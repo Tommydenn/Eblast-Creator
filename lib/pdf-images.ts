@@ -66,6 +66,8 @@ export interface ExtractionDiagnostic {
   rgbConverted: number;
   cmykConverted: number;
   iccProfilesFound: number;
+  documentProfileFound: boolean;
+  documentProfileBytes: number;
   sharpFailed: number;
   errors: string[];
   imageDetails: ImageDebugInfo[];
@@ -146,7 +148,7 @@ function decompressStream(stream: PDFRawStream): Buffer | null {
 
 /**
  * If an image XObject's /ColorSpace is [/ICCBased <ref>], dereference and
- * return the raw ICC profile bytes (after any FlateDecode wrapping).
+ * return the raw ICC profile bytes.
  */
 function extractIccProfile(imageDict: PDFDict, doc: PDFDocument): Buffer | null {
   const cs = imageDict.get(PDFName.of("ColorSpace"));
@@ -162,6 +164,67 @@ function extractIccProfile(imageDict: PDFDict, doc: PDFDocument): Buffer | null 
   if (!(stream instanceof PDFRawStream)) return null;
 
   return decompressStream(stream);
+}
+
+/**
+ * Look for a document-level CMYK profile in /OutputIntents (PDF/X) or
+ * /DefaultCMYK on each page's /Resources/ColorSpace dictionary.
+ *
+ * Adobe-generated flyer PDFs almost always declare ONE OutputIntent profile
+ * (typically "U.S. Web Coated (SWOP) v2") and every CMYK image inherits it.
+ * Per-image /ColorSpace entries are usually just /DeviceCMYK in that case.
+ */
+function getDocumentCmykProfile(doc: PDFDocument): Buffer | null {
+  // 1) /OutputIntents on the catalog
+  try {
+    const catalog: any = (doc as any).catalog;
+    if (catalog) {
+      const outputIntents =
+        typeof catalog.lookup === "function"
+          ? catalog.lookup(PDFName.of("OutputIntents"))
+          : catalog.get?.(PDFName.of("OutputIntents"));
+      if (outputIntents instanceof PDFArray) {
+        for (let i = 0; i < outputIntents.size(); i++) {
+          const intent = outputIntents.lookup(i);
+          if (!(intent instanceof PDFDict)) continue;
+          const profileEntry = intent.get(PDFName.of("DestOutputProfile"));
+          let stream: any = null;
+          if (profileEntry instanceof PDFRef) stream = doc.context.lookup(profileEntry);
+          else if (profileEntry instanceof PDFRawStream) stream = profileEntry;
+          if (stream instanceof PDFRawStream) {
+            const bytes = decompressStream(stream);
+            if (bytes && bytes.length > 0) return bytes;
+          }
+        }
+      }
+    }
+  } catch {
+    // fall through
+  }
+
+  // 2) Walk pages looking for /Resources/ColorSpace/DefaultCMYK
+  try {
+    for (const page of doc.getPages()) {
+      const resources: any = (page.node as any).Resources?.();
+      if (!(resources instanceof PDFDict)) continue;
+      const csDict = resources.get(PDFName.of("ColorSpace"));
+      if (!(csDict instanceof PDFDict)) continue;
+      const defaultCmyk = csDict.get(PDFName.of("DefaultCMYK"));
+      if (!(defaultCmyk instanceof PDFArray) || defaultCmyk.size() < 2) continue;
+      const head = defaultCmyk.lookup(0);
+      if (!(head instanceof PDFName) || head.asString() !== "/ICCBased") continue;
+      const ref = defaultCmyk.get(1);
+      if (!(ref instanceof PDFRef)) continue;
+      const stream = doc.context.lookup(ref);
+      if (!(stream instanceof PDFRawStream)) continue;
+      const bytes = decompressStream(stream);
+      if (bytes && bytes.length > 0) return bytes;
+    }
+  } catch {
+    // fall through
+  }
+
+  return null;
 }
 
 // ---------- ICC injection into JPEG (APP2 marker) ------------------------
@@ -286,6 +349,8 @@ export async function extractImagesFromPdf(
     rgbConverted: 0,
     cmykConverted: 0,
     iccProfilesFound: 0,
+    documentProfileFound: false,
+    documentProfileBytes: 0,
     sharpFailed: 0,
     errors: [],
     imageDetails: [],
@@ -298,6 +363,13 @@ export async function extractImagesFromPdf(
   } catch (e: any) {
     diag.errors.push(`pdf-lib load: ${e?.message ?? String(e)}`);
     return { images: [], diagnostic: diag };
+  }
+
+  // Document-level CMYK profile (used as fallback for images without their own)
+  const documentCmykProfile = getDocumentCmykProfile(doc);
+  if (documentCmykProfile) {
+    diag.documentProfileFound = true;
+    diag.documentProfileBytes = documentCmykProfile.length;
   }
 
   const out: ExtractedImage[] = [];
@@ -358,17 +430,26 @@ export async function extractImagesFromPdf(
     seenHashes.add(hash);
     diag.passedFilters++;
 
-    // Pull the ICC profile out of the PDF if present, and bake it into the
-    // JPEG so sharp will use it for proper color-managed conversion.
+    // Pull the ICC profile out of the PDF and bake it into the JPEG so
+    // sharp will use it for proper color-managed conversion.
+    //
+    // Resolution order:
+    //   1) Per-image /ColorSpace [/ICCBased <ref>]
+    //   2) Document-level /OutputIntents profile (typical for Adobe PDF/X)
+    //   3) Document-level /DefaultCMYK on a page's /Resources
     let jpegToProcess = jpegBytes;
-    const iccBytes = extractIccProfile(dict, doc);
+    let iccBytes = extractIccProfile(dict, doc);
     if (iccBytes && iccBytes.length > 0) {
       diag.iccProfilesFound++;
+    } else if (info.components === 4 && documentCmykProfile) {
+      iccBytes = documentCmykProfile;
+    }
+
+    if (iccBytes && iccBytes.length > 0) {
       debug.iccProfileBytes = iccBytes.length;
       try {
         jpegToProcess = injectIccProfile(jpegBytes, iccBytes);
       } catch {
-        // If injection fails for any reason, fall back to the un-tagged JPEG.
         jpegToProcess = jpegBytes;
       }
     }

@@ -1,16 +1,16 @@
-// Extract embedded JPEG images from a PDF — properly, via PDF object parsing.
+// Extract embedded JPEG images from a PDF.
 //
-// Approach: parse the PDF with pdf-lib, walk every indirect object, find
-// image XObjects whose filter chain ends in /DCTDecode (i.e. JPEG). Apply
-// any leading filters (typically /FlateDecode for Flate-wrapped JPEGs) to
-// get the actual JPEG file bytes.
-//
-// Color handling: 4-component (CMYK) JPEGs are decoded with jpeg-js and
-// converted to RGB PNG. 3-component (RGB/YCbCr) JPEGs pass through as-is.
+// Pipeline:
+//   1. Parse the PDF with pdf-lib, walk every indirect object.
+//   2. Filter to image XObjects whose filter chain ends in /DCTDecode.
+//   3. Apply any leading filters (FlateDecode etc.) to recover JPEG bytes.
+//   4. Hand each JPEG to sharp, which handles CMYK/YCCK/Adobe-inverted
+//      color spaces uniformly and outputs clean RGB JPEG. sharp uses libvips
+//      under the hood — Vercel ships precompiled binaries so it works in
+//      serverless functions out of the box.
 
 import { PDFDocument, PDFRawStream, PDFName, PDFDict, PDFArray, PDFNumber } from "pdf-lib";
-import { PNG } from "pngjs";
-import jpeg from "jpeg-js";
+import sharp from "sharp";
 import * as zlib from "node:zlib";
 import { createHash } from "node:crypto";
 
@@ -19,6 +19,7 @@ export interface ExtractedImage {
   width: number;
   height: number;
   area: number;
+  /** Original color space before sharp normalized it. */
   colorSource: "rgb" | "cmyk";
 }
 
@@ -31,8 +32,19 @@ interface ImageDebugInfo {
   filterChain: string[];
   rawBytes: number;
   jpegBytes: number;
+  outputBytes?: number;
+  outputWidth?: number;
+  outputHeight?: number;
   firstBytesHex: string;
-  status: "rgb" | "cmyk-converted" | "cmyk-failed" | "skipped-too-small" | "skipped-duplicate" | "skipped-bad-decompression" | "skipped-no-jpeg-marker";
+  status:
+    | "ok-rgb"
+    | "ok-cmyk"
+    | "skipped-too-small"
+    | "skipped-duplicate"
+    | "skipped-bad-decompression"
+    | "skipped-no-jpeg-marker"
+    | "skipped-sharp-failed";
+  error?: string;
 }
 
 export interface ExtractionDiagnostic {
@@ -41,15 +53,17 @@ export interface ExtractionDiagnostic {
   imageStreams: number;
   jpegStreams: number;
   passedFilters: number;
+  rgbConverted: number;
   cmykConverted: number;
-  cmykFailed: number;
+  sharpFailed: number;
   errors: string[];
   imageDetails: ImageDebugInfo[];
 }
 
 const MIN_AREA = 5_000;
+const MAX_OUTPUT_DIMENSION = 1400; // downscale anything larger than this for email size budget
 
-// ---------- JPEG SOF parsing --------------------------------------------
+// ---------- JPEG SOF parsing (just for debugging info) -------------------
 
 interface JpegInfo {
   width: number;
@@ -88,38 +102,28 @@ function readJpegInfo(jpegBuf: Buffer): JpegInfo | null {
   return null;
 }
 
-// ---------- CMYK → RGB ---------------------------------------------------
+// ---------- sharp-based JPEG normalization -------------------------------
 
-function cmykJpegToRgbPng(jpegBuf: Buffer): { dataUri: string; width: number; height: number } | null {
-  let decoded: any;
+async function processJpegToRgb(jpegBuf: Buffer): Promise<
+  { data: Buffer; width: number; height: number } | { error: string }
+> {
   try {
-    decoded = jpeg.decode(jpegBuf, { useTArray: true, formatAsRGBA: false } as any);
-  } catch {
-    return null;
-  }
-  const { width, height, data } = decoded;
-  if (!width || !height || !data) return null;
-  if (data.length < width * height * 4) return null;
+    let pipeline = sharp(jpegBuf, { failOn: "none" }).toColorspace("srgb");
 
-  const rgba = Buffer.alloc(width * height * 4);
-  for (let p = 0; p < width * height; p++) {
-    const c = data[p * 4];
-    const m = data[p * 4 + 1];
-    const y = data[p * 4 + 2];
-    const k = data[p * 4 + 3];
-    rgba[p * 4] = Math.round(((255 - c) * (255 - k)) / 255);
-    rgba[p * 4 + 1] = Math.round(((255 - m) * (255 - k)) / 255);
-    rgba[p * 4 + 2] = Math.round(((255 - y) * (255 - k)) / 255);
-    rgba[p * 4 + 3] = 255;
-  }
+    const meta = await sharp(jpegBuf, { failOn: "none" }).metadata();
+    if (meta.width && meta.height) {
+      if (meta.width > MAX_OUTPUT_DIMENSION || meta.height > MAX_OUTPUT_DIMENSION) {
+        pipeline = pipeline.resize(MAX_OUTPUT_DIMENSION, MAX_OUTPUT_DIMENSION, {
+          fit: "inside",
+          withoutEnlargement: true,
+        });
+      }
+    }
 
-  try {
-    const png = new PNG({ width, height });
-    png.data = rgba;
-    const out = PNG.sync.write(png);
-    return { dataUri: `data:image/png;base64,${out.toString("base64")}`, width, height };
-  } catch {
-    return null;
+    const out = await pipeline.jpeg({ quality: 85, mozjpeg: false }).toBuffer({ resolveWithObject: true });
+    return { data: out.data, width: out.info.width, height: out.info.height };
+  } catch (e: any) {
+    return { error: e?.message ?? String(e) };
   }
 }
 
@@ -139,13 +143,6 @@ function parseFilterChain(filter: any): string[] {
   return [];
 }
 
-/**
- * Take a PDF raw stream and apply all leading filters (everything except the
- * final DCTDecode) to recover the embedded JPEG bytes.
- *
- * The final filter is expected to be DCTDecode — we DON'T apply it because
- * we want the JPEG bytes themselves, not the decoded pixels.
- */
 function unwrapToJpeg(rawBytes: Buffer, filterChain: string[]): Buffer | null {
   if (filterChain.length === 0) return null;
   if (filterChain[filterChain.length - 1] !== "DCTDecode") return null;
@@ -159,7 +156,6 @@ function unwrapToJpeg(rawBytes: Buffer, filterChain: string[]): Buffer | null {
       } else if (f === "ASCIIHexDecode") {
         bytes = Buffer.from(bytes.toString("ascii").replace(/\s+/g, ""), "hex");
       } else {
-        // Unknown intermediate filter — bail
         return null;
       }
     } catch {
@@ -169,13 +165,13 @@ function unwrapToJpeg(rawBytes: Buffer, filterChain: string[]): Buffer | null {
   return bytes;
 }
 
-// ---------- public API ---------------------------------------------------
-
 function dictNumber(dict: PDFDict, key: string): number {
   const v = dict.get(PDFName.of(key));
   if (v instanceof PDFNumber) return v.asNumber();
   return 0;
 }
+
+// ---------- public API ---------------------------------------------------
 
 export async function extractImagesFromPdf(
   pdfBuffer: Buffer,
@@ -186,8 +182,9 @@ export async function extractImagesFromPdf(
     imageStreams: 0,
     jpegStreams: 0,
     passedFilters: 0,
+    rgbConverted: 0,
     cmykConverted: 0,
-    cmykFailed: 0,
+    sharpFailed: 0,
     errors: [],
     imageDetails: [],
   };
@@ -262,34 +259,31 @@ export async function extractImagesFromPdf(
     seenHashes.add(hash);
     diag.passedFilters++;
 
-    if (info.components === 4) {
-      const converted = cmykJpegToRgbPng(jpegBytes);
-      if (converted) {
-        out.push({
-          dataUri: converted.dataUri,
-          width: converted.width,
-          height: converted.height,
-          area: converted.width * converted.height,
-          colorSource: "cmyk",
-        });
-        diag.cmykConverted++;
-        debug.status = "cmyk-converted";
-      } else {
-        diag.cmykFailed++;
-        debug.status = "cmyk-failed";
-        diag.errors.push(`CMYK conversion failed for ${info.width}x${info.height}`);
-      }
-    } else {
-      out.push({
-        dataUri: `data:image/jpeg;base64,${jpegBytes.toString("base64")}`,
-        width: info.width,
-        height: info.height,
-        area: info.width * info.height,
-        colorSource: "rgb",
-      });
-      debug.status = "rgb";
+    const processed = await processJpegToRgb(jpegBytes);
+    if ("error" in processed) {
+      debug.status = "skipped-sharp-failed";
+      debug.error = processed.error;
+      diag.sharpFailed++;
+      diag.errors.push(`sharp failed for ${info.width}x${info.height}: ${processed.error}`);
+      diag.imageDetails.push(debug);
+      continue;
     }
 
+    const colorSource: "rgb" | "cmyk" = info.components === 4 ? "cmyk" : "rgb";
+    out.push({
+      dataUri: `data:image/jpeg;base64,${processed.data.toString("base64")}`,
+      width: processed.width,
+      height: processed.height,
+      area: processed.width * processed.height,
+      colorSource,
+    });
+    if (colorSource === "cmyk") diag.cmykConverted++;
+    else diag.rgbConverted++;
+
+    debug.status = colorSource === "cmyk" ? "ok-cmyk" : "ok-rgb";
+    debug.outputBytes = processed.data.length;
+    debug.outputWidth = processed.width;
+    debug.outputHeight = processed.height;
     diag.imageDetails.push(debug);
   }
 

@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
             imagesExtracted: 0,
             imagesSkipped: 0,
             cmykConvertedToSrgb: 0,
+            cmykConvertedVia: { mupdf: 0, sharp: 0 },
             cmykConversionFailed: 0,
             imagesByFormat: { jpeg: 0, jpeg2000: 0, flate: 0, ccitt: 0, other: 0 },
             errors: [String((imagesResult as any).reason)],

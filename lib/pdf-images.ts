@@ -35,6 +35,7 @@ export interface ExtractionDiagnostic {
   imagesExtracted: number;
   imagesSkipped: number;
   cmykConvertedToSrgb: number;
+  cmykConvertedVia: { mupdf: number; sharp: number };
   cmykConversionFailed: number;
   imagesByFormat: { jpeg: number; jpeg2000: number; flate: number; ccitt: number; other: number };
   errors: string[];
@@ -46,8 +47,8 @@ export interface ExtractionDiagnostic {
     colorSpace?: string;
     format: string;
     byteLength: number;
-    /** Set when we ran sharp's CMYK→sRGB normalization on this image. */
-    convertedToSrgb?: boolean;
+    /** Which converter was used for CMYK normalisation, if any. */
+    convertedVia?: "mupdf" | "sharp";
     outputBytes?: number;
   }>;
 }
@@ -107,25 +108,65 @@ function readColorSpaceName(dict: PDFDict): string | undefined {
 }
 
 /**
- * Targeted normalization for CMYK JPEGs only.
+ * Targeted CMYK→sRGB conversion using MuPDF's Image class.
  *
- * Browsers + email clients render CMYK JPEGs inconsistently (Chrome usually
- * renders them OK, Firefox often doesn't, most email clients fail). For
- * any image whose PDF /ColorSpace is /DeviceCMYK, we run sharp once to
- * convert it to sRGB so the rendered output is web-safe across all clients.
+ * MuPDF ships bundled CMYK and sRGB profiles and has built-in handling for
+ * Adobe APP14 / YCCK / inverted CMYK conventions — the same color
+ * management Acrobat uses. Crucially, this renders just the *image* (no
+ * overlays, no compositing), unlike page rendering.
  *
- * The negate step un-inverts the Adobe-stored CMYK convention (where 0 =
- * full ink) before the colorspace conversion. RGB images never pass
- * through this function.
+ * RGB images never pass through this function.
  */
-async function cmykJpegToSrgbJpeg(jpegBytes: Buffer): Promise<Buffer | null> {
+async function cmykJpegToSrgbViaMupdf(jpegBytes: Buffer): Promise<Buffer | null> {
+  let mupdfModule: any;
   try {
-    const buf = await sharp(jpegBytes, { failOn: "none" })
+    mupdfModule = await import("mupdf");
+  } catch {
+    return null;
+  }
+  const mupdf = mupdfModule.default ?? mupdfModule;
+
+  let image: any;
+  let pixmap: any;
+  try {
+    image = new mupdf.Image(jpegBytes);
+    const colorspace = mupdf.ColorSpace?.DeviceRGB ?? mupdf.DeviceRGB;
+    pixmap = image.toPixmap(undefined, colorspace);
+
+    // Try mupdf's native JPEG encoding first.
+    if (typeof pixmap.asJPEG === "function") {
+      try {
+        const out = pixmap.asJPEG(90, false);
+        if (out) return Buffer.from(out);
+      } catch {
+        // fall through to PNG path
+      }
+    }
+
+    // Fallback: PNG via mupdf → JPEG via sharp (sharp here is just an
+    // encoder, no color manipulation).
+    const pngBytes = pixmap.asPNG();
+    return await sharp(Buffer.from(pngBytes)).jpeg({ quality: 90 }).toBuffer();
+  } catch {
+    return null;
+  } finally {
+    try { pixmap?.destroy?.(); } catch {}
+    try { image?.destroy?.(); } catch {}
+  }
+}
+
+/**
+ * Last-resort fallback when MuPDF can't decode a particular CMYK JPEG.
+ * Less accurate (no bundled ICC profile) but better than emitting raw CMYK
+ * bytes that browsers won't render correctly.
+ */
+async function cmykJpegToSrgbViaSharp(jpegBytes: Buffer): Promise<Buffer | null> {
+  try {
+    return await sharp(jpegBytes, { failOn: "none" })
       .negate({ alpha: false })
       .toColorspace("srgb")
       .jpeg({ quality: 90 })
       .toBuffer();
-    return buf;
   } catch {
     return null;
   }
@@ -143,6 +184,7 @@ export async function extractImagesFromPdf(
     imagesExtracted: 0,
     imagesSkipped: 0,
     cmykConvertedToSrgb: 0,
+    cmykConvertedVia: { mupdf: 0, sharp: 0 },
     cmykConversionFailed: 0,
     imagesByFormat: { jpeg: 0, jpeg2000: 0, flate: 0, ccitt: 0, other: 0 },
     errors: [],
@@ -244,17 +286,29 @@ export async function extractImagesFromPdf(
     let outputBytes = imageBytes;
     let outputMime = mimeType;
     let resolvedColorSource: ExtractedImage["colorSource"] = isCmyk ? "cmyk" : "rgb";
-    let convertedToSrgb = false;
+    let convertedVia: "mupdf" | "sharp" | undefined;
 
-    // Targeted CMYK normalization. RGB images skip this entirely — they
-    // pass through with their original bytes unchanged.
+    // RGB images pass through with their ORIGINAL bytes — no sharp, no
+    // re-encoding, untouched. Only CMYK JPEGs run through the converter.
     if (isCmyk && format === "jpeg") {
-      const converted = await cmykJpegToSrgbJpeg(imageBytes);
+      // Primary: MuPDF's color-managed Image rendering (proper ICC handling).
+      let converted = await cmykJpegToSrgbViaMupdf(imageBytes);
+      if (converted) {
+        convertedVia = "mupdf";
+        diag.cmykConvertedVia.mupdf++;
+      } else {
+        // Fallback: sharp's negate + toColorspace (less accurate but works).
+        converted = await cmykJpegToSrgbViaSharp(imageBytes);
+        if (converted) {
+          convertedVia = "sharp";
+          diag.cmykConvertedVia.sharp++;
+        }
+      }
+
       if (converted) {
         outputBytes = converted;
         outputMime = "image/jpeg";
         resolvedColorSource = "cmyk-converted-to-srgb";
-        convertedToSrgb = true;
         diag.cmykConvertedToSrgb++;
       } else {
         diag.cmykConversionFailed++;
@@ -280,7 +334,7 @@ export async function extractImagesFromPdf(
       colorSpace: colorSpaceName,
       format,
       byteLength: imageBytes.length,
-      convertedToSrgb,
+      convertedVia,
       outputBytes: outputBytes.length,
     });
   }

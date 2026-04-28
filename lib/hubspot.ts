@@ -112,12 +112,15 @@ export async function uploadImageToFileManager(opts: {
 }): Promise<UploadedFile> {
   const url = `${HUBSPOT_BASE}/files/v3/files`;
 
-  // Buffer → Uint8Array view: TypeScript strict mode doesn't accept
-  // Buffer directly as a BlobPart in newer Node typings.
-  const bytesView = new Uint8Array(opts.bytes.buffer, opts.bytes.byteOffset, opts.bytes.byteLength);
+  // Allocate a fresh Uint8Array (backed by a new ArrayBuffer, not
+  // ArrayBufferLike) and copy the bytes in. TypeScript 5.7's Blob signature
+  // requires Uint8Array<ArrayBuffer> specifically — Buffer's underlying
+  // ArrayBufferLike isn't accepted directly.
+  const blobBytes = new Uint8Array(opts.bytes.byteLength);
+  blobBytes.set(opts.bytes);
 
   const form = new FormData();
-  form.append("file", new Blob([bytesView], { type: opts.mimeType }), opts.fileName);
+  form.append("file", new Blob([blobBytes], { type: opts.mimeType }), opts.fileName);
   form.append("folderPath", opts.folderPath);
   form.append(
     "options",

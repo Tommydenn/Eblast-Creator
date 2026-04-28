@@ -5,18 +5,25 @@ import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail } from "@/lib/hubspot";
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 interface PushBody {
-  /** Community slug, e.g. "caretta-bellevue" */
+  /** Community slug. */
   communitySlug: string;
-  /** Filename of the template under data/communities/{slug}/templates/ */
-  templateFile: string;
-  /** Subject line for the marketing email. */
+  /** Email subject. */
   subject: string;
   /** Optional inbox preview text. */
   previewText?: string;
-  /** Optional name; defaults to "{Community} – {filename}". */
+  /** Optional override of the draft name in HubSpot. */
   name?: string;
+  /** Inline HTML to use as the email body (preferred). */
+  html?: string;
+  /** Or: filename of a template under data/communities/{slug}/templates/. */
+  templateFile?: string;
+}
+
+function safeSlug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 }
 
 export async function POST(req: NextRequest) {
@@ -34,50 +41,46 @@ export async function POST(req: NextRequest) {
   if (!community) {
     return NextResponse.json({
       ok: false,
-      steps: [{
-        step: "lookup_community",
+      steps: [{ step: "lookup_community", ok: false, status: 404, body: { error: `Unknown community: ${body.communitySlug}` } }],
+    });
+  }
+
+  // Resolve HTML: inline body wins, otherwise read from disk template.
+  let html = body.html;
+  let templateFileName: string;
+  if (html) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    templateFileName = `${safeSlug(body.subject || "draft")}-${stamp}.html`;
+  } else if (body.templateFile) {
+    const p = path.join(process.cwd(), "data", "communities", community.slug, "templates", body.templateFile);
+    try {
+      html = await readFile(p, "utf-8");
+    } catch (e: any) {
+      return NextResponse.json({
         ok: false,
-        status: 404,
-        body: { error: `Unknown community slug: ${body.communitySlug}` },
-      }],
-    });
+        steps: [{ step: "read_template", ok: false, status: 0, body: { error: String(e), path: p } }],
+      });
+    }
+    templateFileName = body.templateFile;
+  } else {
+    return NextResponse.json(
+      { ok: false, steps: [{ step: "validate", ok: false, status: 400, body: { error: "Provide html or templateFile" } }] },
+      { status: 400 },
+    );
   }
 
-  // Resolve template HTML on disk.
-  const templatePath = path.join(
-    process.cwd(),
-    "data",
-    "communities",
-    community.slug,
-    "templates",
-    body.templateFile,
-  );
-  let html: string;
-  try {
-    html = await readFile(templatePath, "utf-8");
-  } catch (e: any) {
-    return NextResponse.json({
-      ok: false,
-      steps: [{ step: "read_template", ok: false, status: 0, body: { error: String(e), path: templatePath } }],
-    });
-  }
-
-  // 1) Upload to Design Manager as coded email template.
-  // Use a stable per-community path so re-runs overwrite cleanly.
-  const hubspotPath = `email-templates/${community.slug}/${body.templateFile}`;
+  // 1) Upload to Design Manager.
+  const hubspotPath = `email-templates/${community.slug}/${templateFileName}`;
   const upload = await uploadEmailTemplate({
     path: hubspotPath,
     html,
-    label: `${community.displayName} — ${body.templateFile}`,
+    label: `${community.displayName} — ${templateFileName}`,
   });
-
-  if (!upload.ok) {
-    return NextResponse.json({ ok: false, steps: [upload] });
-  }
+  if (!upload.ok) return NextResponse.json({ ok: false, steps: [upload] });
 
   // 2) Create the marketing email pointing at it.
   const create = await createEmail({
-    name: body.name ?? `${community.displayName} – ${body.templateFile}`,
+    name: body.name ?? `${community.displayName} – ${body.subject}`,
     subject: body.subject,
     previewText: body.previewText,
     fromName: community.sender.name,

@@ -71,7 +71,18 @@ export async function POST(req: NextRequest) {
   const imageRun =
     imagesResult.status === "fulfilled"
       ? imagesResult.value
-      : { images: [], diagnostic: { pageCount: 0, imageRefsFound: 0, decoded: 0, skippedNoData: 0, skippedTooSmall: 0, skippedUnknownKind: 0, skippedDuplicate: 0, errors: [String((imagesResult as any).reason)], inspected: [] } };
+      : {
+          images: [],
+          diagnostic: {
+            method: "none" as const,
+            xrefCount: 0,
+            imageObjects: 0,
+            imagesRendered: 0,
+            imagesSkipped: 0,
+            errors: [String((imagesResult as any).reason)],
+            imageDetails: [],
+          },
+        };
 
   const heroImageUrl = imageRun.images[0]?.dataUri;
   const secondaryImageUrl = imageRun.images[1]?.dataUri;

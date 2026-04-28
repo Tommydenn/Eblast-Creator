@@ -96,19 +96,17 @@ function readJpegDimensions(jpegBuf: Buffer): { width: number; height: number } 
 /**
  * Convert a CMYK (4-component) JPEG to an RGB PNG data URI.
  *
- * PDFs from Adobe InDesign / Illustrator store CMYK photos with
- * "inverted" channel values (0 = full ink, 255 = no ink) — the opposite
- * of the standard CMYK convention. When a generic decoder treats those
- * bytes as standard CMYK, you get the classic complementary-color
- * inversion: green grass renders purple, coral skin renders teal.
- *
- * We decode with jpeg-js (raw color space, no internal CMYK→RGB), then
- * apply the un-invert + CMYK→RGB conversion manually.
+ * PDFs from Adobe InDesign / Illustrator store CMYK photos in YCCK or
+ * Adobe-inverted CMYK. jpeg-js with `formatAsRGBA: false` already applies
+ * the YCCK→CMYK transform (when needed) and outputs `255 - channel` for
+ * each component, giving us straight CMYK values. We then run the standard
+ * subtractive CMYK→RGB formula.
  */
 function cmykJpegToRgbPng(jpegBuf: Buffer): { dataUri: string; width: number; height: number } | null {
   let decoded: any;
   try {
-    // formatAsRGBA: false → return raw CMYK pixels (4 bytes per pixel)
+    // formatAsRGBA: false → jpeg-js outputs (255-C, 255-M, 255-Y, 255-K),
+    // which after its own inversion equals the actual CMYK values.
     decoded = jpeg.decode(jpegBuf, { useTArray: true, formatAsRGBA: false } as any);
   } catch {
     return null;
@@ -118,11 +116,10 @@ function cmykJpegToRgbPng(jpegBuf: Buffer): { dataUri: string; width: number; he
 
   const rgba = Buffer.alloc(width * height * 4);
   for (let p = 0; p < width * height; p++) {
-    // Un-invert the Adobe convention (0 = full ink → 255 = full ink)
-    const c = 255 - data[p * 4];
-    const m = 255 - data[p * 4 + 1];
-    const y = 255 - data[p * 4 + 2];
-    const k = 255 - data[p * 4 + 3];
+    const c = data[p * 4];
+    const m = data[p * 4 + 1];
+    const y = data[p * 4 + 2];
+    const k = data[p * 4 + 3];
 
     // Standard subtractive CMYK → RGB
     rgba[p * 4] = Math.round(((255 - c) * (255 - k)) / 255);

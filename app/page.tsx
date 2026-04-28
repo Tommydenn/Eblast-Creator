@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface Community {
   slug: string;
@@ -39,18 +39,31 @@ interface ExtractedFlyer {
   audienceHints: string[];
 }
 
-type Stage = "idle" | "drafting" | "preview" | "pushing" | "done";
+type Stage = "idle" | "drafting" | "preview" | "refining" | "pushing" | "done";
+
+interface RefinementEntry {
+  instruction: string;
+  ok: boolean;
+}
 
 export default function Home() {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string>("");
   const [pdf, setPdf] = useState<File | null>(null);
+  const [heroImage, setHeroImage] = useState<File | null>(null);
+  const [secondaryImage, setSecondaryImage] = useState<File | null>(null);
+
   const [stage, setStage] = useState<Stage>("idle");
   const [extracted, setExtracted] = useState<ExtractedFlyer | null>(null);
   const [html, setHtml] = useState<string>("");
+  const [heroImageUrl, setHeroImageUrl] = useState<string | undefined>();
+  const [secondaryImageUrl, setSecondaryImageUrl] = useState<string | undefined>();
+
+  const [refineInput, setRefineInput] = useState("");
+  const [refineHistory, setRefineHistory] = useState<RefinementEntry[]>([]);
+
   const [pushResult, setPushResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/communities")
@@ -70,10 +83,13 @@ export default function Home() {
     setExtracted(null);
     setHtml("");
     setPushResult(null);
+    setRefineHistory([]);
 
     const fd = new FormData();
     fd.append("file", pdf);
     fd.append("communitySlug", selectedSlug);
+    if (heroImage) fd.append("heroImage", heroImage);
+    if (secondaryImage) fd.append("secondaryImage", secondaryImage);
 
     try {
       const res = await fetch("/api/draft-from-pdf", { method: "POST", body: fd });
@@ -85,10 +101,49 @@ export default function Home() {
       }
       setExtracted(data.extracted);
       setHtml(data.html);
+      setHeroImageUrl(data.heroImageUrl);
+      setSecondaryImageUrl(data.secondaryImageUrl);
       setStage("preview");
     } catch (e: any) {
       setError(String(e));
       setStage("idle");
+    }
+  }
+
+  async function refineDraft() {
+    if (!extracted || !refineInput.trim() || !selectedSlug) return;
+    const instruction = refineInput.trim();
+    setStage("refining");
+    setError(null);
+    setRefineInput("");
+
+    try {
+      const res = await fetch("/api/refine-eblast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current: extracted,
+          instruction,
+          communitySlug: selectedSlug,
+          heroImageUrl,
+          secondaryImageUrl,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setError(data.error ?? "Refinement failed");
+        setRefineHistory((h) => [...h, { instruction, ok: false }]);
+        setStage("preview");
+        return;
+      }
+      setExtracted(data.extracted);
+      setHtml(data.html);
+      setRefineHistory((h) => [...h, { instruction, ok: true }]);
+      setStage("preview");
+    } catch (e: any) {
+      setError(String(e));
+      setRefineHistory((h) => [...h, { instruction, ok: false }]);
+      setStage("preview");
     }
   }
 
@@ -115,13 +170,6 @@ export default function Home() {
       setError(String(e));
       setStage("preview");
     }
-  }
-
-  function updateField<K extends keyof ExtractedFlyer>(key: K, value: ExtractedFlyer[K]) {
-    if (!extracted) return;
-    setExtracted({ ...extracted, [key]: value });
-    // Note: HTML is stale until regenerate. For now, push uses extracted fields for subject/preview
-    // but the HTML body still reflects the original draft. (Re-render is a follow-up.)
   }
 
   const labelStyle: React.CSSProperties = {
@@ -153,13 +201,13 @@ export default function Home() {
           Drop a flyer. Get an eblast.
         </h1>
         <p style={{ fontSize: 15, color: "#5C5C5C", maxWidth: 720, lineHeight: 1.6 }}>
-          Upload the printed flyer as a PDF and pick the community. Claude reads it, extracts the
-          subject, headline, body copy, and CTA, then renders a brand-themed HTML email. Preview,
-          tweak, and push to HubSpot.
+          Upload the flyer PDF (and optionally 1–2 brand photos). Claude extracts the copy, the
+          renderer applies the community&rsquo;s brand. Refine with a chat instruction, then push
+          to HubSpot.
         </p>
       </header>
 
-      {/* Step 1: inputs */}
+      {/* Step 1 — inputs */}
       <section style={{ background: "white", border: "1px solid #E5DAC1", padding: 24, marginBottom: 24 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
           <div>
@@ -175,10 +223,34 @@ export default function Home() {
           <div>
             <label style={labelStyle}>Flyer PDF</label>
             <input
-              ref={fileInputRef}
               type="file"
               accept="application/pdf"
               onChange={(e) => setPdf(e.target.files?.[0] ?? null)}
+              style={fieldStyle}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div>
+            <label style={labelStyle}>
+              Hero image <span style={{ color: "#9CA3AF", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
+            </label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
+              style={fieldStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>
+              Inline image <span style={{ color: "#9CA3AF", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
+            </label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(e) => setSecondaryImage(e.target.files?.[0] ?? null)}
               style={fieldStyle}
             />
           </div>
@@ -228,40 +300,78 @@ export default function Home() {
         )}
       </section>
 
-      {/* Step 2: preview + edit */}
+      {/* Step 2 — preview + refine + push */}
       {extracted && (
         <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 380px) 1fr", gap: 24, marginBottom: 24 }}>
-          <div style={{ background: "white", border: "1px solid #E5DAC1", padding: 20 }}>
-            <h2 style={{ fontFamily: "Georgia, serif", fontSize: 20, color: "#1F4538", margin: "0 0 16px 0" }}>
-              Extracted fields
-            </h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Refinement chat */}
+            <div style={{ background: "white", border: "1px solid #E5DAC1", padding: 18 }}>
+              <p style={{ ...labelStyle, marginBottom: 8 }}>Refine with a prompt</p>
+              <textarea
+                value={refineInput}
+                onChange={(e) => setRefineInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && (e.metaKey || e.ctrlKey)) refineDraft();
+                }}
+                placeholder='e.g. "make the headline shorter and more punchy" or "less salesy, more warm"'
+                rows={3}
+                style={{ ...fieldStyle, fontFamily: "inherit", resize: "vertical" }}
+                disabled={stage === "refining"}
+              />
+              <button
+                onClick={refineDraft}
+                disabled={!refineInput.trim() || stage === "refining"}
+                style={{
+                  marginTop: 10,
+                  background: selected?.brand.primary ?? "#1F4538",
+                  color: "white",
+                  border: 0,
+                  padding: "10px 20px",
+                  fontSize: 12,
+                  letterSpacing: 1.5,
+                  textTransform: "uppercase",
+                  fontWeight: 500,
+                  cursor: stage === "refining" ? "wait" : "pointer",
+                  opacity: !refineInput.trim() || stage === "refining" ? 0.5 : 1,
+                  width: "100%",
+                }}
+              >
+                {stage === "refining" ? "Refining..." : "Apply change"}
+              </button>
+              {refineHistory.length > 0 && (
+                <details style={{ marginTop: 12 }}>
+                  <summary style={{ fontSize: 11, color: "#9C7A55", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase" }}>
+                    Refinements ({refineHistory.length})
+                  </summary>
+                  <ol style={{ paddingLeft: 18, margin: "8px 0 0 0", fontSize: 12, color: "#3A3A3A", lineHeight: 1.6 }}>
+                    {refineHistory.map((r, i) => (
+                      <li key={i} style={{ color: r.ok ? "#3A3A3A" : "#B5683E" }}>
+                        {r.instruction}
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+            </div>
 
-            <label style={labelStyle}>Subject</label>
-            <input value={extracted.subject} onChange={(e) => updateField("subject", e.target.value)} style={fieldStyle} />
+            {/* Quick fields */}
+            <div style={{ background: "white", border: "1px solid #E5DAC1", padding: 18 }}>
+              <p style={{ ...labelStyle, marginBottom: 12 }}>Subject &amp; preview</p>
+              <p style={{ fontSize: 14, lineHeight: 1.5, margin: "0 0 8px 0", fontWeight: 500, color: "#1F2937" }}>
+                {extracted.subject}
+              </p>
+              <p style={{ fontSize: 13, lineHeight: 1.5, margin: 0, color: "#6B6B6B" }}>{extracted.previewText}</p>
+              <details style={{ marginTop: 14 }}>
+                <summary style={{ fontSize: 11, color: "#9C7A55", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase" }}>
+                  Full extracted JSON
+                </summary>
+                <pre style={{ background: "#FBF7EE", border: "1px solid #E5DAC1", padding: 10, fontSize: 11, marginTop: 8, maxHeight: 280, overflow: "auto" }}>
+                  {JSON.stringify(extracted, null, 2)}
+                </pre>
+              </details>
+            </div>
 
-            <div style={{ height: 12 }} />
-            <label style={labelStyle}>Preview text</label>
-            <input value={extracted.previewText} onChange={(e) => updateField("previewText", e.target.value)} style={fieldStyle} />
-
-            <div style={{ height: 12 }} />
-            <label style={labelStyle}>Headline</label>
-            <input value={extracted.headline} onChange={(e) => updateField("headline", e.target.value)} style={fieldStyle} />
-
-            <div style={{ height: 12 }} />
-            <label style={labelStyle}>CTA button</label>
-            <input value={extracted.ctaButtonLabel} onChange={(e) => updateField("ctaButtonLabel", e.target.value)} style={fieldStyle} />
-
-            <div style={{ height: 12 }} />
-            <details>
-              <summary style={{ fontSize: 12, color: "#9C7A55", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase" }}>
-                Full extracted JSON
-              </summary>
-              <pre style={{ background: "#FBF7EE", border: "1px solid #E5DAC1", padding: 12, fontSize: 11, marginTop: 8, maxHeight: 280, overflow: "auto" }}>
-                {JSON.stringify(extracted, null, 2)}
-              </pre>
-            </details>
-
-            <div style={{ height: 20 }} />
+            {/* Push */}
             <button
               onClick={pushDraft}
               disabled={stage === "pushing"}
@@ -269,27 +379,27 @@ export default function Home() {
                 background: selected?.brand.accent ?? "#B5683E",
                 color: "white",
                 border: 0,
-                padding: "14px 28px",
+                padding: "16px 28px",
                 fontSize: 14,
                 letterSpacing: 2,
                 textTransform: "uppercase",
                 fontWeight: 500,
                 cursor: stage === "pushing" ? "wait" : "pointer",
-                width: "100%",
               }}
             >
               {stage === "pushing" ? "Pushing to HubSpot..." : "Push draft to HubSpot"}
             </button>
-            <p style={{ fontSize: 11, color: "#9C7A55", marginTop: 8, lineHeight: 1.5 }}>
-              Note: edits to extracted fields update what gets sent to HubSpot, but the preview
-              still reflects the original render. Re-render-on-edit is the next iteration.
-            </p>
           </div>
 
           <div style={{ background: "#1F2937", padding: 12 }}>
-            <p style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: "#9CA3AF", margin: "0 0 8px 4px" }}>
-              Email preview
-            </p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <p style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: "#9CA3AF", margin: 0, marginLeft: 4 }}>
+                Email preview
+              </p>
+              {stage === "refining" && (
+                <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0, marginRight: 4 }}>refining…</p>
+              )}
+            </div>
             <iframe
               srcDoc={html}
               style={{ width: "100%", height: 760, border: 0, background: "white" }}
@@ -299,7 +409,7 @@ export default function Home() {
         </section>
       )}
 
-      {/* Step 3: push result */}
+      {/* Step 3 — push result */}
       {pushResult && (
         <section style={{ marginBottom: 24 }}>
           <div

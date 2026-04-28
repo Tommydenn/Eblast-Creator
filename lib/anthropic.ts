@@ -133,3 +133,47 @@ export async function extractFlyerContent(opts: {
   }
   return toolUseBlock.input as ExtractedFlyer;
 }
+
+/**
+ * Refine an existing extracted draft based on a user instruction.
+ * E.g. "make the headline shorter" or "change the tone to more casual".
+ */
+export async function refineFlyerContent(opts: {
+  current: ExtractedFlyer;
+  instruction: string;
+  community: Community;
+}): Promise<ExtractedFlyer> {
+  const c = client();
+
+  const response = await c.messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    system: `${systemPrompt(opts.community)}
+
+You are now in REFINEMENT mode. The user has an existing extracted draft and wants targeted changes.
+- Apply the user's specific instruction. Touch only what they ask about.
+- Leave every other field exactly as the user has it. Do not "improve" things you weren't asked to improve.
+- If the user's instruction implies a cascading change (e.g. "make the headline shorter" might naturally also affect a script subhead that quotes it), make the minimum cascading change and explain nothing.
+- Always return the FULL updated object via the extract_flyer tool. Do not return a partial diff.`,
+    tools: [
+      {
+        name: "extract_flyer",
+        description: "Return the FULL updated marketing-email content with the user's refinement applied.",
+        input_schema: extractFlyerToolSchema as any,
+      },
+    ],
+    tool_choice: { type: "tool", name: "extract_flyer" },
+    messages: [
+      {
+        role: "user",
+        content: `Here is the current draft:\n\n${JSON.stringify(opts.current, null, 2)}\n\nMy instruction: ${opts.instruction}`,
+      },
+    ],
+  });
+
+  const toolUseBlock = response.content.find((b: any) => b.type === "tool_use");
+  if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
+    throw new Error("Claude did not return tool_use output for refinement.");
+  }
+  return toolUseBlock.input as ExtractedFlyer;
+}

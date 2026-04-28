@@ -14,30 +14,21 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function placeholderImage(opts: { width: number; height: number; bg: string; fg: string; label: string }) {
-  // Visible placeholder served from a CDN; will swap to brand assets when we wire image upload.
-  const text = encodeURIComponent(opts.label);
-  return `https://placehold.co/${opts.width}x${opts.height}/${opts.bg.replace("#", "")}/${opts.fg.replace("#", "")}?text=${text}`;
+export interface RenderOptions {
+  /** Hero image URL or data URI. If omitted, the hero block has no photo — just brand color. */
+  heroImageUrl?: string;
+  /** Secondary inline image. If omitted, no inline image is rendered. */
+  secondaryImageUrl?: string;
 }
 
-export function buildEblastHtml(flyer: ExtractedFlyer, community: Community): string {
+export function buildEblastHtml(
+  flyer: ExtractedFlyer,
+  community: Community,
+  options: RenderOptions = {},
+): string {
   const { brand } = community;
-  const heroImg = placeholderImage({
-    width: 600,
-    height: 340,
-    bg: brand.primary,
-    fg: brand.background,
-    label: flyer.heroImageDescription.slice(0, 60),
-  });
-  const secondaryImg = flyer.secondaryImageDescription
-    ? placeholderImage({
-        width: 528,
-        height: 300,
-        bg: "#D9CDB1",
-        fg: brand.primary,
-        label: flyer.secondaryImageDescription.slice(0, 60),
-      })
-    : null;
+  const heroImg = options.heroImageUrl;
+  const secondaryImg = options.secondaryImageUrl;
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
@@ -64,13 +55,14 @@ export function buildEblastHtml(flyer: ExtractedFlyer, community: Community): st
   <tr>
     <td>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        ${heroImg ? `
         <tr>
           <td style="background:${brand.primary}; padding: 0;" align="center">
             <img src="${heroImg}" width="600" height="340" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:100%; max-width:600px; height:auto; border:0;">
           </td>
-        </tr>
+        </tr>` : ""}
         <tr>
-          <td style="background:${brand.primary}; padding: 36px 36px 40px 36px;" align="center">
+          <td style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
             <p style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 12px 0;">${escapeHtml(flyer.eyebrow)}</p>
             <p style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? `<p style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 44px; color: #F0E2C0; line-height: 1; margin: 0 0 18px 0;">${escapeHtml(flyer.scriptSubheadline)}</p>` : ""}
@@ -113,7 +105,8 @@ export function buildEblastHtml(flyer: ExtractedFlyer, community: Community): st
     <td style="padding: 0 36px 28px 36px;">
       <img src="${secondaryImg}" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:100%; max-width:528px; height:auto; border:0;">
     </td>
-  </tr>` : ""}`;
+  </tr>` : ""}
+  `;
 
   const pullQuote = flyer.pullQuote
     ? `

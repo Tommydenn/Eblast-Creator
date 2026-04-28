@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
+    "jpeg-js": "^0.4.4",
     "next": "14.2.15",
     "pdfjs-dist": "^4.7.76",
     "pngjs": "^7.0.0",

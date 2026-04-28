@@ -10,18 +10,23 @@
 // list extraction for non-JPEG image kinds.
 
 import { PNG } from "pngjs";
+import jpeg from "jpeg-js";
 
 export interface ExtractedImage {
   dataUri: string;
   width: number;
   height: number;
   area: number;
+  /** "rgb" if the source was a 3-component JPEG, "cmyk" if it was 4-component (re-encoded). */
+  colorSource: "rgb" | "cmyk";
 }
 
 export interface ExtractionDiagnostic {
   method: "jpeg-scan" | "pdfjs-fallback" | "none";
   scannedJpegs: number;
   validJpegs: number;
+  cmykConverted: number;
+  cmykFailed: number;
   pdfjsImageRefs: number;
   pdfjsDecoded: number;
   errors: string[];
@@ -32,16 +37,23 @@ const MIN_AREA = 5_000;
 
 // ---------- JPEG scanner -------------------------------------------------
 
-function readJpegDimensions(jpeg: Buffer): { width: number; height: number } | null {
+interface JpegInfo {
+  width: number;
+  height: number;
+  /** 1=grayscale, 3=YCbCr/RGB, 4=CMYK/YCCK */
+  components: number;
+}
+
+function readJpegInfo(jpegBuf: Buffer): JpegInfo | null {
   let i = 2; // skip SOI (FF D8)
-  while (i < jpeg.length - 8) {
-    if (jpeg[i] !== 0xff) {
+  while (i < jpegBuf.length - 8) {
+    if (jpegBuf[i] !== 0xff) {
       i++;
       continue;
     }
-    const marker = jpeg[i + 1];
+    const marker = jpegBuf[i + 1];
 
-    // Skip any 0xFF padding
+    // Skip 0xFF padding
     if (marker === 0xff) {
       i++;
       continue;
@@ -52,7 +64,6 @@ function readJpegDimensions(jpeg: Buffer): { width: number; height: number } | n
       continue;
     }
 
-    // SOF markers: C0-C3, C5-C7, C9-CB, CD-CF (these contain dimensions)
     const isSof =
       (marker >= 0xc0 && marker <= 0xc3) ||
       (marker >= 0xc5 && marker <= 0xc7) ||
@@ -61,19 +72,73 @@ function readJpegDimensions(jpeg: Buffer): { width: number; height: number } | n
 
     if (isSof) {
       // SOF segment: marker(2) length(2) precision(1) height(2) width(2) components(1)
-      const height = (jpeg[i + 5] << 8) | jpeg[i + 6];
-      const width = (jpeg[i + 7] << 8) | jpeg[i + 8];
-      if (width > 0 && height > 0) return { width, height };
+      const height = (jpegBuf[i + 5] << 8) | jpegBuf[i + 6];
+      const width = (jpegBuf[i + 7] << 8) | jpegBuf[i + 8];
+      const components = jpegBuf[i + 9];
+      if (width > 0 && height > 0) return { width, height, components };
       return null;
     }
 
-    // Other markers carry a 2-byte length
-    if (i + 4 > jpeg.length) return null;
-    const len = (jpeg[i + 2] << 8) | jpeg[i + 3];
+    if (i + 4 > jpegBuf.length) return null;
+    const len = (jpegBuf[i + 2] << 8) | jpegBuf[i + 3];
     if (len < 2) return null;
     i += 2 + len;
   }
   return null;
+}
+
+// Backwards compat for the rest of this file.
+function readJpegDimensions(jpegBuf: Buffer): { width: number; height: number } | null {
+  const info = readJpegInfo(jpegBuf);
+  return info ? { width: info.width, height: info.height } : null;
+}
+
+/**
+ * Convert a CMYK (4-component) JPEG to an RGB PNG data URI.
+ *
+ * PDFs from Adobe InDesign / Illustrator store CMYK photos with
+ * "inverted" channel values (0 = full ink, 255 = no ink) — the opposite
+ * of the standard CMYK convention. When a generic decoder treats those
+ * bytes as standard CMYK, you get the classic complementary-color
+ * inversion: green grass renders purple, coral skin renders teal.
+ *
+ * We decode with jpeg-js (raw color space, no internal CMYK→RGB), then
+ * apply the un-invert + CMYK→RGB conversion manually.
+ */
+function cmykJpegToRgbPng(jpegBuf: Buffer): { dataUri: string; width: number; height: number } | null {
+  let decoded: any;
+  try {
+    // formatAsRGBA: false → return raw CMYK pixels (4 bytes per pixel)
+    decoded = jpeg.decode(jpegBuf, { useTArray: true, formatAsRGBA: false } as any);
+  } catch {
+    return null;
+  }
+  const { width, height, data } = decoded;
+  if (!width || !height || !data) return null;
+
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let p = 0; p < width * height; p++) {
+    // Un-invert the Adobe convention (0 = full ink → 255 = full ink)
+    const c = 255 - data[p * 4];
+    const m = 255 - data[p * 4 + 1];
+    const y = 255 - data[p * 4 + 2];
+    const k = 255 - data[p * 4 + 3];
+
+    // Standard subtractive CMYK → RGB
+    rgba[p * 4] = Math.round(((255 - c) * (255 - k)) / 255);
+    rgba[p * 4 + 1] = Math.round(((255 - m) * (255 - k)) / 255);
+    rgba[p * 4 + 2] = Math.round(((255 - y) * (255 - k)) / 255);
+    rgba[p * 4 + 3] = 255;
+  }
+
+  try {
+    const png = new PNG({ width, height });
+    png.data = rgba;
+    const out = PNG.sync.write(png);
+    return { dataUri: `data:image/png;base64,${out.toString("base64")}`, width, height };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -170,10 +235,10 @@ function findJpegStreams(buf: Buffer): Array<{ data: Buffer; width: number; heig
     }
 
     if (foundEnd > i) {
-      const jpeg = buf.subarray(i, foundEnd + 1);
-      const dims = readJpegDimensions(jpeg);
+      const jpegSlice = buf.subarray(i, foundEnd + 1);
+      const dims = readJpegDimensions(jpegSlice);
       if (dims && dims.width * dims.height >= MIN_AREA) {
-        results.push({ data: Buffer.from(jpeg), width: dims.width, height: dims.height });
+        results.push({ data: Buffer.from(jpegSlice), width: dims.width, height: dims.height });
       }
       i = foundEnd + 1;
     } else {
@@ -282,6 +347,7 @@ async function extractViaPdfjs(
           width: img.width,
           height: img.height,
           area: img.width * img.height,
+          colorSource: "rgb",
         });
         diag.pdfjsDecoded++;
       } catch (e: any) {
@@ -301,6 +367,8 @@ export async function extractImagesFromPdf(
     method: "none",
     scannedJpegs: 0,
     validJpegs: 0,
+    cmykConverted: 0,
+    cmykFailed: 0,
     pdfjsImageRefs: 0,
     pdfjsDecoded: 0,
     errors: [],
@@ -320,14 +388,37 @@ export async function extractImagesFromPdf(
 
   if (rawJpegs.length > 0) {
     diag.method = "jpeg-scan";
-    const images: ExtractedImage[] = rawJpegs
-      .map((j) => ({
-        dataUri: `data:image/jpeg;base64,${j.data.toString("base64")}`,
-        width: j.width,
-        height: j.height,
-        area: j.width * j.height,
-      }))
-      .sort((a, b) => b.area - a.area);
+    const images: ExtractedImage[] = [];
+    for (const j of rawJpegs) {
+      const info = readJpegInfo(j.data);
+      if (info && info.components === 4) {
+        // CMYK / YCCK — decode and convert to RGB PNG
+        const converted = cmykJpegToRgbPng(j.data);
+        if (converted) {
+          images.push({
+            dataUri: converted.dataUri,
+            width: converted.width,
+            height: converted.height,
+            area: converted.width * converted.height,
+            colorSource: "cmyk",
+          });
+          diag.cmykConverted++;
+        } else {
+          diag.cmykFailed++;
+          diag.errors.push(`CMYK conversion failed for ${j.width}x${j.height} JPEG`);
+        }
+      } else {
+        // 3-component RGB JPEG — pass through as-is
+        images.push({
+          dataUri: `data:image/jpeg;base64,${j.data.toString("base64")}`,
+          width: j.width,
+          height: j.height,
+          area: j.width * j.height,
+          colorSource: "rgb",
+        });
+      }
+    }
+    images.sort((a, b) => b.area - a.area);
     return { images, diagnostic: diag };
   }
 

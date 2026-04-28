@@ -1,15 +1,25 @@
-// Extract embedded JPEG images from a PDF.
+// Extract embedded JPEG images from a PDF, with proper ICC color management.
 //
-// Pipeline:
-//   1. Parse the PDF with pdf-lib, walk every indirect object.
-//   2. Filter to image XObjects whose filter chain ends in /DCTDecode.
-//   3. Apply any leading filters (FlateDecode etc.) to recover JPEG bytes.
-//   4. Hand each JPEG to sharp, which handles CMYK/YCCK/Adobe-inverted
-//      color spaces uniformly and outputs clean RGB JPEG. sharp uses libvips
-//      under the hood — Vercel ships precompiled binaries so it works in
-//      serverless functions out of the box.
+// Why this is more involved than "just grab the JPEG bytes": when an Adobe
+// product (InDesign / Illustrator / Acrobat) places a CMYK photo into a PDF,
+// the JPEG bytes themselves don't carry the source color profile. The
+// profile lives in the image XObject's /ColorSpace [/ICCBased <ref>] entry,
+// referencing a separate stream in the PDF.
+//
+// If we extract just the JPEG bytes and convert CMYK→sRGB, sharp/libvips
+// uses a generic conversion that comes out flat and desaturated.
+//
+// The fix that Acrobat does and that we now do here:
+//   1. Walk the PDF's image XObjects (via pdf-lib)
+//   2. For each, extract both the JPEG bytes AND the ICC profile from
+//      /ColorSpace
+//   3. Inject the ICC profile into the JPEG as an APP2 marker so sharp's
+//      pipeline picks it up
+//   4. Let sharp handle the ICC-aware CMYK→sRGB conversion
+//
+// Result: photos come out with the same colors Acrobat would produce.
 
-import { PDFDocument, PDFRawStream, PDFName, PDFDict, PDFArray, PDFNumber } from "pdf-lib";
+import { PDFDocument, PDFRawStream, PDFName, PDFDict, PDFArray, PDFNumber, PDFRef } from "pdf-lib";
 import sharp from "sharp";
 import * as zlib from "node:zlib";
 import { createHash } from "node:crypto";
@@ -19,7 +29,6 @@ export interface ExtractedImage {
   width: number;
   height: number;
   area: number;
-  /** Original color space before sharp normalized it. */
   colorSource: "rgb" | "cmyk";
 }
 
@@ -32,6 +41,7 @@ interface ImageDebugInfo {
   filterChain: string[];
   rawBytes: number;
   jpegBytes: number;
+  iccProfileBytes?: number;
   outputBytes?: number;
   outputWidth?: number;
   outputHeight?: number;
@@ -55,21 +65,18 @@ export interface ExtractionDiagnostic {
   passedFilters: number;
   rgbConverted: number;
   cmykConverted: number;
+  iccProfilesFound: number;
   sharpFailed: number;
   errors: string[];
   imageDetails: ImageDebugInfo[];
 }
 
 const MIN_AREA = 5_000;
-const MAX_OUTPUT_DIMENSION = 1400; // downscale anything larger than this for email size budget
+const MAX_OUTPUT_DIMENSION = 1400;
 
-// ---------- JPEG SOF parsing (just for debugging info) -------------------
+// ---------- JPEG SOF parsing ----------------------------------------------
 
-interface JpegInfo {
-  width: number;
-  height: number;
-  components: number;
-}
+interface JpegInfo { width: number; height: number; components: number }
 
 function readJpegInfo(jpegBuf: Buffer): JpegInfo | null {
   if (jpegBuf.length < 4 || jpegBuf[0] !== 0xff || jpegBuf[1] !== 0xd8) return null;
@@ -102,23 +109,97 @@ function readJpegInfo(jpegBuf: Buffer): JpegInfo | null {
   return null;
 }
 
-// ---------- sharp-based JPEG normalization -------------------------------
+// ---------- ICC profile extraction from PDF ------------------------------
 
 /**
- * Convert a PDF-extracted JPEG to an RGB JPEG suitable for embedding in
- * email HTML.
- *
- * The crucial step for CMYK input: PDFs from Adobe products (InDesign,
- * Illustrator, Acrobat) store CMYK channels with the Adobe-inverted
- * convention — 0 = full ink, 255 = no ink — opposite the standard CMYK
- * convention that sharp/libvips assumes. Without correction, sharp's
- * CMYK→sRGB conversion produces complementary-color output (green grass
- * comes out purple, coral shirts come out teal).
- *
- * Fix: apply `.negate()` before `.toColorspace('srgb')` to flip every
- * channel to standard CMYK first, then convert. We only do this for
- * 4-component JPEGs — 3-component RGB JPEGs need no special handling.
+ * Apply the leading filters of a PDF stream (typically just FlateDecode for
+ * ICC streams) to recover the actual ICC profile bytes.
  */
+function decompressStream(stream: PDFRawStream): Buffer | null {
+  const filterField = stream.dict.get(PDFName.of("Filter"));
+  let bytes = Buffer.from(stream.contents);
+
+  const filters: string[] = [];
+  if (filterField instanceof PDFName) filters.push(filterField.asString().replace(/^\//, ""));
+  else if (filterField instanceof PDFArray) {
+    for (let i = 0; i < filterField.size(); i++) {
+      const f = filterField.get(i);
+      if (f instanceof PDFName) filters.push(f.asString().replace(/^\//, ""));
+    }
+  }
+
+  for (const f of filters) {
+    try {
+      if (f === "FlateDecode") {
+        bytes = zlib.inflateSync(bytes);
+      } else if (f === "ASCIIHexDecode") {
+        bytes = Buffer.from(bytes.toString("ascii").replace(/\s+/g, ""), "hex");
+      } else {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return bytes;
+}
+
+/**
+ * If an image XObject's /ColorSpace is [/ICCBased <ref>], dereference and
+ * return the raw ICC profile bytes (after any FlateDecode wrapping).
+ */
+function extractIccProfile(imageDict: PDFDict, doc: PDFDocument): Buffer | null {
+  const cs = imageDict.get(PDFName.of("ColorSpace"));
+  if (!(cs instanceof PDFArray) || cs.size() < 2) return null;
+
+  const head = cs.lookup(0);
+  if (!(head instanceof PDFName) || head.asString() !== "/ICCBased") return null;
+
+  const ref = cs.get(1);
+  if (!(ref instanceof PDFRef)) return null;
+
+  const stream = doc.context.lookup(ref);
+  if (!(stream instanceof PDFRawStream)) return null;
+
+  return decompressStream(stream);
+}
+
+// ---------- ICC injection into JPEG (APP2 marker) ------------------------
+
+/**
+ * Embed an ICC profile into a JPEG as APP2 markers (split into 64KB chunks
+ * if needed). After this, sharp/libvips will detect and apply the profile
+ * during colorspace conversion.
+ */
+function injectIccProfile(jpegBuf: Buffer, iccBytes: Buffer): Buffer {
+  const ICC_IDENTIFIER = Buffer.from("ICC_PROFILE\0", "ascii"); // 12 bytes
+  // APP2 segment length field is 2 bytes (max 65535). Subtract:
+  //   2 for the length field itself
+  //   12 for the ICC_PROFILE identifier
+  //   2 for chunk-number / total-chunks
+  const MAX_CHUNK = 65535 - 16;
+
+  const totalChunks = Math.max(1, Math.ceil(iccBytes.length / MAX_CHUNK));
+  if (totalChunks > 255) return jpegBuf; // ICC > 16MB; skip injection
+
+  const segments: Buffer[] = [];
+  for (let i = 0; i < totalChunks; i++) {
+    const chunk = iccBytes.subarray(i * MAX_CHUNK, Math.min((i + 1) * MAX_CHUNK, iccBytes.length));
+    const segmentLength = 2 + ICC_IDENTIFIER.length + 2 + chunk.length;
+    segments.push(
+      Buffer.from([0xff, 0xe2, (segmentLength >> 8) & 0xff, segmentLength & 0xff]),
+      ICC_IDENTIFIER,
+      Buffer.from([i + 1, totalChunks]),
+      chunk,
+    );
+  }
+
+  // Insert APP2 markers right after the SOI (FF D8)
+  return Buffer.concat([jpegBuf.subarray(0, 2), ...segments, jpegBuf.subarray(2)]);
+}
+
+// ---------- sharp pipeline -----------------------------------------------
+
 async function processJpegToRgb(
   jpegBuf: Buffer,
   components: number,
@@ -128,23 +209,13 @@ async function processJpegToRgb(
 
     let pipeline = sharp(jpegBuf, { failOn: "none" });
 
-    // CMYK = 4 components. Negate before colorspace to undo Adobe's
-    // inverted-channel storage convention.
+    // Adobe stores CMYK with inverted channel values. negate() flips them
+    // back to the standard convention before colorspace conversion.
     if (components === 4) {
       pipeline = pipeline.negate({ alpha: false });
     }
 
     pipeline = pipeline.toColorspace("srgb");
-
-    // CMYK → sRGB without an ICC profile is a generic linear conversion that
-    // comes out flat and desaturated relative to the original print intent.
-    // Apply a tuned saturation + contrast nudge so the result looks closer
-    // to what the designer intended for screen viewing.
-    if (components === 4) {
-      pipeline = pipeline
-        .modulate({ saturation: 1.3 })
-        .linear(1.1, -12); // light contrast S-bump, deepens shadows a touch
-    }
 
     if (meta.width && meta.height) {
       if (meta.width > MAX_OUTPUT_DIMENSION || meta.height > MAX_OUTPUT_DIMENSION) {
@@ -155,14 +226,14 @@ async function processJpegToRgb(
       }
     }
 
-    const out = await pipeline.jpeg({ quality: 85, mozjpeg: false }).toBuffer({ resolveWithObject: true });
+    const out = await pipeline.jpeg({ quality: 88 }).toBuffer({ resolveWithObject: true });
     return { data: out.data, width: out.info.width, height: out.info.height };
   } catch (e: any) {
     return { error: e?.message ?? String(e) };
   }
 }
 
-// ---------- Filter chain handling ----------------------------------------
+// ---------- filter-chain handling for image streams ----------------------
 
 function parseFilterChain(filter: any): string[] {
   if (!filter) return [];
@@ -181,18 +252,13 @@ function parseFilterChain(filter: any): string[] {
 function unwrapToJpeg(rawBytes: Buffer, filterChain: string[]): Buffer | null {
   if (filterChain.length === 0) return null;
   if (filterChain[filterChain.length - 1] !== "DCTDecode") return null;
-
   let bytes = rawBytes;
   for (let i = 0; i < filterChain.length - 1; i++) {
     const f = filterChain[i];
     try {
-      if (f === "FlateDecode") {
-        bytes = zlib.inflateSync(bytes);
-      } else if (f === "ASCIIHexDecode") {
-        bytes = Buffer.from(bytes.toString("ascii").replace(/\s+/g, ""), "hex");
-      } else {
-        return null;
-      }
+      if (f === "FlateDecode") bytes = zlib.inflateSync(bytes);
+      else if (f === "ASCIIHexDecode") bytes = Buffer.from(bytes.toString("ascii").replace(/\s+/g, ""), "hex");
+      else return null;
     } catch {
       return null;
     }
@@ -219,6 +285,7 @@ export async function extractImagesFromPdf(
     passedFilters: 0,
     rgbConverted: 0,
     cmykConverted: 0,
+    iccProfilesFound: 0,
     sharpFailed: 0,
     errors: [],
     imageDetails: [],
@@ -264,10 +331,7 @@ export async function extractImagesFromPdf(
       status: "skipped-bad-decompression",
     };
 
-    if (!jpegBytes) {
-      diag.imageDetails.push(debug);
-      continue;
-    }
+    if (!jpegBytes) { diag.imageDetails.push(debug); continue; }
 
     const info = readJpegInfo(jpegBytes);
     if (!info) {
@@ -294,7 +358,22 @@ export async function extractImagesFromPdf(
     seenHashes.add(hash);
     diag.passedFilters++;
 
-    const processed = await processJpegToRgb(jpegBytes, info.components);
+    // Pull the ICC profile out of the PDF if present, and bake it into the
+    // JPEG so sharp will use it for proper color-managed conversion.
+    let jpegToProcess = jpegBytes;
+    const iccBytes = extractIccProfile(dict, doc);
+    if (iccBytes && iccBytes.length > 0) {
+      diag.iccProfilesFound++;
+      debug.iccProfileBytes = iccBytes.length;
+      try {
+        jpegToProcess = injectIccProfile(jpegBytes, iccBytes);
+      } catch {
+        // If injection fails for any reason, fall back to the un-tagged JPEG.
+        jpegToProcess = jpegBytes;
+      }
+    }
+
+    const processed = await processJpegToRgb(jpegToProcess, info.components);
     if ("error" in processed) {
       debug.status = "skipped-sharp-failed";
       debug.error = processed.error;

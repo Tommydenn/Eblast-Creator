@@ -88,6 +88,50 @@ ${stripped}
 
 // ---------- API surface ---------------------------------------------------
 
+// ---------- Marketing email reads ----------------------------------------
+
+/**
+ * List marketing emails from the portal. The v3 API returns metadata only —
+ * to get HTML content for a specific email, follow up with getMarketingEmail.
+ */
+export async function listMarketingEmails(opts: {
+  limit?: number;
+  after?: string;
+} = {}): Promise<ApiCallResult & { results?: any[]; paging?: any }> {
+  const params = new URLSearchParams();
+  params.set("limit", String(opts.limit ?? 50));
+  if (opts.after) params.set("after", opts.after);
+
+  const res = await fetch(`${HUBSPOT_BASE}/marketing/v3/emails?${params.toString()}`, {
+    method: "GET",
+    headers: authHeader(),
+  });
+  const text = await res.text();
+  let parsed: any;
+  try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
+
+  return {
+    step: "list_marketing_emails",
+    ok: res.ok,
+    status: res.status,
+    body: parsed,
+    results: parsed?.results,
+    paging: parsed?.paging,
+  };
+}
+
+/** Fetch a single marketing email by ID, including its content. */
+export async function getMarketingEmail(emailId: string): Promise<ApiCallResult> {
+  const res = await fetch(`${HUBSPOT_BASE}/marketing/v3/emails/${emailId}`, {
+    method: "GET",
+    headers: authHeader(),
+  });
+  const text = await res.text();
+  let parsed: any;
+  try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
+  return { step: "get_marketing_email", ok: res.ok, status: res.status, body: parsed };
+}
+
 // ---------- File Manager (image hosting) ---------------------------------
 
 export interface UploadedFile {

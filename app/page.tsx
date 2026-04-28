@@ -50,14 +50,13 @@ export default function Home() {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string>("");
   const [pdf, setPdf] = useState<File | null>(null);
-  const [heroImage, setHeroImage] = useState<File | null>(null);
-  const [secondaryImage, setSecondaryImage] = useState<File | null>(null);
 
   const [stage, setStage] = useState<Stage>("idle");
   const [extracted, setExtracted] = useState<ExtractedFlyer | null>(null);
   const [html, setHtml] = useState<string>("");
   const [heroImageUrl, setHeroImageUrl] = useState<string | undefined>();
   const [secondaryImageUrl, setSecondaryImageUrl] = useState<string | undefined>();
+  const [imageCount, setImageCount] = useState<number>(0);
 
   const [refineInput, setRefineInput] = useState("");
   const [refineHistory, setRefineHistory] = useState<RefinementEntry[]>([]);
@@ -88,8 +87,6 @@ export default function Home() {
     const fd = new FormData();
     fd.append("file", pdf);
     fd.append("communitySlug", selectedSlug);
-    if (heroImage) fd.append("heroImage", heroImage);
-    if (secondaryImage) fd.append("secondaryImage", secondaryImage);
 
     try {
       const res = await fetch("/api/draft-from-pdf", { method: "POST", body: fd });
@@ -103,6 +100,7 @@ export default function Home() {
       setHtml(data.html);
       setHeroImageUrl(data.heroImageUrl);
       setSecondaryImageUrl(data.secondaryImageUrl);
+      setImageCount(data.imageCount ?? 0);
       setStage("preview");
     } catch (e: any) {
       setError(String(e));
@@ -201,9 +199,8 @@ export default function Home() {
           Drop a flyer. Get an eblast.
         </h1>
         <p style={{ fontSize: 15, color: "#5C5C5C", maxWidth: 720, lineHeight: 1.6 }}>
-          Upload the flyer PDF (and optionally 1–2 brand photos). Claude extracts the copy, the
-          renderer applies the community&rsquo;s brand. Refine with a chat instruction, then push
-          to HubSpot.
+          Upload one PDF. Claude extracts the copy; we pull the photos straight out of the PDF
+          and apply the community&rsquo;s brand. Refine with a chat instruction, then push to HubSpot.
         </p>
       </header>
 
@@ -226,31 +223,6 @@ export default function Home() {
               type="file"
               accept="application/pdf"
               onChange={(e) => setPdf(e.target.files?.[0] ?? null)}
-              style={fieldStyle}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-          <div>
-            <label style={labelStyle}>
-              Hero image <span style={{ color: "#9CA3AF", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
-            </label>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={(e) => setHeroImage(e.target.files?.[0] ?? null)}
-              style={fieldStyle}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>
-              Inline image <span style={{ color: "#9CA3AF", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional)</span>
-            </label>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={(e) => setSecondaryImage(e.target.files?.[0] ?? null)}
               style={fieldStyle}
             />
           </div>
@@ -395,6 +367,11 @@ export default function Home() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <p style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: "#9CA3AF", margin: 0, marginLeft: 4 }}>
                 Email preview
+                {imageCount > 0 && (
+                  <span style={{ marginLeft: 8, color: "#6B7280" }}>
+                    · {imageCount} image{imageCount === 1 ? "" : "s"} extracted
+                  </span>
+                )}
               </p>
               {stage === "refining" && (
                 <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0, marginRight: 4 }}>refining…</p>

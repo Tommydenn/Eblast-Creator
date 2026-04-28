@@ -17,8 +17,10 @@ function escapeHtml(s: string): string {
 export interface RenderOptions {
   /** Hero image URL or data URI. If omitted, the hero block has no photo — just brand color. */
   heroImageUrl?: string;
-  /** Secondary inline image. If omitted, no inline image is rendered. */
+  /** Secondary inline image, placed between body paragraphs. */
   secondaryImageUrl?: string;
+  /** Additional images for the gallery section near the bottom. Up to 4 used. */
+  galleryImageUrls?: string[];
 }
 
 export function buildEblastHtml(
@@ -29,6 +31,7 @@ export function buildEblastHtml(
   const { brand } = community;
   const heroImg = options.heroImageUrl;
   const secondaryImg = options.secondaryImageUrl;
+  const galleryImgs = (options.galleryImageUrls ?? []).slice(0, 4);
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
@@ -125,6 +128,51 @@ export function buildEblastHtml(
   </tr>`
     : "";
 
+  // Gallery: 2- or 4-up grid of additional photos extracted from the flyer.
+  // Sits between the pull-quote and the final CTA.
+  const gallery = (() => {
+    if (galleryImgs.length === 0) return "";
+
+    // 1 image → single full-width row, 2 images → 2-up, 3 images → 3-up,
+    // 4+ images → 2×2 grid for visual symmetry.
+    const cols = galleryImgs.length === 3 ? 3 : galleryImgs.length === 1 ? 1 : 2;
+    const cellWidth = Math.floor(528 / cols);
+    const rows: string[][] = [];
+    for (let i = 0; i < galleryImgs.length; i += cols) {
+      rows.push(galleryImgs.slice(i, i + cols));
+    }
+
+    const eyebrow = flyer.eventLocation || community.displayName;
+
+    return `
+  <tr>
+    <td style="padding: 44px 36px 12px 36px;" align="center">
+      <p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">A Look Around ${escapeHtml(community.shortName)}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 16px 36px 32px 36px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: separate; border-spacing: 6px;">
+        ${rows
+          .map(
+            (row) => `
+        <tr>
+          ${row
+            .map(
+              (src) => `
+          <td valign="top" width="${cellWidth - 12}" style="padding: 0;">
+            <img src="${src}" width="${cellWidth - 12}" alt="${escapeHtml(community.displayName)}" style="display:block; width:100%; max-width:${cellWidth - 12}px; height:auto; border:0;">
+          </td>`,
+            )
+            .join("")}
+        </tr>`,
+          )
+          .join("")}
+      </table>
+    </td>
+  </tr>`;
+  })();
+
   const finalCta = `
   <tr>
     <td>
@@ -169,6 +217,7 @@ export function buildEblastHtml(
       ${hero}
       ${story}
       ${pullQuote}
+      ${gallery}
       ${finalCta}
       ${footer}
     </table>

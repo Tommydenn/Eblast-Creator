@@ -56,6 +56,7 @@ export default function Home() {
   const [html, setHtml] = useState<string>("");
   const [heroImageUrl, setHeroImageUrl] = useState<string | undefined>();
   const [secondaryImageUrl, setSecondaryImageUrl] = useState<string | undefined>();
+  const [galleryImageUrls, setGalleryImageUrls] = useState<string[]>([]);
   const [imageCount, setImageCount] = useState<number>(0);
   const [imageDiagnostic, setImageDiagnostic] = useState<any>(null);
 
@@ -101,6 +102,7 @@ export default function Home() {
       setHtml(data.html);
       setHeroImageUrl(data.heroImageUrl);
       setSecondaryImageUrl(data.secondaryImageUrl);
+      setGalleryImageUrls(data.galleryImageUrls ?? []);
       setImageCount(data.imageCount ?? 0);
       setImageDiagnostic(data.imageDiagnostic ?? null);
       setStage("preview");
@@ -127,6 +129,7 @@ export default function Home() {
           communitySlug: selectedSlug,
           heroImageUrl,
           secondaryImageUrl,
+          galleryImageUrls,
         }),
       });
       const data = await res.json();

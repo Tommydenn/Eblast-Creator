@@ -13,6 +13,7 @@ interface Body {
   communitySlug: string;
   heroImageUrl?: string;
   secondaryImageUrl?: string;
+  galleryImageUrls?: string[];
 }
 
 export async function POST(req: NextRequest) {
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
     const html = buildEblastHtml(updated, community, {
       heroImageUrl: body.heroImageUrl,
       secondaryImageUrl: body.secondaryImageUrl,
+      galleryImageUrls: body.galleryImageUrls,
     });
     return NextResponse.json({ ok: true, extracted: updated, html });
   } catch (e: any) {

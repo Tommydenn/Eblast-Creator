@@ -87,8 +87,9 @@ export async function POST(req: NextRequest) {
 
   const heroImageUrl = imageRun.images[0]?.dataUri;
   const secondaryImageUrl = imageRun.images[1]?.dataUri;
+  const galleryImageUrls = imageRun.images.slice(2, 6).map((i) => i.dataUri);
 
-  const html = buildEblastHtml(extracted, community, { heroImageUrl, secondaryImageUrl });
+  const html = buildEblastHtml(extracted, community, { heroImageUrl, secondaryImageUrl, galleryImageUrls });
 
   return NextResponse.json({
     ok: true,
@@ -97,6 +98,7 @@ export async function POST(req: NextRequest) {
     html,
     heroImageUrl,
     secondaryImageUrl,
+    galleryImageUrls,
     imageCount: imageRun.images.length,
     imageDiagnostic: imageRun.diagnostic,
   });

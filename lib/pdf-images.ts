@@ -136,6 +136,16 @@ async function processJpegToRgb(
 
     pipeline = pipeline.toColorspace("srgb");
 
+    // CMYK → sRGB without an ICC profile is a generic linear conversion that
+    // comes out flat and desaturated relative to the original print intent.
+    // Apply a tuned saturation + contrast nudge so the result looks closer
+    // to what the designer intended for screen viewing.
+    if (components === 4) {
+      pipeline = pipeline
+        .modulate({ saturation: 1.3 })
+        .linear(1.1, -12); // light contrast S-bump, deepens shadows a touch
+    }
+
     if (meta.width && meta.height) {
       if (meta.width > MAX_OUTPUT_DIMENSION || meta.height > MAX_OUTPUT_DIMENSION) {
         pipeline = pipeline.resize(MAX_OUTPUT_DIMENSION, MAX_OUTPUT_DIMENSION, {

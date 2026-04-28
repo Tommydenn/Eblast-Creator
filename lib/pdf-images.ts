@@ -1,16 +1,22 @@
-// Extract individual images from a PDF using MuPDF's high-level API.
+// True embedded image object extraction.
 //
-// Approach (this is the same path Acrobat uses for its "extract image" tool):
-//   1. Render each page with MuPDF — produces a properly color-managed RGB
-//      pixmap. Same library, same color conversion Acrobat does.
-//   2. Ask MuPDF for the page's structured text *with images preserved*.
-//      This gives us the bounding box of every image on the page.
-//   3. Crop the rendered page to each image's bbox using sharp.
+// Same idea as Poppler's `pdfimages -all` or PyMuPDF's
+//   `page.get_images(full=True)` + `doc.extract_image(xref)`:
 //
-// Result: individual photos extracted with the same color fidelity as
-// Acrobat. No CMYK math, no ICC tweaking, no contrast hacks.
+// We walk the PDF's indirect-object table, find every image XObject
+// (`Subtype == Image`), apply only the *leading* filters (Flate / ASCIIHex)
+// to recover the bytes that the final filter expects, and write those bytes
+// out as-is. For a `/DCTDecode` final filter the recovered bytes ARE the
+// original JPEG file the designer placed into the PDF — the same bytes
+// Acrobat's "Save Image As" would write to disk.
+//
+// We don't render the page. We don't crop from page screenshots. We don't
+// re-encode through sharp. Overlays, text, and other page-level decoration
+// stay where they belong: on the page, not in our extracted images.
 
-import sharp from "sharp";
+import { PDFDocument, PDFRawStream, PDFName, PDFDict, PDFArray, PDFNumber } from "pdf-lib";
+import * as zlib from "node:zlib";
+import { createHash } from "node:crypto";
 
 export interface ExtractedImage {
   dataUri: string;
@@ -21,197 +27,209 @@ export interface ExtractedImage {
 }
 
 export interface ExtractionDiagnostic {
-  method: "mupdf-render-crop" | "none";
-  pageCount: number;
-  pagesProcessed: number;
-  imageBlocksFound: number;
-  cropped: number;
-  cropFailed: number;
+  method: "embedded-image-extraction" | "none";
+  totalStreams: number;
+  imageStreams: number;
+  imagesExtracted: number;
+  imagesSkipped: number;
+  imagesByFormat: { jpeg: number; jpeg2000: number; flate: number; ccitt: number; other: number };
   errors: string[];
   imageDetails: Array<{
-    page: number;
-    pdfBbox: number[];
-    pixelBbox: { left: number; top: number; width: number; height: number };
-    outputBytes: number;
+    width: number;
+    height: number;
+    bitsPerComponent?: number;
+    filterChain: string[];
+    colorSpace?: string;
+    format: string;
+    byteLength: number;
   }>;
 }
 
-const RENDER_SCALE = 2; // 2× the PDF default DPI of 72 = 144 DPI render
-const MIN_PIXEL_AREA = 10_000; // ~100×100 — filters out logos and tiny icons
-const MAX_OUTPUT_DIMENSION = 1400;
+const MIN_AREA = 10_000;
+
+// ---------- helpers -------------------------------------------------------
+
+function parseFilterChain(filter: any): string[] {
+  if (!filter) return [];
+  if (filter instanceof PDFName) return [filter.asString().replace(/^\//, "")];
+  if (filter instanceof PDFArray) {
+    const out: string[] = [];
+    for (let i = 0; i < filter.size(); i++) {
+      const f = filter.get(i);
+      if (f instanceof PDFName) out.push(f.asString().replace(/^\//, ""));
+    }
+    return out;
+  }
+  return [];
+}
+
+/**
+ * Apply every filter in the chain UP TO BUT NOT INCLUDING `untilFilter`.
+ * For an image whose chain ends in DCTDecode, the result is the JPEG bytes;
+ * for JPXDecode the result is the JPEG-2000 bytes, etc.
+ */
+function applyLeadingFilters(rawBytes: Buffer, chain: string[], untilFilter: string): Buffer | null {
+  let bytes = rawBytes;
+  for (const f of chain) {
+    if (f === untilFilter) return bytes;
+    try {
+      if (f === "FlateDecode") bytes = zlib.inflateSync(bytes);
+      else if (f === "ASCIIHexDecode") bytes = Buffer.from(bytes.toString("ascii").replace(/\s+/g, ""), "hex");
+      else return null; // unsupported leading filter
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function dictNumber(dict: PDFDict, key: string): number {
+  const v = dict.get(PDFName.of(key));
+  if (v instanceof PDFNumber) return v.asNumber();
+  return 0;
+}
+
+function readColorSpaceName(dict: PDFDict): string | undefined {
+  const cs = dict.get(PDFName.of("ColorSpace"));
+  if (cs instanceof PDFName) return cs.asString().replace(/^\//, "");
+  if (cs instanceof PDFArray && cs.size() > 0) {
+    const head = cs.lookup(0);
+    if (head instanceof PDFName) return head.asString().replace(/^\//, "");
+  }
+  return undefined;
+}
+
+// ---------- public API ----------------------------------------------------
 
 export async function extractImagesFromPdf(
   pdfBuffer: Buffer,
 ): Promise<{ images: ExtractedImage[]; diagnostic: ExtractionDiagnostic }> {
   const diag: ExtractionDiagnostic = {
-    method: "none",
-    pageCount: 0,
-    pagesProcessed: 0,
-    imageBlocksFound: 0,
-    cropped: 0,
-    cropFailed: 0,
+    method: "embedded-image-extraction",
+    totalStreams: 0,
+    imageStreams: 0,
+    imagesExtracted: 0,
+    imagesSkipped: 0,
+    imagesByFormat: { jpeg: 0, jpeg2000: 0, flate: 0, ccitt: 0, other: 0 },
     errors: [],
     imageDetails: [],
   };
 
-  let mupdfModule: any;
+  let doc: PDFDocument;
   try {
-    mupdfModule = await import("mupdf");
+    doc = await PDFDocument.load(pdfBuffer, { ignoreEncryption: true });
   } catch (e: any) {
-    diag.errors.push(`mupdf import: ${e?.message ?? String(e)}`);
-    return { images: [], diagnostic: diag };
-  }
-  const mupdf = mupdfModule.default ?? mupdfModule;
-  diag.method = "mupdf-render-crop";
-
-  let doc: any;
-  try {
-    doc = mupdf.Document.openDocument(pdfBuffer, "application/pdf");
-  } catch (e: any) {
-    diag.errors.push(`mupdf openDocument: ${e?.message ?? String(e)}`);
-    return { images: [], diagnostic: diag };
-  }
-
-  let pageCount = 0;
-  try {
-    pageCount = doc.countPages();
-    diag.pageCount = pageCount;
-  } catch (e: any) {
-    diag.errors.push(`countPages: ${e?.message ?? String(e)}`);
+    diag.errors.push(`pdf-lib load: ${e?.message ?? String(e)}`);
+    diag.method = "none";
     return { images: [], diagnostic: diag };
   }
 
   const out: ExtractedImage[] = [];
-  const pagesToProcess = Math.min(pageCount, 3); // first 3 pages cover any flyer
+  const seenHashes = new Set<string>();
 
-  for (let pageIdx = 0; pageIdx < pagesToProcess; pageIdx++) {
-    let page: any, pixmap: any;
-    try {
-      page = doc.loadPage(pageIdx);
+  for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+    if (!(obj instanceof PDFRawStream)) continue;
+    diag.totalStreams++;
 
-      // Step 1: render the page (proper color management baked in)
-      const matrix = mupdf.Matrix.scale(RENDER_SCALE, RENDER_SCALE);
-      const colorspace = mupdf.ColorSpace?.DeviceRGB ?? mupdf.DeviceRGB;
-      pixmap = page.toPixmap(matrix, colorspace, false);
-      const pagePng = Buffer.from(pixmap.asPNG());
+    const dict = obj.dict;
+    const subtype = dict.get(PDFName.of("Subtype"));
+    if (!(subtype instanceof PDFName) || subtype.asString() !== "/Image") continue;
+    diag.imageStreams++;
 
-      // Step 2: pull image bounding boxes from the page's structured text
-      let stext: any;
-      let stextJson: any;
-      try {
-        stext = page.toStructuredText("preserve-images");
-        const raw = stext.asJSON();
-        stextJson = typeof raw === "string" ? JSON.parse(raw) : raw;
-      } catch (e: any) {
-        diag.errors.push(`page ${pageIdx} structured text: ${e?.message ?? String(e)}`);
-      }
-
-      const blocks: any[] = stextJson?.blocks ?? [];
-      const imageBlocks = blocks.filter((b: any) => b?.type === "image" || b?.kind === "image");
-      diag.imageBlocksFound += imageBlocks.length;
-
-      // Render meta — use the pixmap's actual dimensions for sanity checking
-      const renderedWidth = pixmap.getWidth?.() ?? pixmap.width;
-      const renderedHeight = pixmap.getHeight?.() ?? pixmap.height;
-
-      // Step 3: crop the rendered page to each image bbox
-      for (const block of imageBlocks) {
-        const bbox = block.bbox ?? block.box;
-        if (!bbox) continue;
-
-        // bbox arrives as either an array [x0,y0,x1,y1] or {x,y,w,h}
-        let x0: number, y0: number, x1: number, y1: number;
-        if (Array.isArray(bbox)) {
-          [x0, y0, x1, y1] = bbox;
-        } else if (bbox.x !== undefined) {
-          x0 = bbox.x;
-          y0 = bbox.y;
-          x1 = bbox.x + (bbox.w ?? 0);
-          y1 = bbox.y + (bbox.h ?? 0);
-        } else {
-          continue;
-        }
-
-        // Convert to pixel coordinates. MuPDF's structured text uses top-left
-        // origin (matching screen coords) so no Y-flip needed.
-        const left = Math.max(0, Math.round(x0 * RENDER_SCALE));
-        const top = Math.max(0, Math.round(y0 * RENDER_SCALE));
-        const width = Math.min(renderedWidth - left, Math.round((x1 - x0) * RENDER_SCALE));
-        const height = Math.min(renderedHeight - top, Math.round((y1 - y0) * RENDER_SCALE));
-
-        if (width <= 0 || height <= 0) continue;
-        if (width * height < MIN_PIXEL_AREA) continue;
-
-        try {
-          let pipeline = sharp(pagePng).extract({ left, top, width, height });
-
-          // Downscale if huge
-          if (width > MAX_OUTPUT_DIMENSION || height > MAX_OUTPUT_DIMENSION) {
-            pipeline = pipeline.resize(MAX_OUTPUT_DIMENSION, MAX_OUTPUT_DIMENSION, {
-              fit: "inside",
-              withoutEnlargement: true,
-            });
-          }
-
-          const jpeg = await pipeline.jpeg({ quality: 90 }).toBuffer({ resolveWithObject: true });
-
-          out.push({
-            dataUri: `data:image/jpeg;base64,${jpeg.data.toString("base64")}`,
-            width: jpeg.info.width,
-            height: jpeg.info.height,
-            area: jpeg.info.width * jpeg.info.height,
-            colorSource: "rendered",
-          });
-          diag.cropped++;
-          diag.imageDetails.push({
-            page: pageIdx,
-            pdfBbox: [x0, y0, x1, y1],
-            pixelBbox: { left, top, width, height },
-            outputBytes: jpeg.data.length,
-          });
-        } catch (e: any) {
-          diag.cropFailed++;
-          diag.errors.push(`crop page ${pageIdx} bbox ${x0},${y0},${x1},${y1}: ${e?.message ?? String(e)}`);
-        }
-      }
-
-      // Fallback: if no image blocks were found on page 1, use the whole
-      // rendered page as a hero candidate.
-      if (pageIdx === 0 && imageBlocks.length === 0) {
-        try {
-          const pageJpeg = await sharp(pagePng)
-            .resize(MAX_OUTPUT_DIMENSION, MAX_OUTPUT_DIMENSION, { fit: "inside", withoutEnlargement: true })
-            .jpeg({ quality: 90 })
-            .toBuffer({ resolveWithObject: true });
-          out.push({
-            dataUri: `data:image/jpeg;base64,${pageJpeg.data.toString("base64")}`,
-            width: pageJpeg.info.width,
-            height: pageJpeg.info.height,
-            area: pageJpeg.info.width * pageJpeg.info.height,
-            colorSource: "rendered",
-          });
-          diag.cropped++;
-          diag.imageDetails.push({
-            page: pageIdx,
-            pdfBbox: [0, 0, renderedWidth / RENDER_SCALE, renderedHeight / RENDER_SCALE],
-            pixelBbox: { left: 0, top: 0, width: pageJpeg.info.width, height: pageJpeg.info.height },
-            outputBytes: pageJpeg.data.length,
-          });
-        } catch (e: any) {
-          diag.errors.push(`page ${pageIdx} fallback render: ${e?.message ?? String(e)}`);
-        }
-      }
-
-      diag.pagesProcessed++;
-    } catch (e: any) {
-      diag.errors.push(`page ${pageIdx}: ${e?.message ?? String(e)}`);
-    } finally {
-      try { pixmap?.destroy?.(); } catch {}
-      try { page?.destroy?.(); } catch {}
+    const width = dictNumber(dict, "Width");
+    const height = dictNumber(dict, "Height");
+    const bitsPerComponent = dictNumber(dict, "BitsPerComponent");
+    if (!width || !height) {
+      diag.imagesSkipped++;
+      continue;
     }
+    if (width * height < MIN_AREA) {
+      diag.imagesSkipped++;
+      continue;
+    }
+
+    const filterChain = parseFilterChain(dict.get(PDFName.of("Filter")));
+    if (filterChain.length === 0) {
+      diag.imagesSkipped++;
+      diag.imagesByFormat.other++;
+      continue;
+    }
+
+    const colorSpaceName = readColorSpaceName(dict);
+    const rawBytes = Buffer.from(obj.contents);
+    const finalFilter = filterChain[filterChain.length - 1];
+
+    let imageBytes: Buffer | null = null;
+    let mimeType = "";
+    let format: keyof ExtractionDiagnostic["imagesByFormat"] = "other";
+
+    if (finalFilter === "DCTDecode") {
+      // JPEG. Stream content (after any leading filters) IS the JPEG file.
+      imageBytes = applyLeadingFilters(rawBytes, filterChain, "DCTDecode");
+      mimeType = "image/jpeg";
+      format = "jpeg";
+    } else if (finalFilter === "JPXDecode") {
+      // JPEG 2000. Browser support is patchy but we keep the bytes.
+      imageBytes = applyLeadingFilters(rawBytes, filterChain, "JPXDecode");
+      mimeType = "image/jp2";
+      format = "jpeg2000";
+    } else if (finalFilter === "CCITTFaxDecode") {
+      // Fax-style monochrome. Would need a TIFF wrapper to display.
+      diag.imagesByFormat.ccitt++;
+      diag.imagesSkipped++;
+      diag.imageDetails.push({
+        width, height, bitsPerComponent, filterChain,
+        colorSpace: colorSpaceName, format: "ccitt-skipped", byteLength: rawBytes.length,
+      });
+      continue;
+    } else {
+      // Raw / Flate-compressed pixel data — would need a PNG wrapper. Skip.
+      diag.imagesByFormat.flate++;
+      diag.imagesSkipped++;
+      diag.imageDetails.push({
+        width, height, bitsPerComponent, filterChain,
+        colorSpace: colorSpaceName, format: "raw-skipped", byteLength: rawBytes.length,
+      });
+      continue;
+    }
+
+    if (!imageBytes) {
+      diag.imagesSkipped++;
+      diag.errors.push(`failed to apply leading filters for ${width}x${height} ${finalFilter}`);
+      continue;
+    }
+
+    const hash = createHash("md5").update(imageBytes).digest("hex");
+    if (seenHashes.has(hash)) {
+      diag.imagesSkipped++;
+      continue;
+    }
+    seenHashes.add(hash);
+
+    const colorSource: "rgb" | "cmyk" = colorSpaceName === "DeviceCMYK" ? "cmyk" : "rgb";
+
+    out.push({
+      dataUri: `data:${mimeType};base64,${imageBytes.toString("base64")}`,
+      width,
+      height,
+      area: width * height,
+      colorSource,
+    });
+    diag.imagesExtracted++;
+    diag.imagesByFormat[format]++;
+    diag.imageDetails.push({
+      width,
+      height,
+      bitsPerComponent,
+      filterChain,
+      colorSpace: colorSpaceName,
+      format,
+      byteLength: imageBytes.length,
+    });
   }
 
-  try { doc.destroy?.(); } catch {}
-
-  return { images: out.sort((a, b) => b.area - a.area), diagnostic: diag };
+  return {
+    images: out.sort((a, b) => b.area - a.area),
+    diagnostic: diag,
+  };
 }

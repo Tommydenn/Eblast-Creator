@@ -15,6 +15,7 @@
 // stay where they belong: on the page, not in our extracted images.
 
 import { PDFDocument, PDFRawStream, PDFName, PDFDict, PDFArray, PDFNumber } from "pdf-lib";
+import sharp from "sharp";
 import * as zlib from "node:zlib";
 import { createHash } from "node:crypto";
 
@@ -23,7 +24,8 @@ export interface ExtractedImage {
   width: number;
   height: number;
   area: number;
-  colorSource: "rgb" | "cmyk" | "rendered";
+  /** Where the bytes came from / what we did to them. */
+  colorSource: "rgb" | "cmyk" | "cmyk-converted-to-srgb" | "rendered";
 }
 
 export interface ExtractionDiagnostic {
@@ -32,6 +34,8 @@ export interface ExtractionDiagnostic {
   imageStreams: number;
   imagesExtracted: number;
   imagesSkipped: number;
+  cmykConvertedToSrgb: number;
+  cmykConversionFailed: number;
   imagesByFormat: { jpeg: number; jpeg2000: number; flate: number; ccitt: number; other: number };
   errors: string[];
   imageDetails: Array<{
@@ -42,6 +46,9 @@ export interface ExtractionDiagnostic {
     colorSpace?: string;
     format: string;
     byteLength: number;
+    /** Set when we ran sharp's CMYK→sRGB normalization on this image. */
+    convertedToSrgb?: boolean;
+    outputBytes?: number;
   }>;
 }
 
@@ -99,6 +106,31 @@ function readColorSpaceName(dict: PDFDict): string | undefined {
   return undefined;
 }
 
+/**
+ * Targeted normalization for CMYK JPEGs only.
+ *
+ * Browsers + email clients render CMYK JPEGs inconsistently (Chrome usually
+ * renders them OK, Firefox often doesn't, most email clients fail). For
+ * any image whose PDF /ColorSpace is /DeviceCMYK, we run sharp once to
+ * convert it to sRGB so the rendered output is web-safe across all clients.
+ *
+ * The negate step un-inverts the Adobe-stored CMYK convention (where 0 =
+ * full ink) before the colorspace conversion. RGB images never pass
+ * through this function.
+ */
+async function cmykJpegToSrgbJpeg(jpegBytes: Buffer): Promise<Buffer | null> {
+  try {
+    const buf = await sharp(jpegBytes, { failOn: "none" })
+      .negate({ alpha: false })
+      .toColorspace("srgb")
+      .jpeg({ quality: 90 })
+      .toBuffer();
+    return buf;
+  } catch {
+    return null;
+  }
+}
+
 // ---------- public API ----------------------------------------------------
 
 export async function extractImagesFromPdf(
@@ -110,6 +142,8 @@ export async function extractImagesFromPdf(
     imageStreams: 0,
     imagesExtracted: 0,
     imagesSkipped: 0,
+    cmykConvertedToSrgb: 0,
+    cmykConversionFailed: 0,
     imagesByFormat: { jpeg: 0, jpeg2000: 0, flate: 0, ccitt: 0, other: 0 },
     errors: [],
     imageDetails: [],
@@ -206,14 +240,35 @@ export async function extractImagesFromPdf(
     }
     seenHashes.add(hash);
 
-    const colorSource: "rgb" | "cmyk" = colorSpaceName === "DeviceCMYK" ? "cmyk" : "rgb";
+    const isCmyk = colorSpaceName === "DeviceCMYK";
+    let outputBytes = imageBytes;
+    let outputMime = mimeType;
+    let resolvedColorSource: ExtractedImage["colorSource"] = isCmyk ? "cmyk" : "rgb";
+    let convertedToSrgb = false;
+
+    // Targeted CMYK normalization. RGB images skip this entirely — they
+    // pass through with their original bytes unchanged.
+    if (isCmyk && format === "jpeg") {
+      const converted = await cmykJpegToSrgbJpeg(imageBytes);
+      if (converted) {
+        outputBytes = converted;
+        outputMime = "image/jpeg";
+        resolvedColorSource = "cmyk-converted-to-srgb";
+        convertedToSrgb = true;
+        diag.cmykConvertedToSrgb++;
+      } else {
+        diag.cmykConversionFailed++;
+        diag.errors.push(`CMYK→sRGB conversion failed for ${width}x${height}`);
+        // Fall back to original CMYK bytes — Chrome usually renders them OK.
+      }
+    }
 
     out.push({
-      dataUri: `data:${mimeType};base64,${imageBytes.toString("base64")}`,
+      dataUri: `data:${outputMime};base64,${outputBytes.toString("base64")}`,
       width,
       height,
       area: width * height,
-      colorSource,
+      colorSource: resolvedColorSource,
     });
     diag.imagesExtracted++;
     diag.imagesByFormat[format]++;
@@ -225,6 +280,8 @@ export async function extractImagesFromPdf(
       colorSpace: colorSpaceName,
       format,
       byteLength: imageBytes.length,
+      convertedToSrgb,
+      outputBytes: outputBytes.length,
     });
   }
 

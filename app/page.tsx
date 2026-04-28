@@ -196,7 +196,8 @@ export default function Home() {
 
   return (
     <main style={{ maxWidth: 1180, margin: "0 auto", padding: "48px 32px" }}>
-      <header style={{ marginBottom: 32 }}>
+      <header style={{ marginBottom: 32, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
         <p style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#9C7A55", margin: 0 }}>
           Eblast Drafter
         </p>
@@ -207,6 +208,24 @@ export default function Home() {
           Upload one PDF. Claude extracts the copy; we pull the photos straight out of the PDF
           and apply the community&rsquo;s brand. Refine with a chat instruction, then push to HubSpot.
         </p>
+        </div>
+        <a
+          href="/communities"
+          style={{
+            background: "white",
+            color: "#1F4538",
+            border: "1px solid #1F4538",
+            padding: "12px 22px",
+            fontSize: 12,
+            letterSpacing: 2,
+            textTransform: "uppercase",
+            fontWeight: 500,
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Communities →
+        </a>
       </header>
 
       {/* Step 1 — inputs */}

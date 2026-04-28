@@ -29,10 +29,28 @@ export interface CommunitySender {
 export interface CommunityHubSpot {
   /** Numeric ID of the segmented contact list this community emails. */
   listId?: number;
+  /** Additional list IDs (some communities email multiple segments). */
+  additionalListIds?: number[];
   /** Optional: HubSpot business unit if you've split portals. */
   businessUnitId?: number;
   /** The active sending domain HubSpot uses for this community. */
   activeDomain?: string;
+}
+
+export interface CommunitySocials {
+  facebook?: string;
+  instagram?: string;
+  linkedin?: string;
+  youtube?: string;
+}
+
+export interface CommunityAsset {
+  /** HubSpot Files URL (or other CDN URL) where the asset is hosted. */
+  url: string;
+  /** Optional human-readable label. */
+  caption?: string;
+  /** Tags for AI selection — e.g. ["dining", "exterior", "lifestyle"]. */
+  tags?: string[];
 }
 
 export type CommunityType = "assisted_living" | "memory_care" | "independent_living" | "mixed";
@@ -44,15 +62,41 @@ export interface Community {
   displayName: string;
   /** Short brand name without the city, e.g. "Caretta". */
   shortName: string;
+  /**
+   * 2-4 letter abbreviation used as a prefix in past eblast names.
+   * Lets us link new drafts back to historical sends, e.g. "ACB" → Caretta Bellevue.
+   */
+  nameAbbreviation?: string;
   /** What this community offers. Drives template defaults. */
   type: CommunityType;
+  /** Free-form list of care types offered, e.g. ["Assisted Living", "Memory Care"]. */
+  careTypes?: string[];
   brand: CommunityBrand;
   address: { street: string; city: string; state: string; zip: string };
   phone: string;
   email: string;
   websiteUrl: string;
+  /** Per-community social links — used in email footer when present. */
+  socials?: CommunitySocials;
+  /** The "From:" identity HubSpot will use for this community's sends. */
   sender: CommunitySender;
+  /**
+   * The marketer who actually creates and schedules eblasts for this
+   * community in HubSpot (e.g. Amelia Ozell). Used for ownership/audit trail
+   * and may differ from `sender` (which is who recipients see).
+   */
+  marketingDirector?: { name: string; email: string };
   hubspot: CommunityHubSpot;
+  /** URL of the brand guide PDF (uploaded to HubSpot Files). */
+  brandGuideUrl?: string;
+  /** URL of the community's primary logo (uploaded to HubSpot Files). */
+  logoUrl?: string;
+  /** Curated photo library to be referenced when AI drafts emails. */
+  photoLibrary?: CommunityAsset[];
+  /** Mission statement / tagline lines used in email pull-quotes. */
+  taglines?: string[];
+  /** Distinctive amenities the marketing copy can reference. */
+  amenities?: string[];
   /** Human notes — voice, tone, audience cues for AI drafting. */
   voiceNotes?: string;
 }
@@ -62,7 +106,9 @@ export const communities: Community[] = [
     slug: "caretta-bellevue",
     displayName: "Caretta Bellevue",
     shortName: "Caretta",
+    nameAbbreviation: "ACB", // matches past eblast naming convention
     type: "mixed", // assisted living + memory care
+    careTypes: ["Assisted Living", "Memory Care"],
     brand: {
       primary: "#1F4538",
       accent: "#B5683E",
@@ -84,10 +130,24 @@ export const communities: Community[] = [
       name: "Caretta Bellevue",
       email: "Bellevue@CarettaSeniorLiving.com",
     },
+    marketingDirector: {
+      name: "Amelia Ozell",
+      email: "aozell@greatlakesmc.com",
+    },
     hubspot: {
       // TODO: fill with the Caretta Bellevue segmented list ID
       activeDomain: "talamoresunprairie-8818180.hs-sites.com",
     },
+    taglines: [
+      "Caretta seeks to enrich the rhythms of our residents' lives by fostering meaningful relationships, creating engaging experiences, and providing exceptional care.",
+    ],
+    amenities: [
+      "Boutique 26-apartment memory care neighborhood",
+      "Made-from-scratch dining via Unidine",
+      "9' ceilings and large windows",
+      "All-new stainless appliances and quartz countertops",
+      "Satellite TV and WiFi included",
+    ],
     voiceNotes:
       "Boutique, warm, hospitality-forward. Lean on food and craft. " +
       "Family-decision audience: addresses adult children making the decision " +

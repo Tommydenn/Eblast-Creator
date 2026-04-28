@@ -5,21 +5,26 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 /**
- * GET /api/marketing-emails/recent
+ * GET /api/marketing-emails/recent?days=90&type=BATCH_EMAIL
  *
  * Walks every marketing email in the HubSpot portal (paginated) and returns
- * a compact summary of the ones created in the last N days (default 90).
+ * a breakdown plus a recent-window summary. Used both for the in-app
+ * dashboard and as a research tool for understanding past eblast patterns.
  *
- * We use this both for the in-app dashboard and as a research tool to see
- * what patterns past Great Lakes eblasts share — so the Community type
- * captures the actual fields the team uses, not guesses.
- *
- * Read-only. Doesn't write anything to HubSpot.
+ * Query params:
+ *   days   — recency window for "inWindow" emails (default 90)
+ *   type   — filter to a specific type (BATCH_EMAIL / AUTOMATED_EMAIL / AB_EMAIL)
+ *   include — comma list: "automated" to include AUTOMATED_EMAIL in results
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const days = Number(url.searchParams.get("days") ?? "90");
-  const includeHtmlSummary = url.searchParams.get("html") === "1"; // future: fetch each body
+  const typeFilter = url.searchParams.get("type"); // optional
+  const include = (url.searchParams.get("include") ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const includeAutomated = include.includes("automated");
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
@@ -27,9 +32,10 @@ export async function GET(req: Request) {
   const all: any[] = [];
   let after: string | undefined;
 
-  // Paginate up to 10 pages (500 emails). Generous for a small portal.
-  for (let i = 0; i < 10; i++) {
-    const page = await listMarketingEmails({ limit: 50, after });
+  // Paginate up to 60 pages (6000 emails). The portal has 5+ years of
+  // history including drafts, so we need to walk the full list.
+  for (let i = 0; i < 60; i++) {
+    const page = await listMarketingEmails({ limit: 100, after });
     if (!page.ok) {
       return NextResponse.json(
         {
@@ -48,20 +54,67 @@ export async function GET(req: Request) {
     if (!after || results.length === 0) break;
   }
 
-  // Filter to anything created/published within the date window
+  // ---------- distribution / breakdown ----------------------------------
+  const byState: Record<string, number> = {};
+  const byType: Record<string, number> = {};
+  const byTemplateMode: Record<string, number> = {};
+  const byDomain: Record<string, number> = {};
+  const byBusinessUnit: Record<string, number> = {};
+
+  let oldestCreated = "";
+  let newestCreated = "";
+  let oldestUpdated = "";
+  let newestUpdated = "";
+  let oldestPublished = "";
+  let newestPublished = "";
+
+  for (const e of all) {
+    if (e.state) byState[e.state] = (byState[e.state] ?? 0) + 1;
+    if (e.type) byType[e.type] = (byType[e.type] ?? 0) + 1;
+    if (e.emailTemplateMode) {
+      byTemplateMode[e.emailTemplateMode] = (byTemplateMode[e.emailTemplateMode] ?? 0) + 1;
+    }
+    if (e.activeDomain) byDomain[e.activeDomain] = (byDomain[e.activeDomain] ?? 0) + 1;
+    if (e.businessUnitId !== undefined) {
+      const k = String(e.businessUnitId);
+      byBusinessUnit[k] = (byBusinessUnit[k] ?? 0) + 1;
+    }
+
+    if (e.createdAt) {
+      if (!oldestCreated || e.createdAt < oldestCreated) oldestCreated = e.createdAt;
+      if (!newestCreated || e.createdAt > newestCreated) newestCreated = e.createdAt;
+    }
+    if (e.updatedAt) {
+      if (!oldestUpdated || e.updatedAt < oldestUpdated) oldestUpdated = e.updatedAt;
+      if (!newestUpdated || e.updatedAt > newestUpdated) newestUpdated = e.updatedAt;
+    }
+    if (e.publishDate) {
+      if (!oldestPublished || e.publishDate < oldestPublished) oldestPublished = e.publishDate;
+      if (!newestPublished || e.publishDate > newestPublished) newestPublished = e.publishDate;
+    }
+  }
+
+  // ---------- in-window filter ------------------------------------------
   const recent = all.filter((e: any) => {
+    if (typeFilter && e.type !== typeFilter) return false;
+    if (!includeAutomated && e.type === "AUTOMATED_EMAIL") return false;
+
     const created = e.createdAt ? new Date(e.createdAt) : null;
+    const updated = e.updatedAt ? new Date(e.updatedAt) : null;
     const published = e.publishDate ? new Date(e.publishDate) : null;
-    return (created && created >= cutoff) || (published && published >= cutoff);
+    return (
+      (created && created >= cutoff) ||
+      (updated && updated >= cutoff) ||
+      (published && published >= cutoff)
+    );
   });
 
-  // Compact, signal-rich summary — enough to spot patterns by skimming.
+  // Compact summary of in-window emails
   const summary = recent
     .map((e: any) => ({
       id: e.id,
       name: e.name,
       subject: e.subject,
-      previewText: e.previewKey, // HubSpot's odd field name
       state: e.state,
       type: e.type,
       emailTemplateMode: e.emailTemplateMode,
@@ -71,15 +124,13 @@ export async function GET(req: Request) {
       publishDate: e.publishDate,
       activeDomain: e.activeDomain,
       from: e.from,
-      to: e.to,
-      subcategory: e.subcategory,
       subscriptionDetails: e.subscriptionDetails,
       businessUnitId: e.businessUnitId,
       templatePath: e.content?.templatePath,
     }))
-    .sort((a: any, b: any) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+    .sort((a: any, b: any) => (b.updatedAt ?? b.createdAt ?? "").localeCompare(a.updatedAt ?? a.createdAt ?? ""));
 
-  // Aggregate signals — useful for designing the Community structure.
+  // ---------- in-window aggregates --------------------------------------
   const senderEmails = new Map<string, number>();
   const senderNames = new Map<string, number>();
   const activeDomains = new Map<string, number>();
@@ -104,8 +155,24 @@ export async function GET(req: Request) {
     ok: true,
     days,
     cutoff: cutoff.toISOString(),
+    typeFilter,
+    includeAutomated,
     totalScanned: all.length,
     inWindow: recent.length,
+    distribution: {
+      byState,
+      byType,
+      byTemplateMode,
+      byDomain: Object.fromEntries(
+        Object.entries(byDomain).sort(([, a], [, b]) => b - a).slice(0, 50),
+      ),
+      byBusinessUnit,
+      dateRanges: {
+        createdAt: { oldest: oldestCreated, newest: newestCreated },
+        updatedAt: { oldest: oldestUpdated, newest: newestUpdated },
+        publishDate: { oldest: oldestPublished, newest: newestPublished },
+      },
+    },
     aggregates: {
       senderEmails: topN(senderEmails),
       senderNames: topN(senderNames),

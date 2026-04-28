@@ -88,6 +88,145 @@ ${stripped}
 
 // ---------- API surface ---------------------------------------------------
 
+// ---------- File Manager (image hosting) ---------------------------------
+
+export interface UploadedFile {
+  ok: boolean;
+  url?: string;
+  id?: string;
+  status: number;
+  body: any;
+}
+
+/**
+ * Upload a single image to HubSpot's File Manager. Returns the public URL we
+ * can reference from the email HTML (e.g. https://*.hubspotusercontent**.net/...).
+ *
+ * Required scope on the Private App: `files`.
+ */
+export async function uploadImageToFileManager(opts: {
+  bytes: Buffer;
+  mimeType: string;
+  fileName: string;
+  folderPath: string; // e.g. "/eblast-drafter/caretta-bellevue"
+}): Promise<UploadedFile> {
+  const url = `${HUBSPOT_BASE}/files/v3/files`;
+
+  const form = new FormData();
+  form.append("file", new Blob([opts.bytes], { type: opts.mimeType }), opts.fileName);
+  form.append("folderPath", opts.folderPath);
+  form.append(
+    "options",
+    JSON.stringify({
+      access: "PUBLIC_NOT_INDEXABLE",
+      overwrite: false,
+      duplicateValidationStrategy: "NONE",
+      duplicateValidationScope: "EXACT_FOLDER",
+    }),
+  );
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: authHeader(), // do NOT set Content-Type; FormData sets the boundary
+    body: form,
+  });
+  const text = await res.text();
+  let parsed: any;
+  try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    body: parsed,
+    url: parsed?.url,
+    id: parsed?.id,
+  };
+}
+
+/**
+ * Find every `data:image/...;base64,...` URI in the HTML, upload each unique
+ * image to HubSpot File Manager, and return the HTML with the data URIs
+ * swapped for hosted URLs.
+ */
+export async function swapDataUrisForHostedImages(opts: {
+  html: string;
+  folderPath: string;
+}): Promise<{
+  html: string;
+  attempted: number;
+  uploaded: number;
+  failures: Array<{ status: number; body: any }>;
+  bytesBefore: number;
+  bytesAfter: number;
+}> {
+  const bytesBefore = opts.html.length;
+  const dataUriRegex = /data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)/g;
+
+  // Find unique data URIs (an image referenced multiple times only uploads once).
+  const seen = new Map<string, { mime: string; bytes: Buffer }>();
+  let m: RegExpExecArray | null;
+  while ((m = dataUriRegex.exec(opts.html)) !== null) {
+    if (!seen.has(m[0])) {
+      seen.set(m[0], { mime: m[1], bytes: Buffer.from(m[2], "base64") });
+    }
+  }
+
+  const failures: Array<{ status: number; body: any }> = [];
+  if (seen.size === 0) {
+    return { html: opts.html, attempted: 0, uploaded: 0, failures, bytesBefore, bytesAfter: bytesBefore };
+  }
+
+  // Upload each in parallel.
+  const uploads = await Promise.all(
+    Array.from(seen.entries()).map(async ([dataUri, { mime, bytes }]) => {
+      const ext = mime.replace("image/", "").replace("jpeg", "jpg");
+      const hash = createHashShort(bytes);
+      const fileName = `${hash}.${ext}`;
+      const result = await uploadImageToFileManager({
+        bytes,
+        mimeType: mime,
+        fileName,
+        folderPath: opts.folderPath,
+      });
+      return { dataUri, result };
+    }),
+  );
+
+  // Replace data URIs with hosted URLs (or leave intact if upload failed).
+  let html = opts.html;
+  let uploaded = 0;
+  for (const { dataUri, result } of uploads) {
+    if (result.ok && result.url) {
+      html = html.split(dataUri).join(result.url);
+      uploaded++;
+    } else {
+      failures.push({ status: result.status, body: result.body });
+    }
+  }
+
+  return {
+    html,
+    attempted: uploads.length,
+    uploaded,
+    failures,
+    bytesBefore,
+    bytesAfter: html.length,
+  };
+}
+
+function createHashShort(bytes: Buffer): string {
+  // Tiny fnv-1a hash — enough for filename uniqueness, doesn't need crypto.
+  let h = 0x811c9dc5;
+  const len = Math.min(bytes.length, 4096);
+  for (let i = 0; i < len; i++) {
+    h ^= bytes[i];
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+// ---------- coded email templates ----------------------------------------
+
 /**
  * Upload an HTML file as a coded email template via the Design Manager
  * source-code API. The endpoint expects multipart/form-data — JSON returns

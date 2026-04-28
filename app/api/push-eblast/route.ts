@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getCommunity } from "@/data/communities";
-import { uploadEmailTemplate, createEmail } from "@/lib/hubspot";
+import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages } from "@/lib/hubspot";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -73,16 +73,59 @@ export async function POST(req: NextRequest) {
     `[push-eblast] community=${community.slug} subject="${body.subject}" htmlBytes=${html.length}`,
   );
 
-  // 1) Upload to Design Manager.
+  // 1) Upload any inline data: image URIs to HubSpot's File Manager and
+  //    swap them for hosted URLs. HubSpot rejects coded templates over 1.5 MiB,
+  //    so embedded base64 images must be hosted externally before push.
+  const swap = await swapDataUrisForHostedImages({
+    html,
+    folderPath: `/eblast-drafter/${community.slug}`,
+  });
+  console.log(
+    `[push-eblast] image swap: attempted=${swap.attempted} uploaded=${swap.uploaded} bytesBefore=${swap.bytesBefore} bytesAfter=${swap.bytesAfter}`,
+  );
+  if (swap.failures.length > 0) {
+    console.error(`[push-eblast] image-upload failures`, JSON.stringify(swap.failures));
+    return NextResponse.json({
+      ok: false,
+      steps: [
+        {
+          step: "upload_images",
+          ok: false,
+          status: swap.failures[0].status,
+          body: {
+            attempted: swap.attempted,
+            uploaded: swap.uploaded,
+            failures: swap.failures,
+            hint:
+              "If you see 401/403 here, add the `files` scope to your Private App, regenerate the token, and update HUBSPOT_PRIVATE_APP_TOKEN in Vercel env vars.",
+          },
+        },
+      ],
+    });
+  }
+  const finalHtml = swap.html;
+
+  // 2) Upload the (now slim) HTML to Design Manager.
   const hubspotPath = `email-templates/${community.slug}/${templateFileName}`;
   const upload = await uploadEmailTemplate({
     path: hubspotPath,
-    html,
+    html: finalHtml,
     label: `${community.displayName} — ${templateFileName}`,
   });
   if (!upload.ok) {
     console.error(`[push-eblast] upload failed status=${upload.status}`, JSON.stringify(upload.body));
-    return NextResponse.json({ ok: false, steps: [upload] });
+    return NextResponse.json({
+      ok: false,
+      steps: [
+        {
+          step: "upload_images",
+          ok: true,
+          status: 200,
+          body: { attempted: swap.attempted, uploaded: swap.uploaded, bytesAfter: swap.bytesAfter },
+        },
+        upload,
+      ],
+    });
   }
 
   // 2) Create the marketing email pointing at it.
@@ -102,7 +145,16 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: upload.ok && create.ok,
-    steps: [upload, create],
+    steps: [
+      {
+        step: "upload_images",
+        ok: true,
+        status: 200,
+        body: { attempted: swap.attempted, uploaded: swap.uploaded, bytesAfter: swap.bytesAfter },
+      },
+      upload,
+      create,
+    ],
     summary: create.ok
       ? {
           emailId: create.body?.id,

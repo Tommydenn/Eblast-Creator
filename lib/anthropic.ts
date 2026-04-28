@@ -110,6 +110,9 @@ export async function extractFlyerContent(opts: {
     messages: [
       {
         role: "user",
+        // Cast to any: the SDK's published types still classify "document" as
+        // a beta content block in some minor versions. The runtime API accepts
+        // it cleanly on Sonnet 4.6.
         content: [
           {
             type: "document",
@@ -119,7 +122,7 @@ export async function extractFlyerContent(opts: {
             type: "text",
             text: "Read this flyer and extract its content as a marketing email by calling the extract_flyer tool.",
           },
-        ],
+        ] as any,
       },
     ],
   });

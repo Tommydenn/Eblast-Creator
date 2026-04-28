@@ -1,55 +1,67 @@
 // Extract embedded JPEG images from a PDF — properly, via PDF object parsing.
 //
-// Approach: parse the PDF with pdf-lib, walk every indirect object, and pull
-// the ones that are image XObjects with /Filter /DCTDecode (i.e. JPEG). The
-// stream content of those objects IS the raw JPEG file bytes — no scanning,
-// no false positives, no truncation.
+// Approach: parse the PDF with pdf-lib, walk every indirect object, find
+// image XObjects whose filter chain ends in /DCTDecode (i.e. JPEG). Apply
+// any leading filters (typically /FlateDecode for Flate-wrapped JPEGs) to
+// get the actual JPEG file bytes.
 //
-// Color handling: a 4-component JPEG (CMYK) gets decoded with jpeg-js and
-// converted to RGB PNG. A 3-component JPEG (RGB/YCbCr) passes through
-// unchanged because every modern email client renders it correctly.
+// Color handling: 4-component (CMYK) JPEGs are decoded with jpeg-js and
+// converted to RGB PNG. 3-component (RGB/YCbCr) JPEGs pass through as-is.
 
 import { PDFDocument, PDFRawStream, PDFName, PDFDict, PDFArray, PDFNumber } from "pdf-lib";
 import { PNG } from "pngjs";
 import jpeg from "jpeg-js";
+import * as zlib from "node:zlib";
+import { createHash } from "node:crypto";
 
 export interface ExtractedImage {
   dataUri: string;
   width: number;
   height: number;
   area: number;
-  /** "rgb" if we passed the JPEG through as-is, "cmyk" if we converted from a 4-component JPEG. */
   colorSource: "rgb" | "cmyk";
+}
+
+interface ImageDebugInfo {
+  pdfDictWidth: number;
+  pdfDictHeight: number;
+  jpegSofWidth?: number;
+  jpegSofHeight?: number;
+  components?: number;
+  filterChain: string[];
+  rawBytes: number;
+  jpegBytes: number;
+  firstBytesHex: string;
+  status: "rgb" | "cmyk-converted" | "cmyk-failed" | "skipped-too-small" | "skipped-duplicate" | "skipped-bad-decompression" | "skipped-no-jpeg-marker";
 }
 
 export interface ExtractionDiagnostic {
   method: "pdf-lib" | "none";
-  totalStreams: number;     // total indirect-object streams in the PDF
-  imageStreams: number;     // streams whose Subtype is /Image
-  jpegStreams: number;      // image streams whose filter chain ends in /DCTDecode
-  passedFilters: number;    // jpeg streams that survived the size threshold
+  totalStreams: number;
+  imageStreams: number;
+  jpegStreams: number;
+  passedFilters: number;
   cmykConverted: number;
   cmykFailed: number;
   errors: string[];
+  imageDetails: ImageDebugInfo[];
 }
 
 const MIN_AREA = 5_000;
 
-// ---------- JPEG SOF parsing (just to count color components) ------------
+// ---------- JPEG SOF parsing --------------------------------------------
 
 interface JpegInfo {
   width: number;
   height: number;
-  components: number; // 1, 3, or 4
+  components: number;
 }
 
 function readJpegInfo(jpegBuf: Buffer): JpegInfo | null {
+  if (jpegBuf.length < 4 || jpegBuf[0] !== 0xff || jpegBuf[1] !== 0xd8) return null;
   let i = 2;
   while (i < jpegBuf.length - 8) {
-    if (jpegBuf[i] !== 0xff) {
-      i++;
-      continue;
-    }
+    if (jpegBuf[i] !== 0xff) { i++; continue; }
     const marker = jpegBuf[i + 1];
     if (marker === 0xff) { i++; continue; }
     if (marker === 0x00 || marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
@@ -87,6 +99,7 @@ function cmykJpegToRgbPng(jpegBuf: Buffer): { dataUri: string; width: number; he
   }
   const { width, height, data } = decoded;
   if (!width || !height || !data) return null;
+  if (data.length < width * height * 4) return null;
 
   const rgba = Buffer.alloc(width * height * 4);
   for (let p = 0; p < width * height; p++) {
@@ -110,19 +123,53 @@ function cmykJpegToRgbPng(jpegBuf: Buffer): { dataUri: string; width: number; he
   }
 }
 
-// ---------- pdf-lib image-stream extraction -------------------------------
+// ---------- Filter chain handling ----------------------------------------
 
-function filterChainEndsInDCT(filter: any): boolean {
-  if (!filter) return false;
-  if (filter instanceof PDFName) return filter.asString() === "/DCTDecode";
+function parseFilterChain(filter: any): string[] {
+  if (!filter) return [];
+  if (filter instanceof PDFName) return [filter.asString().replace(/^\//, "")];
   if (filter instanceof PDFArray) {
+    const out: string[] = [];
     for (let i = 0; i < filter.size(); i++) {
       const f = filter.get(i);
-      if (f instanceof PDFName && f.asString() === "/DCTDecode") return true;
+      if (f instanceof PDFName) out.push(f.asString().replace(/^\//, ""));
+    }
+    return out;
+  }
+  return [];
+}
+
+/**
+ * Take a PDF raw stream and apply all leading filters (everything except the
+ * final DCTDecode) to recover the embedded JPEG bytes.
+ *
+ * The final filter is expected to be DCTDecode — we DON'T apply it because
+ * we want the JPEG bytes themselves, not the decoded pixels.
+ */
+function unwrapToJpeg(rawBytes: Buffer, filterChain: string[]): Buffer | null {
+  if (filterChain.length === 0) return null;
+  if (filterChain[filterChain.length - 1] !== "DCTDecode") return null;
+
+  let bytes = rawBytes;
+  for (let i = 0; i < filterChain.length - 1; i++) {
+    const f = filterChain[i];
+    try {
+      if (f === "FlateDecode") {
+        bytes = zlib.inflateSync(bytes);
+      } else if (f === "ASCIIHexDecode") {
+        bytes = Buffer.from(bytes.toString("ascii").replace(/\s+/g, ""), "hex");
+      } else {
+        // Unknown intermediate filter — bail
+        return null;
+      }
+    } catch {
+      return null;
     }
   }
-  return false;
+  return bytes;
 }
+
+// ---------- public API ---------------------------------------------------
 
 function dictNumber(dict: PDFDict, key: string): number {
   const v = dict.get(PDFName.of(key));
@@ -142,6 +189,7 @@ export async function extractImagesFromPdf(
     cmykConverted: 0,
     cmykFailed: 0,
     errors: [],
+    imageDetails: [],
   };
 
   let doc: PDFDocument;
@@ -154,7 +202,7 @@ export async function extractImagesFromPdf(
   }
 
   const out: ExtractedImage[] = [];
-  const seenSizes = new Set<number>(); // crude dedupe for repeated images
+  const seenHashes = new Set<string>();
 
   for (const [, obj] of doc.context.enumerateIndirectObjects()) {
     if (!(obj instanceof PDFRawStream)) continue;
@@ -165,23 +213,56 @@ export async function extractImagesFromPdf(
     if (!(subtype instanceof PDFName) || subtype.asString() !== "/Image") continue;
     diag.imageStreams++;
 
-    const filter = dict.get(PDFName.of("Filter"));
-    if (!filterChainEndsInDCT(filter)) continue;
+    const filterChain = parseFilterChain(dict.get(PDFName.of("Filter")));
+    if (filterChain[filterChain.length - 1] !== "DCTDecode") continue;
     diag.jpegStreams++;
 
-    const width = dictNumber(dict, "Width");
-    const height = dictNumber(dict, "Height");
-    if (!width || !height || width * height < MIN_AREA) continue;
+    const pdfDictWidth = dictNumber(dict, "Width");
+    const pdfDictHeight = dictNumber(dict, "Height");
+    const rawBytes = Buffer.from(obj.contents);
 
-    const jpegBytes = Buffer.from(obj.contents);
-    if (seenSizes.has(jpegBytes.length)) continue;
-    seenSizes.add(jpegBytes.length);
-    diag.passedFilters++;
+    const jpegBytes = unwrapToJpeg(rawBytes, filterChain);
+    const debug: ImageDebugInfo = {
+      pdfDictWidth,
+      pdfDictHeight,
+      filterChain,
+      rawBytes: rawBytes.length,
+      jpegBytes: jpegBytes?.length ?? 0,
+      firstBytesHex: jpegBytes ? jpegBytes.subarray(0, 8).toString("hex") : rawBytes.subarray(0, 8).toString("hex"),
+      status: "skipped-bad-decompression",
+    };
+
+    if (!jpegBytes) {
+      diag.imageDetails.push(debug);
+      continue;
+    }
 
     const info = readJpegInfo(jpegBytes);
-    const components = info?.components ?? 0;
+    if (!info) {
+      debug.status = "skipped-no-jpeg-marker";
+      diag.imageDetails.push(debug);
+      continue;
+    }
+    debug.jpegSofWidth = info.width;
+    debug.jpegSofHeight = info.height;
+    debug.components = info.components;
 
-    if (components === 4) {
+    if (info.width * info.height < MIN_AREA) {
+      debug.status = "skipped-too-small";
+      diag.imageDetails.push(debug);
+      continue;
+    }
+
+    const hash = createHash("md5").update(jpegBytes).digest("hex");
+    if (seenHashes.has(hash)) {
+      debug.status = "skipped-duplicate";
+      diag.imageDetails.push(debug);
+      continue;
+    }
+    seenHashes.add(hash);
+    diag.passedFilters++;
+
+    if (info.components === 4) {
       const converted = cmykJpegToRgbPng(jpegBytes);
       if (converted) {
         out.push({
@@ -192,19 +273,24 @@ export async function extractImagesFromPdf(
           colorSource: "cmyk",
         });
         diag.cmykConverted++;
+        debug.status = "cmyk-converted";
       } else {
         diag.cmykFailed++;
-        diag.errors.push(`CMYK conversion failed for ${width}x${height}`);
+        debug.status = "cmyk-failed";
+        diag.errors.push(`CMYK conversion failed for ${info.width}x${info.height}`);
       }
     } else {
       out.push({
         dataUri: `data:image/jpeg;base64,${jpegBytes.toString("base64")}`,
-        width,
-        height,
-        area: width * height,
+        width: info.width,
+        height: info.height,
+        area: info.width * info.height,
         colorSource: "rgb",
       });
+      debug.status = "rgb";
     }
+
+    diag.imageDetails.push(debug);
   }
 
   return { images: out.sort((a, b) => b.area - a.area), diagnostic: diag };

@@ -68,10 +68,13 @@ export async function POST(req: NextRequest) {
   }
   const extracted = extractedResult.value;
 
-  // Image extraction is best-effort — if it fails, render with no images.
-  const images = imagesResult.status === "fulfilled" ? imagesResult.value : [];
-  const heroImageUrl = images[0]?.dataUri;
-  const secondaryImageUrl = images[1]?.dataUri;
+  const imageRun =
+    imagesResult.status === "fulfilled"
+      ? imagesResult.value
+      : { images: [], diagnostic: { pageCount: 0, imageRefsFound: 0, decoded: 0, skippedNoData: 0, skippedTooSmall: 0, skippedUnknownKind: 0, skippedDuplicate: 0, errors: [String((imagesResult as any).reason)], inspected: [] } };
+
+  const heroImageUrl = imageRun.images[0]?.dataUri;
+  const secondaryImageUrl = imageRun.images[1]?.dataUri;
 
   const html = buildEblastHtml(extracted, community, { heroImageUrl, secondaryImageUrl });
 
@@ -82,8 +85,7 @@ export async function POST(req: NextRequest) {
     html,
     heroImageUrl,
     secondaryImageUrl,
-    imageCount: images.length,
-    imageExtractionError:
-      imagesResult.status === "rejected" ? String((imagesResult as any).reason) : undefined,
+    imageCount: imageRun.images.length,
+    imageDiagnostic: imageRun.diagnostic,
   });
 }

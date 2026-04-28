@@ -2,29 +2,34 @@
 //
 // Uses pdfjs-dist's legacy Node-friendly build to walk each page's operator
 // list, finds every image XObject, decodes the raw bitmap into RGBA, and
-// re-encodes as PNG via pngjs. Returns sorted by area, largest first.
-//
-// Heuristic: we treat the largest image as the hero, second-largest as the
-// inline. Tiny images (logos, icons) are filtered by a minimum-area threshold
-// so they don't accidentally become the hero.
+// re-encodes as PNG via pngjs.
 
 import { PNG } from "pngjs";
 
 export interface ExtractedImage {
-  /** data: URI suitable for embedding directly in email HTML. */
   dataUri: string;
   width: number;
   height: number;
-  /** Pixel area — width × height. Used for ranking. */
   area: number;
 }
 
-const MIN_AREA = 40_000; // ~200×200 — discards logos and small icons
-const MAX_OUTPUT_DIMENSION = 1200; // downscale anything wider/taller than this
+export interface ExtractionDiagnostic {
+  pageCount: number;
+  imageRefsFound: number;     // how many paintImage* ops we saw
+  decoded: number;            // how many we successfully turned into a PNG
+  skippedNoData: number;      // image objects that had no usable data
+  skippedTooSmall: number;
+  skippedUnknownKind: number;
+  skippedDuplicate: number;
+  errors: string[];
+  // Per-image debug — useful for figuring out what kind of compression a tricky PDF uses.
+  inspected: Array<{ width?: number; height?: number; kind?: number; hasData?: boolean; hasBitmap?: boolean }>;
+}
+
+const MIN_AREA = 5_000; // ~70×70 — cuts logos/icons but lets in most editorial photos
+const MAX_OUTPUT_DIMENSION = 1200;
 
 function fnv1aHash(buffer: Uint8Array | Uint8ClampedArray): string {
-  // Fast non-cryptographic hash so we can dedupe images that appear on
-  // multiple pages. Walks at most the first 8KB to keep it cheap.
   let h = 0x811c9dc5;
   const len = Math.min(buffer.length, 8192);
   for (let i = 0; i < len; i++) {
@@ -80,61 +85,149 @@ function downscaleNN(rgba: Buffer, width: number, height: number, maxDim: number
   return { rgba: out, width: newW, height: newH };
 }
 
-export async function extractImagesFromPdf(pdfBuffer: Buffer): Promise<ExtractedImage[]> {
-  // Dynamic import because pdfjs-dist v4 is ESM and we want it kept out of the
-  // bundle when the route isn't called.
-  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+/**
+ * Try both page.objs and page.commonObjs. Different pdfjs versions stash
+ * image data in different places.
+ */
+async function fetchImageObject(page: any, objId: string): Promise<any | null> {
+  const tryStore = (store: any): Promise<any | null> =>
+    new Promise((resolve) => {
+      try {
+        store.get(objId, (img: any) => resolve(img ?? null));
+      } catch {
+        resolve(null);
+      }
+    });
+  const fromObjs = await tryStore(page.objs);
+  if (fromObjs) return fromObjs;
+  if (page.commonObjs) {
+    const fromCommon = await tryStore(page.commonObjs);
+    if (fromCommon) return fromCommon;
+  }
+  return null;
+}
 
-  const doc = await pdfjs.getDocument({
-    data: new Uint8Array(pdfBuffer),
-    useSystemFonts: false,
-    disableFontFace: true,
-    isEvalSupported: false,
-  }).promise;
+export async function extractImagesFromPdf(
+  pdfBuffer: Buffer,
+): Promise<{ images: ExtractedImage[]; diagnostic: ExtractionDiagnostic }> {
+  const diagnostic: ExtractionDiagnostic = {
+    pageCount: 0,
+    imageRefsFound: 0,
+    decoded: 0,
+    skippedNoData: 0,
+    skippedTooSmall: 0,
+    skippedUnknownKind: 0,
+    skippedDuplicate: 0,
+    errors: [],
+    inspected: [],
+  };
 
+  let pdfjs: any;
+  try {
+    pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  } catch (e: any) {
+    diagnostic.errors.push(`pdfjs import failed: ${e.message}`);
+    return { images: [], diagnostic };
+  }
+
+  let doc: any;
+  try {
+    doc = await pdfjs.getDocument({
+      data: new Uint8Array(pdfBuffer),
+      useSystemFonts: false,
+      disableFontFace: true,
+      isEvalSupported: false,
+    }).promise;
+  } catch (e: any) {
+    diagnostic.errors.push(`pdfjs getDocument failed: ${e.message}`);
+    return { images: [], diagnostic };
+  }
+
+  diagnostic.pageCount = doc.numPages;
   const seenHashes = new Set<string>();
   const out: ExtractedImage[] = [];
 
+  const isImageOp = (fn: any): boolean =>
+    fn === pdfjs.OPS.paintImageXObject ||
+    fn === pdfjs.OPS.paintJpegXObject ||
+    fn === pdfjs.OPS.paintImageXObjectRepeat ||
+    fn === pdfjs.OPS.paintInlineImageXObject ||
+    fn === pdfjs.OPS.paintInlineImageXObjectGroup;
+
   for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-    const page = await doc.getPage(pageNum);
-    const ops = await page.getOperatorList();
+    let page: any;
+    try {
+      page = await doc.getPage(pageNum);
+    } catch (e: any) {
+      diagnostic.errors.push(`page ${pageNum}: ${e.message}`);
+      continue;
+    }
+
+    let ops: any;
+    try {
+      ops = await page.getOperatorList();
+    } catch (e: any) {
+      diagnostic.errors.push(`page ${pageNum} ops: ${e.message}`);
+      continue;
+    }
 
     for (let i = 0; i < ops.fnArray.length; i++) {
-      const fn = ops.fnArray[i];
-      const isImageOp = fn === pdfjs.OPS.paintImageXObject || fn === pdfjs.OPS.paintJpegXObject;
-      if (!isImageOp) continue;
-
+      if (!isImageOp(ops.fnArray[i])) continue;
+      diagnostic.imageRefsFound++;
       const objId = ops.argsArray[i][0];
+      if (typeof objId !== "string") continue;
 
-      let img: any;
-      try {
-        img = await new Promise((resolve, reject) => {
-          page.objs.get(objId, (resolved: any) => {
-            if (resolved) resolve(resolved);
-            else reject(new Error("no image data"));
-          });
-        });
-      } catch {
+      const img = await fetchImageObject(page, objId);
+      if (!img) {
+        diagnostic.skippedNoData++;
+        diagnostic.inspected.push({ hasData: false, hasBitmap: false });
         continue;
       }
 
-      if (!img || !img.data || !img.width || !img.height) continue;
-      const { width, height, data, kind } = img;
-      const area = width * height;
-      if (area < MIN_AREA) continue;
+      diagnostic.inspected.push({
+        width: img.width,
+        height: img.height,
+        kind: img.kind,
+        hasData: !!img.data,
+        hasBitmap: !!img.bitmap,
+      });
+
+      const width = img.width;
+      const height = img.height;
+      const data = img.data;
+      const kind = img.kind;
+
+      if (!width || !height) {
+        diagnostic.skippedNoData++;
+        continue;
+      }
+      if (width * height < MIN_AREA) {
+        diagnostic.skippedTooSmall++;
+        continue;
+      }
+      if (!data) {
+        diagnostic.skippedNoData++;
+        continue;
+      }
 
       const hash = fnv1aHash(data);
-      if (seenHashes.has(hash)) continue;
+      if (seenHashes.has(hash)) {
+        diagnostic.skippedDuplicate++;
+        continue;
+      }
       seenHashes.add(hash);
 
-      // pdfjs ImageKind: 1 = GRAYSCALE_1BPP, 2 = RGB_24BPP, 3 = RGBA_32BPP
       let rgba: Buffer;
       try {
         if (kind === 3) rgba = Buffer.from(data);
         else if (kind === 2) rgba = expandRgbToRgba(data, width, height);
         else if (kind === 1) rgba = expandGrayscale1Bpp(data, width, height);
-        else continue;
-      } catch {
+        else {
+          diagnostic.skippedUnknownKind++;
+          continue;
+        }
+      } catch (e: any) {
+        diagnostic.errors.push(`decode ${objId}: ${e.message}`);
         continue;
       }
 
@@ -144,12 +237,16 @@ export async function extractImagesFromPdf(pdfBuffer: Buffer): Promise<Extracted
         png.data = scaled.rgba;
         const buffer = PNG.sync.write(png);
         const dataUri = `data:image/png;base64,${buffer.toString("base64")}`;
-        out.push({ dataUri, width: scaled.width, height: scaled.height, area });
-      } catch {
-        // skip if PNG encoding fails
+        out.push({ dataUri, width: scaled.width, height: scaled.height, area: width * height });
+        diagnostic.decoded++;
+      } catch (e: any) {
+        diagnostic.errors.push(`encode ${objId}: ${e.message}`);
       }
     }
   }
 
-  return out.sort((a, b) => b.area - a.area);
+  return {
+    images: out.sort((a, b) => b.area - a.area),
+    diagnostic,
+  };
 }

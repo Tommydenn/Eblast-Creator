@@ -57,6 +57,7 @@ export default function Home() {
   const [heroImageUrl, setHeroImageUrl] = useState<string | undefined>();
   const [secondaryImageUrl, setSecondaryImageUrl] = useState<string | undefined>();
   const [imageCount, setImageCount] = useState<number>(0);
+  const [imageDiagnostic, setImageDiagnostic] = useState<any>(null);
 
   const [refineInput, setRefineInput] = useState("");
   const [refineHistory, setRefineHistory] = useState<RefinementEntry[]>([]);
@@ -101,6 +102,7 @@ export default function Home() {
       setHeroImageUrl(data.heroImageUrl);
       setSecondaryImageUrl(data.secondaryImageUrl);
       setImageCount(data.imageCount ?? 0);
+      setImageDiagnostic(data.imageDiagnostic ?? null);
       setStage("preview");
     } catch (e: any) {
       setError(String(e));
@@ -260,10 +262,22 @@ export default function Home() {
             fontWeight: 500,
             cursor: stage === "drafting" ? "wait" : "pointer",
             opacity: !pdf || !selectedSlug || stage === "drafting" ? 0.5 : 1,
+            display: "inline-flex",
+            alignItems: "center",
           }}
         >
+          {stage === "drafting" && <span className="eb-spinner" />}
           {stage === "drafting" ? "Reading flyer..." : "Generate eblast draft"}
         </button>
+
+        {stage === "drafting" && (
+          <p style={{ marginTop: 12, fontSize: 12, color: "#6B6B6B", lineHeight: 1.5 }}>
+            <span className="eb-fade-pulse">
+              Claude is reading the flyer and extracting copy. Pulling images out of the PDF in parallel.
+              This usually takes 15–30 seconds.
+            </span>
+          </p>
+        )}
 
         {error && (
           <div style={{ marginTop: 16, padding: "10px 14px", background: "#FBE4DC", borderLeft: "4px solid #B5683E", fontSize: 13 }}>
@@ -306,8 +320,12 @@ export default function Home() {
                   cursor: stage === "refining" ? "wait" : "pointer",
                   opacity: !refineInput.trim() || stage === "refining" ? 0.5 : 1,
                   width: "100%",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
+                {stage === "refining" && <span className="eb-spinner" />}
                 {stage === "refining" ? "Refining..." : "Apply change"}
               </button>
               {refineHistory.length > 0 && (
@@ -341,6 +359,16 @@ export default function Home() {
                   {JSON.stringify(extracted, null, 2)}
                 </pre>
               </details>
+              {imageDiagnostic && (
+                <details style={{ marginTop: 8 }}>
+                  <summary style={{ fontSize: 11, color: "#9C7A55", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase" }}>
+                    Image extraction diagnostic
+                  </summary>
+                  <pre style={{ background: "#FBF7EE", border: "1px solid #E5DAC1", padding: 10, fontSize: 11, marginTop: 8, maxHeight: 280, overflow: "auto" }}>
+                    {JSON.stringify(imageDiagnostic, null, 2)}
+                  </pre>
+                </details>
+              )}
             </div>
 
             {/* Push */}
@@ -357,8 +385,12 @@ export default function Home() {
                 textTransform: "uppercase",
                 fontWeight: 500,
                 cursor: stage === "pushing" ? "wait" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
+              {stage === "pushing" && <span className="eb-spinner" />}
               {stage === "pushing" ? "Pushing to HubSpot..." : "Push draft to HubSpot"}
             </button>
           </div>
@@ -374,12 +406,23 @@ export default function Home() {
                 )}
               </p>
               {stage === "refining" && (
-                <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0, marginRight: 4 }}>refining…</p>
+                <p style={{ fontSize: 11, color: "#9CA3AF", margin: 0, marginRight: 4 }} className="eb-pulse-row">
+                  <span className="eb-pulse-dot" />
+                  <span className="eb-pulse-dot" />
+                  <span className="eb-pulse-dot" />
+                </p>
               )}
             </div>
             <iframe
               srcDoc={html}
-              style={{ width: "100%", height: 760, border: 0, background: "white" }}
+              style={{
+                width: "100%",
+                height: 760,
+                border: 0,
+                background: "white",
+                opacity: stage === "refining" ? 0.55 : 1,
+                transition: "opacity 0.2s ease",
+              }}
               title="Email preview"
             />
           </div>

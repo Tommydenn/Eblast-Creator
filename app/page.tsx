@@ -440,6 +440,7 @@ export default function Home() {
               background: pushResult.ok ? "#E6F0EA" : "#FBE4DC",
               borderLeft: `4px solid ${pushResult.ok ? "#1F4538" : "#B5683E"}`,
               padding: "16px 20px",
+              marginBottom: 12,
             }}
           >
             <p style={{ margin: 0, fontWeight: 500 }}>
@@ -452,6 +453,43 @@ export default function Home() {
               </p>
             )}
           </div>
+
+          {!pushResult.ok && Array.isArray(pushResult.steps) && pushResult.steps.length > 0 && (
+            <>
+              {pushResult.steps.map((s: any, i: number) => (
+                <details key={i} open={!s.ok} style={{ marginBottom: 8 }}>
+                  <summary style={{ cursor: "pointer", fontSize: 13, color: "#3A3A3A", fontWeight: 500 }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        background: s.ok ? "#1F4538" : "#B5683E",
+                        marginRight: 8,
+                        verticalAlign: "middle",
+                      }}
+                    />
+                    Step {i + 1} · {s.step} · HTTP {s.status} {s.ok ? "OK" : "FAIL"}
+                  </summary>
+                  <pre
+                    style={{
+                      background: "#FBF7EE",
+                      border: "1px solid #E5DAC1",
+                      padding: 12,
+                      fontSize: 11,
+                      lineHeight: 1.5,
+                      overflow: "auto",
+                      maxHeight: 400,
+                      marginTop: 8,
+                    }}
+                  >
+                    {JSON.stringify(s.body, null, 2)}
+                  </pre>
+                </details>
+              ))}
+            </>
+          )}
         </section>
       )}
     </main>

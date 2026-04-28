@@ -69,6 +69,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  console.log(
+    `[push-eblast] community=${community.slug} subject="${body.subject}" htmlBytes=${html.length}`,
+  );
+
   // 1) Upload to Design Manager.
   const hubspotPath = `email-templates/${community.slug}/${templateFileName}`;
   const upload = await uploadEmailTemplate({
@@ -76,7 +80,10 @@ export async function POST(req: NextRequest) {
     html,
     label: `${community.displayName} — ${templateFileName}`,
   });
-  if (!upload.ok) return NextResponse.json({ ok: false, steps: [upload] });
+  if (!upload.ok) {
+    console.error(`[push-eblast] upload failed status=${upload.status}`, JSON.stringify(upload.body));
+    return NextResponse.json({ ok: false, steps: [upload] });
+  }
 
   // 2) Create the marketing email pointing at it.
   const create = await createEmail({
@@ -88,6 +95,10 @@ export async function POST(req: NextRequest) {
     templatePath: hubspotPath,
     contactListId: community.hubspot.listId,
   });
+
+  if (!create.ok) {
+    console.error(`[push-eblast] create failed status=${create.status}`, JSON.stringify(create.body));
+  }
 
   return NextResponse.json({
     ok: upload.ok && create.ok,

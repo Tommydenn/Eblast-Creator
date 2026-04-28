@@ -112,8 +112,12 @@ export async function uploadImageToFileManager(opts: {
 }): Promise<UploadedFile> {
   const url = `${HUBSPOT_BASE}/files/v3/files`;
 
+  // Buffer → Uint8Array view: TypeScript strict mode doesn't accept
+  // Buffer directly as a BlobPart in newer Node typings.
+  const bytesView = new Uint8Array(opts.bytes.buffer, opts.bytes.byteOffset, opts.bytes.byteLength);
+
   const form = new FormData();
-  form.append("file", new Blob([opts.bytes], { type: opts.mimeType }), opts.fileName);
+  form.append("file", new Blob([bytesView], { type: opts.mimeType }), opts.fileName);
   form.append("folderPath", opts.folderPath);
   form.append(
     "options",

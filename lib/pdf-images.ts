@@ -104,13 +104,38 @@ function readJpegInfo(jpegBuf: Buffer): JpegInfo | null {
 
 // ---------- sharp-based JPEG normalization -------------------------------
 
-async function processJpegToRgb(jpegBuf: Buffer): Promise<
-  { data: Buffer; width: number; height: number } | { error: string }
-> {
+/**
+ * Convert a PDF-extracted JPEG to an RGB JPEG suitable for embedding in
+ * email HTML.
+ *
+ * The crucial step for CMYK input: PDFs from Adobe products (InDesign,
+ * Illustrator, Acrobat) store CMYK channels with the Adobe-inverted
+ * convention — 0 = full ink, 255 = no ink — opposite the standard CMYK
+ * convention that sharp/libvips assumes. Without correction, sharp's
+ * CMYK→sRGB conversion produces complementary-color output (green grass
+ * comes out purple, coral shirts come out teal).
+ *
+ * Fix: apply `.negate()` before `.toColorspace('srgb')` to flip every
+ * channel to standard CMYK first, then convert. We only do this for
+ * 4-component JPEGs — 3-component RGB JPEGs need no special handling.
+ */
+async function processJpegToRgb(
+  jpegBuf: Buffer,
+  components: number,
+): Promise<{ data: Buffer; width: number; height: number } | { error: string }> {
   try {
-    let pipeline = sharp(jpegBuf, { failOn: "none" }).toColorspace("srgb");
-
     const meta = await sharp(jpegBuf, { failOn: "none" }).metadata();
+
+    let pipeline = sharp(jpegBuf, { failOn: "none" });
+
+    // CMYK = 4 components. Negate before colorspace to undo Adobe's
+    // inverted-channel storage convention.
+    if (components === 4) {
+      pipeline = pipeline.negate({ alpha: false });
+    }
+
+    pipeline = pipeline.toColorspace("srgb");
+
     if (meta.width && meta.height) {
       if (meta.width > MAX_OUTPUT_DIMENSION || meta.height > MAX_OUTPUT_DIMENSION) {
         pipeline = pipeline.resize(MAX_OUTPUT_DIMENSION, MAX_OUTPUT_DIMENSION, {
@@ -259,7 +284,7 @@ export async function extractImagesFromPdf(
     seenHashes.add(hash);
     diag.passedFilters++;
 
-    const processed = await processJpegToRgb(jpegBytes);
+    const processed = await processJpegToRgb(jpegBytes, info.components);
     if ("error" in processed) {
       debug.status = "skipped-sharp-failed";
       debug.error = processed.error;

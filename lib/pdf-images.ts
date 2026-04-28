@@ -1,8 +1,13 @@
-// Extract embedded images from a PDF buffer.
+// Extract embedded JPEG images directly from a PDF buffer.
 //
-// Uses pdfjs-dist's legacy Node-friendly build to walk each page's operator
-// list, finds every image XObject, decodes the raw bitmap into RGBA, and
-// re-encodes as PNG via pngjs.
+// Most flyer PDFs (Adobe InDesign / Illustrator / Acrobat exports) embed
+// photographs with the /DCTDecode filter — meaning the raw JPEG bytes sit
+// in the PDF stream uncompressed. We can just scan for JPEG signatures
+// (FF D8 FF ... FF D9), validate by walking JPEG markers, and pull out the
+// bytes. No decoder, no canvas, no native deps. Works on Vercel.
+//
+// Fallback: if no JPEGs are found this way, we try pdfjs-dist's operator
+// list extraction for non-JPEG image kinds.
 
 import { PNG } from "pngjs";
 
@@ -14,30 +19,181 @@ export interface ExtractedImage {
 }
 
 export interface ExtractionDiagnostic {
-  pageCount: number;
-  imageRefsFound: number;     // how many paintImage* ops we saw
-  decoded: number;            // how many we successfully turned into a PNG
-  skippedNoData: number;      // image objects that had no usable data
-  skippedTooSmall: number;
-  skippedUnknownKind: number;
-  skippedDuplicate: number;
+  method: "jpeg-scan" | "pdfjs-fallback" | "none";
+  scannedJpegs: number;
+  validJpegs: number;
+  pdfjsImageRefs: number;
+  pdfjsDecoded: number;
   errors: string[];
-  // Per-image debug — useful for figuring out what kind of compression a tricky PDF uses.
   inspected: Array<{ width?: number; height?: number; kind?: number; hasData?: boolean; hasBitmap?: boolean }>;
 }
 
-const MIN_AREA = 5_000; // ~70×70 — cuts logos/icons but lets in most editorial photos
-const MAX_OUTPUT_DIMENSION = 1200;
+const MIN_AREA = 5_000;
 
-function fnv1aHash(buffer: Uint8Array | Uint8ClampedArray): string {
-  let h = 0x811c9dc5;
-  const len = Math.min(buffer.length, 8192);
-  for (let i = 0; i < len; i++) {
-    h ^= buffer[i];
-    h = Math.imul(h, 0x01000193);
+// ---------- JPEG scanner -------------------------------------------------
+
+function readJpegDimensions(jpeg: Buffer): { width: number; height: number } | null {
+  let i = 2; // skip SOI (FF D8)
+  while (i < jpeg.length - 8) {
+    if (jpeg[i] !== 0xff) {
+      i++;
+      continue;
+    }
+    const marker = jpeg[i + 1];
+
+    // Skip any 0xFF padding
+    if (marker === 0xff) {
+      i++;
+      continue;
+    }
+    // SOI/EOI/RST/standalone markers — no length
+    if (marker === 0x00 || marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+      i += 2;
+      continue;
+    }
+
+    // SOF markers: C0-C3, C5-C7, C9-CB, CD-CF (these contain dimensions)
+    const isSof =
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+
+    if (isSof) {
+      // SOF segment: marker(2) length(2) precision(1) height(2) width(2) components(1)
+      const height = (jpeg[i + 5] << 8) | jpeg[i + 6];
+      const width = (jpeg[i + 7] << 8) | jpeg[i + 8];
+      if (width > 0 && height > 0) return { width, height };
+      return null;
+    }
+
+    // Other markers carry a 2-byte length
+    if (i + 4 > jpeg.length) return null;
+    const len = (jpeg[i + 2] << 8) | jpeg[i + 3];
+    if (len < 2) return null;
+    i += 2 + len;
   }
-  return (h >>> 0).toString(16);
+  return null;
 }
+
+/**
+ * Walk the PDF buffer looking for valid JPEG SOI markers, then walk JPEG
+ * markers from there to find the matching EOI. Returns each candidate
+ * JPEG with its dimensions parsed from the SOF segment.
+ */
+function findJpegStreams(buf: Buffer): Array<{ data: Buffer; width: number; height: number }> {
+  const results: Array<{ data: Buffer; width: number; height: number }> = [];
+  const seenStarts = new Set<number>();
+  let i = 0;
+
+  while (i < buf.length - 4) {
+    // Look for SOI (FF D8) followed by another marker (FF Xn)
+    if (buf[i] !== 0xff || buf[i + 1] !== 0xd8 || buf[i + 2] !== 0xff) {
+      i++;
+      continue;
+    }
+
+    const startMarker = buf[i + 3];
+    // Plausible "next-after-SOI" markers: APPn (E0-EF), DQT (DB), SOFx (C0/C2),
+    // DHT (C4), COM (FE). This filters out random FF D8 FF byte sequences in
+    // compressed streams that aren't real JPEGs.
+    const looksLikeJpeg =
+      (startMarker >= 0xe0 && startMarker <= 0xef) ||
+      startMarker === 0xdb ||
+      startMarker === 0xc0 ||
+      startMarker === 0xc2 ||
+      startMarker === 0xc4 ||
+      startMarker === 0xfe;
+
+    if (!looksLikeJpeg || seenStarts.has(i)) {
+      i++;
+      continue;
+    }
+    seenStarts.add(i);
+
+    // Walk markers to find EOI
+    let j = i + 2;
+    let foundEnd = -1;
+    while (j < buf.length - 1) {
+      if (buf[j] !== 0xff) {
+        j++;
+        continue;
+      }
+      // Skip 0xFF padding bytes
+      let k = j + 1;
+      while (k < buf.length && buf[k] === 0xff) k++;
+      const m = buf[k];
+      if (m === undefined) break;
+
+      if (m === 0xd9) {
+        foundEnd = k;
+        break;
+      }
+      // Standalone markers: 0x00 (stuffed), RST D0-D7
+      if (m === 0x00 || (m >= 0xd0 && m <= 0xd7)) {
+        j = k + 1;
+        continue;
+      }
+      // SOS (DA) — the entropy-coded image data follows. Walk byte-by-byte
+      // looking for the next marker (0xFF followed by non-stuffed, non-zero).
+      if (m === 0xda) {
+        // length-prefixed SOS header
+        if (k + 3 > buf.length) break;
+        const sosLen = (buf[k + 1] << 8) | buf[k + 2];
+        let p = k + 1 + sosLen;
+        while (p < buf.length - 1) {
+          if (buf[p] === 0xff && buf[p + 1] !== 0x00 && buf[p + 1] < 0xd0) {
+            // restart markers (D0-D7) are inside the entropy stream — skip
+            j = p;
+            break;
+          }
+          if (buf[p] === 0xff && buf[p + 1] >= 0xd0 && buf[p + 1] <= 0xd7) {
+            p += 2;
+            continue;
+          }
+          if (buf[p] === 0xff && buf[p + 1] === 0xd9) {
+            foundEnd = p + 1;
+            j = p;
+            break;
+          }
+          p++;
+        }
+        if (foundEnd >= 0) break;
+        if (p >= buf.length - 1) break;
+        continue;
+      }
+      // Length-prefixed segments
+      if (k + 3 > buf.length) break;
+      const len = (buf[k + 1] << 8) | buf[k + 2];
+      if (len < 2) break;
+      j = k + 1 + len;
+    }
+
+    if (foundEnd > i) {
+      const jpeg = buf.subarray(i, foundEnd + 1);
+      const dims = readJpegDimensions(jpeg);
+      if (dims && dims.width * dims.height >= MIN_AREA) {
+        results.push({ data: Buffer.from(jpeg), width: dims.width, height: dims.height });
+      }
+      i = foundEnd + 1;
+    } else {
+      i++;
+    }
+  }
+
+  return results;
+}
+
+function dedupeBySize(images: Array<{ data: Buffer; width: number; height: number }>): typeof images {
+  const seen = new Set<number>();
+  return images.filter((img) => {
+    if (seen.has(img.data.length)) return false;
+    seen.add(img.data.length);
+    return true;
+  });
+}
+
+// ---------- pdfjs fallback (non-JPEG only) -------------------------------
 
 function expandRgbToRgba(rgb: Uint8Array | Uint8ClampedArray, width: number, height: number): Buffer {
   const out = Buffer.alloc(width * height * 4);
@@ -50,84 +206,16 @@ function expandRgbToRgba(rgb: Uint8Array | Uint8ClampedArray, width: number, hei
   return out;
 }
 
-function expandGrayscale1Bpp(data: Uint8Array | Uint8ClampedArray, width: number, height: number): Buffer {
-  const out = Buffer.alloc(width * height * 4);
-  for (let p = 0; p < width * height; p++) {
-    const byte = data[Math.floor(p / 8)];
-    const bit = (byte >> (7 - (p % 8))) & 1;
-    const v = bit ? 255 : 0;
-    out[p * 4] = v;
-    out[p * 4 + 1] = v;
-    out[p * 4 + 2] = v;
-    out[p * 4 + 3] = 255;
-  }
-  return out;
-}
-
-function downscaleNN(rgba: Buffer, width: number, height: number, maxDim: number): { rgba: Buffer; width: number; height: number } {
-  if (width <= maxDim && height <= maxDim) return { rgba, width, height };
-  const scale = Math.min(maxDim / width, maxDim / height);
-  const newW = Math.round(width * scale);
-  const newH = Math.round(height * scale);
-  const out = Buffer.alloc(newW * newH * 4);
-  for (let y = 0; y < newH; y++) {
-    for (let x = 0; x < newW; x++) {
-      const sx = Math.floor(x / scale);
-      const sy = Math.floor(y / scale);
-      const srcIdx = (sy * width + sx) * 4;
-      const dstIdx = (y * newW + x) * 4;
-      out[dstIdx] = rgba[srcIdx];
-      out[dstIdx + 1] = rgba[srcIdx + 1];
-      out[dstIdx + 2] = rgba[srcIdx + 2];
-      out[dstIdx + 3] = rgba[srcIdx + 3];
-    }
-  }
-  return { rgba: out, width: newW, height: newH };
-}
-
-/**
- * Try both page.objs and page.commonObjs. Different pdfjs versions stash
- * image data in different places.
- */
-async function fetchImageObject(page: any, objId: string): Promise<any | null> {
-  const tryStore = (store: any): Promise<any | null> =>
-    new Promise((resolve) => {
-      try {
-        store.get(objId, (img: any) => resolve(img ?? null));
-      } catch {
-        resolve(null);
-      }
-    });
-  const fromObjs = await tryStore(page.objs);
-  if (fromObjs) return fromObjs;
-  if (page.commonObjs) {
-    const fromCommon = await tryStore(page.commonObjs);
-    if (fromCommon) return fromCommon;
-  }
-  return null;
-}
-
-export async function extractImagesFromPdf(
+async function extractViaPdfjs(
   pdfBuffer: Buffer,
-): Promise<{ images: ExtractedImage[]; diagnostic: ExtractionDiagnostic }> {
-  const diagnostic: ExtractionDiagnostic = {
-    pageCount: 0,
-    imageRefsFound: 0,
-    decoded: 0,
-    skippedNoData: 0,
-    skippedTooSmall: 0,
-    skippedUnknownKind: 0,
-    skippedDuplicate: 0,
-    errors: [],
-    inspected: [],
-  };
-
+  diag: ExtractionDiagnostic,
+): Promise<ExtractedImage[]> {
   let pdfjs: any;
   try {
     pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   } catch (e: any) {
-    diagnostic.errors.push(`pdfjs import failed: ${e.message}`);
-    return { images: [], diagnostic };
+    diag.errors.push(`pdfjs import failed: ${e.message}`);
+    return [];
   }
 
   let doc: any;
@@ -139,52 +227,33 @@ export async function extractImagesFromPdf(
       isEvalSupported: false,
     }).promise;
   } catch (e: any) {
-    diagnostic.errors.push(`pdfjs getDocument failed: ${e.message}`);
-    return { images: [], diagnostic };
+    diag.errors.push(`pdfjs getDocument: ${e.message}`);
+    return [];
   }
 
-  diagnostic.pageCount = doc.numPages;
-  const seenHashes = new Set<string>();
   const out: ExtractedImage[] = [];
-
-  const isImageOp = (fn: any): boolean =>
-    fn === pdfjs.OPS.paintImageXObject ||
-    fn === pdfjs.OPS.paintJpegXObject ||
-    fn === pdfjs.OPS.paintImageXObjectRepeat ||
-    fn === pdfjs.OPS.paintInlineImageXObject ||
-    fn === pdfjs.OPS.paintInlineImageXObjectGroup;
-
   for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-    let page: any;
-    try {
-      page = await doc.getPage(pageNum);
-    } catch (e: any) {
-      diagnostic.errors.push(`page ${pageNum}: ${e.message}`);
-      continue;
-    }
-
-    let ops: any;
-    try {
-      ops = await page.getOperatorList();
-    } catch (e: any) {
-      diagnostic.errors.push(`page ${pageNum} ops: ${e.message}`);
-      continue;
-    }
+    const page = await doc.getPage(pageNum).catch(() => null);
+    if (!page) continue;
+    const ops = await page.getOperatorList().catch(() => null);
+    if (!ops) continue;
 
     for (let i = 0; i < ops.fnArray.length; i++) {
-      if (!isImageOp(ops.fnArray[i])) continue;
-      diagnostic.imageRefsFound++;
+      const fn = ops.fnArray[i];
+      if (fn !== pdfjs.OPS.paintImageXObject && fn !== pdfjs.OPS.paintJpegXObject) continue;
+      diag.pdfjsImageRefs++;
+
       const objId = ops.argsArray[i][0];
-      if (typeof objId !== "string") continue;
+      const img: any = await new Promise((resolve) => {
+        try {
+          page.objs.get(objId, (i: any) => resolve(i ?? null));
+        } catch {
+          resolve(null);
+        }
+      });
+      if (!img) continue;
 
-      const img = await fetchImageObject(page, objId);
-      if (!img) {
-        diagnostic.skippedNoData++;
-        diagnostic.inspected.push({ hasData: false, hasBitmap: false });
-        continue;
-      }
-
-      diagnostic.inspected.push({
+      diag.inspected.push({
         width: img.width,
         height: img.height,
         kind: img.kind,
@@ -192,61 +261,82 @@ export async function extractImagesFromPdf(
         hasBitmap: !!img.bitmap,
       });
 
-      const width = img.width;
-      const height = img.height;
-      const data = img.data;
-      const kind = img.kind;
-
-      if (!width || !height) {
-        diagnostic.skippedNoData++;
-        continue;
-      }
-      if (width * height < MIN_AREA) {
-        diagnostic.skippedTooSmall++;
-        continue;
-      }
-      if (!data) {
-        diagnostic.skippedNoData++;
-        continue;
-      }
-
-      const hash = fnv1aHash(data);
-      if (seenHashes.has(hash)) {
-        diagnostic.skippedDuplicate++;
-        continue;
-      }
-      seenHashes.add(hash);
+      if (!img.data || !img.width || !img.height) continue;
+      if (img.width * img.height < MIN_AREA) continue;
 
       let rgba: Buffer;
       try {
-        if (kind === 3) rgba = Buffer.from(data);
-        else if (kind === 2) rgba = expandRgbToRgba(data, width, height);
-        else if (kind === 1) rgba = expandGrayscale1Bpp(data, width, height);
-        else {
-          diagnostic.skippedUnknownKind++;
-          continue;
-        }
-      } catch (e: any) {
-        diagnostic.errors.push(`decode ${objId}: ${e.message}`);
+        if (img.kind === 3) rgba = Buffer.from(img.data);
+        else if (img.kind === 2) rgba = expandRgbToRgba(img.data, img.width, img.height);
+        else continue;
+      } catch {
         continue;
       }
 
-      const scaled = downscaleNN(rgba, width, height, MAX_OUTPUT_DIMENSION);
       try {
-        const png = new PNG({ width: scaled.width, height: scaled.height });
-        png.data = scaled.rgba;
+        const png = new PNG({ width: img.width, height: img.height });
+        png.data = rgba;
         const buffer = PNG.sync.write(png);
-        const dataUri = `data:image/png;base64,${buffer.toString("base64")}`;
-        out.push({ dataUri, width: scaled.width, height: scaled.height, area: width * height });
-        diagnostic.decoded++;
+        out.push({
+          dataUri: `data:image/png;base64,${buffer.toString("base64")}`,
+          width: img.width,
+          height: img.height,
+          area: img.width * img.height,
+        });
+        diag.pdfjsDecoded++;
       } catch (e: any) {
-        diagnostic.errors.push(`encode ${objId}: ${e.message}`);
+        diag.errors.push(`pdfjs encode: ${e.message}`);
       }
     }
   }
+  return out;
+}
 
-  return {
-    images: out.sort((a, b) => b.area - a.area),
-    diagnostic,
+// ---------- public entry point -------------------------------------------
+
+export async function extractImagesFromPdf(
+  pdfBuffer: Buffer,
+): Promise<{ images: ExtractedImage[]; diagnostic: ExtractionDiagnostic }> {
+  const diag: ExtractionDiagnostic = {
+    method: "none",
+    scannedJpegs: 0,
+    validJpegs: 0,
+    pdfjsImageRefs: 0,
+    pdfjsDecoded: 0,
+    errors: [],
+    inspected: [],
   };
+
+  // Primary: scan for embedded JPEGs.
+  let rawJpegs: Array<{ data: Buffer; width: number; height: number }> = [];
+  try {
+    rawJpegs = findJpegStreams(pdfBuffer);
+    diag.scannedJpegs = rawJpegs.length;
+    rawJpegs = dedupeBySize(rawJpegs);
+    diag.validJpegs = rawJpegs.length;
+  } catch (e: any) {
+    diag.errors.push(`jpeg-scan: ${e.message}`);
+  }
+
+  if (rawJpegs.length > 0) {
+    diag.method = "jpeg-scan";
+    const images: ExtractedImage[] = rawJpegs
+      .map((j) => ({
+        dataUri: `data:image/jpeg;base64,${j.data.toString("base64")}`,
+        width: j.width,
+        height: j.height,
+        area: j.width * j.height,
+      }))
+      .sort((a, b) => b.area - a.area);
+    return { images, diagnostic: diag };
+  }
+
+  // Fallback: pdfjs operator-list extraction (catches PNG / non-JPEG images).
+  const fromPdfjs = await extractViaPdfjs(pdfBuffer, diag);
+  if (fromPdfjs.length > 0) {
+    diag.method = "pdfjs-fallback";
+    return { images: fromPdfjs.sort((a, b) => b.area - a.area), diagnostic: diag };
+  }
+
+  return { images: [], diagnostic: diag };
 }

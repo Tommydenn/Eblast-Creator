@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
+import { IntelligenceApplied } from "@/components/IntelligenceApplied";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, SectionLabel } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -44,6 +45,18 @@ interface ExtractedFlyer {
   heroImageAlt: string;
   heroImageDescription: string;
   audienceHints: string[];
+  drafterRationale?: string;
+}
+
+interface PastSendForContext {
+  subject: string;
+  sentAt: string | null;
+  recipientCount: number | null;
+  openCount: number | null;
+  clickCount?: number | null;
+  openRatePct: number | null;
+  clickRatePct: number | null;
+  fromName: string | null;
 }
 
 type Stage = "idle" | "drafting" | "preview" | "refining" | "pushing" | "done";
@@ -139,6 +152,9 @@ export default function Home() {
   const [pushResult, setPushResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /** Past sends the agents saw — echoed back from /api/draft-from-pdf so we can show them in the post-draft sidebar. */
+  const [pastSendsContext, setPastSendsContext] = useState<PastSendForContext[]>([]);
+
   useEffect(() => {
     fetch("/api/communities")
       .then((r) => r.json())
@@ -161,6 +177,7 @@ export default function Home() {
     setReview(null);
     setReviewError(null);
     setAgentLoop(null);
+    setPastSendsContext([]);
 
     const fd = new FormData();
     fd.append("file", pdf);
@@ -182,6 +199,7 @@ export default function Home() {
       setImageCount(data.imageCount ?? 0);
       setReview(data.review ?? null);
       setAgentLoop(data.agentLoop ?? null);
+      setPastSendsContext(data.pastSendsContext ?? []);
       setStage("preview");
     } catch (e: any) {
       setError(String(e));
@@ -519,6 +537,13 @@ export default function Home() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Intelligence applied — what past sends actually shaped this draft */}
+              <IntelligenceApplied
+                drafterRationale={extracted.drafterRationale}
+                pastSends={pastSendsContext}
+                findings={review?.findings}
+              />
 
               {/* Refine */}
               <Card>

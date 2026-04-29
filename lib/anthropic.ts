@@ -68,6 +68,11 @@ const extractFlyerToolSchema = {
       items: { type: "string" },
       description: "Who this is for, e.g. ['adult children of prospects', 'current residents'].",
     },
+    drafterRationale: {
+      type: "string",
+      description:
+        "1-2 sentences (max ~280 chars) explaining which past-send patterns or brand rules you used to shape this draft. Reference SPECIFIC subjects + open % when relevant, e.g. \"Matched the 'Reserve Your Seat' formula from your top dining-event sends (avg 41% open). Held to brand voice by leaning on hospitality language over event hype.\". Only populate this when past sends or structured voice rules were in context.",
+    },
   },
 };
 
@@ -104,6 +109,8 @@ Notes on using this:
 - The drafts that already shipped represent the brand's accepted voice — match it. If your draft sounds noticeably different, that's a yellow flag.`
       : "";
 
+  const hasIntelligenceContext = (pastSends && pastSends.length > 0) || hasVoice;
+
   return `You are a senior marketing copywriter for ${community.displayName}, a ${community.type.replace(/_/g, " ")} senior living community${community.address.city ? ` in ${community.address.city}, ${community.address.state ?? ""}`.trim() : ""}.
 
 Your job: take a printed flyer (provided as a PDF) and translate it into the structured fields for a marketing email that will be sent to that community's contact list.
@@ -118,6 +125,13 @@ Hard rules:
 - Body copy is grounded and warm, not salesy. Avoid superlatives and exclamation points. Single thoughtful emoji in subject lines is allowed when it's seasonal/celebratory and the brand has used emoji historically — otherwise omit.
 - Honor the flyer's tone. If the flyer is event-focused, your email is event-focused.
 - Keep paragraphs to 2-4 sentences. Write for skim-readers in inboxes.${trackingPhoneNote}${pastSendsBlock}
+
+${
+    hasIntelligenceContext
+      ? `Self-narration:
+- After completing all other fields, populate \`drafterRationale\` with 1–2 sentences (max ~280 chars) explaining which past-send patterns AND/OR brand voice rules you applied. Be specific — name a past subject or an open-rate range when it shaped your decision. The user reads this to see HOW your memory shaped the draft.`
+      : "If no past sends or voice rules were in context, leave drafterRationale empty."
+  }
 
 Output format: call the \`extract_flyer\` tool with a fully-populated structured object. Do not write prose; only call the tool.`;
 }

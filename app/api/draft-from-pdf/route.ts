@@ -161,5 +161,8 @@ export async function POST(req: NextRequest) {
         droppedImageSlots: it.droppedImageSlots ?? [],
       })),
     },
+    // Echo back the past sends the agents saw this round so the UI can
+    // render an "Intelligence applied" panel — proof of memory.
+    pastSendsContext: pastSends,
   });
 }

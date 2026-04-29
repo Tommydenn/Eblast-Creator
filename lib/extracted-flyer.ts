@@ -52,4 +52,12 @@ export interface ExtractedFlyer {
 
   // Audience cues for the marketing team — informational, not rendered
   audienceHints: string[];
+
+  /**
+   * 1–2 sentences from the drafter explaining which past-send patterns or
+   * brand rules they leaned on. Surfaced in the UI under "Intelligence
+   * applied" so the user can see how the agent's memory shaped the draft.
+   * Only populated when past sends or structured voice rules were in context.
+   */
+  drafterRationale?: string;
 }

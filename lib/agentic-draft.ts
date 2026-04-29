@@ -70,13 +70,13 @@ function severityWeight(s: CriticFinding["severity"]): number {
 }
 
 function actionableScore(review: DraftReview): number {
-  return review.findings
+  return (review.findings ?? [])
     .filter((f) => f.severity === "blocker" || f.severity === "important")
     .reduce((acc, f) => acc + severityWeight(f.severity), 0);
 }
 
 function buildRefinementInstruction(review: DraftReview): string {
-  const actionable = review.findings.filter(
+  const actionable = (review.findings ?? []).filter(
     (f) => (f.severity === "blocker" || f.severity === "important") && f.suggestion,
   );
   if (actionable.length === 0) return "";
@@ -180,7 +180,7 @@ export async function agenticDraftLoop(opts: {
       break;
     }
 
-    const actionable = review.findings.filter(
+    const actionable = (review.findings ?? []).filter(
       (f) => (f.severity === "blocker" || f.severity === "important") && f.suggestion,
     );
 

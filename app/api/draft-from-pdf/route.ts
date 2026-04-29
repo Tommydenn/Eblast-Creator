@@ -112,8 +112,16 @@ export async function POST(req: NextRequest) {
       pastSends,
     });
   } catch (e: any) {
+    // Log the full stack to the server console so we never have to debug
+    // these from a one-line UI error again.
+    console.error("[draft-from-pdf] Agent loop threw:", e);
     return NextResponse.json(
-      { ok: false, error: `Agent loop failed: ${e.message ?? String(e)}`, step: "loop" },
+      {
+        ok: false,
+        error: `Agent loop failed: ${e.message ?? String(e)}`,
+        step: "loop",
+        stack: process.env.NODE_ENV === "development" ? e.stack : undefined,
+      },
       { status: 500 },
     );
   }

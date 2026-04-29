@@ -283,7 +283,10 @@ Return your review by calling the review_draft tool.`,
 
   const response = await c.messages.create({
     model: MODEL,
-    max_tokens: 2048,
+    // Bumped from 2048 — with past-sends context + image flags + alt subjects,
+    // 2048 was occasionally cutting off mid-tool-use and leaving `findings`
+    // unset, which crashed the agent loop downstream.
+    max_tokens: 4096,
     system: systemPrompt(opts.community, opts.pastSends),
     tools: [
       {
@@ -300,5 +303,16 @@ Return your review by calling the review_draft tool.`,
   if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
     throw new Error("Reviewer did not return tool_use output.");
   }
-  return toolUseBlock.input as DraftReview;
+  // Normalize the response so downstream code can rely on these arrays
+  // existing even if Claude omitted optional fields or got truncated.
+  const input = toolUseBlock.input as Partial<DraftReview>;
+  return {
+    verdict: input.verdict ?? "needs_revision",
+    summary: input.summary ?? "",
+    findings: Array.isArray(input.findings) ? input.findings : [],
+    subjectLineAlternatives: Array.isArray(input.subjectLineAlternatives) ? input.subjectLineAlternatives : undefined,
+    sendTimeRecommendation: input.sendTimeRecommendation,
+    recipientListNote: input.recipientListNote,
+    flaggedImages: Array.isArray(input.flaggedImages) ? input.flaggedImages : undefined,
+  };
 }

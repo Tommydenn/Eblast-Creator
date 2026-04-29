@@ -1,389 +1,562 @@
-"use client";
+// Per-community detail page — the polished "what does the agent know about
+// this place" view. Server-rendered against Postgres.
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { notFound } from "next/navigation";
+import { eq, sql, and } from "drizzle-orm";
+import { getCommunity } from "@/lib/db/queries";
+import { db } from "@/lib/db";
+import { pastSends } from "@/lib/db/schema";
+import { Header } from "@/components/Header";
+import { Card, CardContent, CardHeader, CardTitle, SectionLabel, CardDescription } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 
-interface CommunitySender {
-  id: string;
-  name: string;
-  email: string;
-  title?: string | null;
-  isPrimary: boolean;
+export const dynamic = "force-dynamic";
+
+interface RecentSend {
+  hubspotEmailId: string;
+  subject: string | null;
+  sentAt: string | null;
+  recipientCount: number | null;
+  openCount: number | null;
+  clickCount: number | null;
+  fromName: string | null;
 }
 
-interface CommunityLogo {
-  url: string;
-  variant: string;
-  onColor?: string;
+async function loadRecentSends(communityId: string, limit: number): Promise<RecentSend[]> {
+  const rows = await db
+    .select({
+      hubspotEmailId: pastSends.hubspotEmailId,
+      subject: pastSends.subject,
+      publishedAt: pastSends.publishedAt,
+      recipientCount: pastSends.recipientCount,
+      openCount: pastSends.openCount,
+      clickCount: pastSends.clickCount,
+      fromName: pastSends.fromName,
+    })
+    .from(pastSends)
+    .where(and(eq(pastSends.communityId, communityId), eq(pastSends.state, "PUBLISHED")))
+    .orderBy(sql`${pastSends.publishedAt} DESC NULLS LAST`)
+    .limit(limit);
+  return rows.map((r) => ({
+    hubspotEmailId: r.hubspotEmailId,
+    subject: r.subject,
+    sentAt: r.publishedAt ? r.publishedAt.toISOString().slice(0, 10) : null,
+    recipientCount: r.recipientCount,
+    openCount: r.openCount,
+    clickCount: r.clickCount,
+    fromName: r.fromName,
+  }));
 }
 
-interface Community {
-  id: string;
-  slug: string;
-  displayName: string;
-  shortName: string;
-  brandFamily?: string | null;
-  nameAbbreviation?: string | null;
-  type: string;
-  careTypes?: string[] | null;
-  brand: { primary: string; accent: string; background: string; fontHeadline: string; fontBody: string; secondary?: string; supporting?: string[] };
-  address: { street?: string; city?: string; state?: string; zip?: string };
-  phone?: string | null;
-  email?: string | null;
-  websiteUrl?: string | null;
-  trackingPhone?: string | null;
-  socials?: { facebook?: string; instagram?: string; linkedin?: string; youtube?: string };
-  senders: CommunitySender[];
-  marketingDirector?: { name: string; email: string } | null;
-  hubspot: { listId?: number; additionalListIds?: number[]; businessUnitId?: number };
-  brandGuideUrl?: string | null;
-  logos?: CommunityLogo[];
-  photoLibrary?: Array<{ url: string; caption?: string; tags?: string[] }>;
-  taglines?: string[] | null;
-  amenities?: string[] | null;
-  voiceNotes?: string | null;
-  templates: string[];
-}
-
-export default function CommunityDetailPage() {
-  const params = useParams<{ slug: string }>();
-  const [community, setCommunity] = useState<Community | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/communities")
-      .then((r) => r.json())
-      .then((d) => {
-        const found = d.communities.find((c: Community) => c.slug === params.slug);
-        if (!found) setError(`Community "${params.slug}" not found in registry`);
-        else setCommunity(found);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(String(e));
-        setLoading(false);
-      });
-  }, [params.slug]);
-
-  const labelStyle: React.CSSProperties = {
-    fontSize: 11,
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    color: "#9C7A55",
-    fontWeight: 500,
-    margin: "0 0 6px 0",
-  };
-  const valueStyle: React.CSSProperties = {
-    fontSize: 14,
-    color: "#1F2937",
-    margin: 0,
-  };
-  const cardStyle: React.CSSProperties = {
-    background: "white",
-    border: "1px solid #E5DAC1",
-    padding: 20,
-    marginBottom: 16,
-  };
-
-  if (loading) {
-    return (
-      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "48px 32px" }}>
-        <p>Loading community…</p>
-      </main>
+async function loadAggregates(communityId: string) {
+  const rows = await db
+    .select({
+      sendCount: sql<number>`COUNT(*)::int`,
+      avgOpenPct: sql<string | null>`ROUND(AVG((${pastSends.openCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 1)`,
+      avgClickPct: sql<string | null>`ROUND(AVG((${pastSends.clickCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 2)`,
+      avgRecipients: sql<string | null>`ROUND(AVG(${pastSends.recipientCount})::numeric)`,
+      bestOpenPct: sql<string | null>`ROUND(MAX((${pastSends.openCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 1)`,
+    })
+    .from(pastSends)
+    .where(
+      and(eq(pastSends.communityId, communityId), eq(pastSends.state, "PUBLISHED"), sql`${pastSends.recipientCount} > 0`),
     );
-  }
+  const r = rows[0];
+  return {
+    sendCount: r?.sendCount ?? 0,
+    avgOpenPct: r?.avgOpenPct ? Number(r.avgOpenPct) : null,
+    avgClickPct: r?.avgClickPct ? Number(r.avgClickPct) : null,
+    avgRecipients: r?.avgRecipients ? Number(r.avgRecipients) : null,
+    bestOpenPct: r?.bestOpenPct ? Number(r.bestOpenPct) : null,
+  };
+}
 
-  if (error || !community) {
-    return (
-      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "48px 32px" }}>
-        <p style={{ color: "#B5683E" }}>{error}</p>
-        <Link href="/communities">← Back to communities</Link>
-      </main>
-    );
-  }
+export default async function CommunityDetailPage({ params }: { params: { slug: string } }) {
+  const community = await getCommunity(params.slug);
+  if (!community) notFound();
+
+  const [recentSends, aggregates] = await Promise.all([
+    loadRecentSends(community.id, 10),
+    loadAggregates(community.id),
+  ]);
 
   const c = community;
+  const hasBrand = c.brandGuideExtracted !== null && c.brandGuideExtracted !== undefined;
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "48px 32px" }}>
-      <Link
-        href="/communities"
-        style={{ fontSize: 12, color: "#9C7A55", textDecoration: "none", letterSpacing: 1, textTransform: "uppercase" }}
-      >
-        ← All communities
-      </Link>
-
-      <header
-        style={{
-          marginTop: 12,
-          marginBottom: 32,
-          paddingBottom: 24,
-          borderBottom: `2px solid ${c.brand.primary}`,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-        }}
-      >
-        <div>
-          <p style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: c.brand.accent, margin: 0 }}>
-            {c.nameAbbreviation ? `${c.nameAbbreviation} · ` : ""}
-            {c.careTypes?.join(" · ") ?? c.type.replace(/_/g, " ")}
-          </p>
-          <h1 style={{ fontFamily: "Georgia, serif", fontSize: 40, margin: "6px 0 4px 0", color: c.brand.primary }}>
-            {c.displayName}
-          </h1>
-          <p style={{ fontSize: 14, color: "#5C5C5C", margin: 0 }}>
-            {[c.address.street, [c.address.city, c.address.state].filter(Boolean).join(", "), c.address.zip].filter(Boolean).join(" · ") || <em style={{ color: "#B5683E" }}>address not set</em>}
-          </p>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            background: c.brand.background,
-            border: `1px solid ${c.brand.primary}`,
-            padding: "12px 16px",
-          }}
+    <>
+      <Header active="communities" />
+      <main className="mx-auto max-w-[1240px] px-6 pb-24 pt-10">
+        <Link
+          href="/communities"
+          className="inline-block text-[11px] font-medium uppercase tracking-[0.12em] text-sand-500 hover:text-sand-700"
         >
-          {[c.brand.primary, c.brand.accent, c.brand.background].map((hex) => (
-            <div key={hex} style={{ textAlign: "center", fontSize: 11, color: "#3A3A3A" }}>
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  background: hex,
-                  border: "1px solid rgba(0,0,0,0.1)",
-                  marginBottom: 4,
-                }}
-              />
-              {hex}
-            </div>
-          ))}
-        </div>
-      </header>
+          ← All communities
+        </Link>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-        <section style={cardStyle}>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 18, margin: "0 0 16px 0", color: c.brand.primary }}>
-            Contact &amp; identity
-          </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+        {/* Hero */}
+        <header className="mt-3 mb-8">
+          <div className="flex items-start justify-between gap-8 border-b border-sand-200 pb-6">
             <div>
-              <p style={labelStyle}>Phone</p>
-              <p style={valueStyle}>{c.phone ?? <em style={{ color: "#B5683E" }}>not set</em>}</p>
-            </div>
-            <div>
-              <p style={labelStyle}>Email</p>
-              <p style={valueStyle}>{c.email ?? <em style={{ color: "#B5683E" }}>not set</em>}</p>
-            </div>
-          </div>
-          <div>
-            <p style={labelStyle}>Website</p>
-            <p style={valueStyle}>
-              {c.websiteUrl ? (
-                <a href={c.websiteUrl} target="_blank" rel="noreferrer" style={{ color: c.brand.accent }}>
-                  {c.websiteUrl.replace(/^https?:\/\//, "")}
-                </a>
-              ) : (
-                <em style={{ color: "#B5683E" }}>not set</em>
-              )}
-            </p>
-          </div>
-          {c.socials && Object.values(c.socials).some(Boolean) && (
-            <div style={{ marginTop: 14 }}>
-              <p style={labelStyle}>Social</p>
-              <p style={valueStyle}>
-                {Object.entries(c.socials)
-                  .filter(([, v]) => v)
-                  .map(([k, v]) => (
-                    <a key={k} href={v as string} target="_blank" rel="noreferrer" style={{ marginRight: 12, color: c.brand.accent }}>
-                      {k}
-                    </a>
-                  ))}
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.16em]" style={{ color: c.brand.accent }}>
+                {c.brandFamily ?? c.shortName}
+                {c.careTypes && c.careTypes.length > 0 && (
+                  <span className="text-sand-400"> · {c.careTypes.join(" · ")}</span>
+                )}
+              </p>
+              <h1
+                className="mt-1 font-serif text-[40px] leading-tight"
+                style={{ color: c.brand.primary }}
+              >
+                {c.displayName}
+              </h1>
+              <p className="mt-2 text-sm text-sand-600">
+                {[
+                  c.address.street,
+                  [c.address.city, c.address.state].filter(Boolean).join(", "),
+                  c.address.zip,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || (
+                  <span className="text-clay-600">Address not set</span>
+                )}
               </p>
             </div>
-          )}
-        </section>
 
-        <section style={cardStyle}>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 18, margin: "0 0 16px 0", color: c.brand.primary }}>
-            Sending
-          </h2>
-          <div style={{ marginBottom: 14 }}>
-            <p style={labelStyle}>From (recipients see this)</p>
-            {c.senders.length === 0 ? (
-              <p style={{ ...valueStyle, color: "#B5683E", fontStyle: "italic" }}>No sender configured</p>
-            ) : (
-              <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
-                {c.senders.map((s) => (
-                  <li key={s.id} style={{ marginBottom: 4 }}>
-                    <span style={valueStyle}>{s.name}</span>
-                    {s.isPrimary && (
-                      <span style={{ marginLeft: 8, fontSize: 9, padding: "1px 6px", background: c.brand.background, color: c.brand.accent, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700 }}>
-                        primary
-                      </span>
-                    )}
-                    <div style={{ fontSize: 12, color: "#9C7A55" }}>{s.email}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {c.marketingDirector && (
-            <div style={{ marginBottom: 14 }}>
-              <p style={labelStyle}>Marketing director (creates eblasts)</p>
-              <p style={valueStyle}>
-                {c.marketingDirector.name} &lt;{c.marketingDirector.email}&gt;
-              </p>
-            </div>
-          )}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <div>
-              <p style={labelStyle}>HubSpot list ID</p>
-              <p style={valueStyle}>
-                {c.hubspot.listId ?? <em style={{ color: "#B5683E" }}>not set</em>}
-              </p>
-            </div>
-            <div>
-              <p style={labelStyle}>Tracking phone (CallRail)</p>
-              <p style={{ ...valueStyle, fontSize: 13 }}>
-                {c.trackingPhone ?? <em style={{ color: "#B5683E" }}>not set</em>}
-              </p>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <section style={cardStyle}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 18, margin: 0, color: c.brand.primary }}>
-            Brand guide &amp; assets
-          </h2>
-          <p style={{ ...labelStyle, margin: 0 }}>uploaded to HubSpot Files</p>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-          <AssetSlot label="Brand guide PDF" url={c.brandGuideUrl ?? undefined} accent={c.brand.accent} />
-          <AssetSlot label={`Logos (${c.logos?.length ?? 0})`} url={c.logos?.[0]?.url} accent={c.brand.accent} previewable />
-          <AssetSlot
-            label={`Photo library (${c.photoLibrary?.length ?? 0})`}
-            url={c.photoLibrary?.[0]?.url}
-            accent={c.brand.accent}
-            previewable
-          />
-        </div>
-
-        <p style={{ fontSize: 12, color: "#9C7A55", marginTop: 16, lineHeight: 1.6 }}>
-          Upload UI ships in the next iteration. For now, drop assets into HubSpot File Manager
-          under <code>/eblast-drafter/{c.slug}</code> and paste the URLs into{" "}
-          <code>data/communities.ts</code>.
-        </p>
-      </section>
-
-      <section style={cardStyle}>
-        <h2 style={{ fontFamily: "Georgia, serif", fontSize: 18, margin: "0 0 16px 0", color: c.brand.primary }}>
-          Voice &amp; positioning
-        </h2>
-
-        {c.taglines && c.taglines.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
-            <p style={labelStyle}>Taglines</p>
-            {c.taglines.map((t, i) => (
-              <p key={i} style={{ ...valueStyle, fontStyle: "italic", marginBottom: 6 }}>
-                &ldquo;{t}&rdquo;
-              </p>
-            ))}
-          </div>
-        )}
-
-        {c.amenities && c.amenities.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
-            <p style={labelStyle}>Distinctive amenities</p>
-            <ul style={{ margin: 0, paddingLeft: 20, color: "#3A3A3A", fontSize: 14, lineHeight: 1.7 }}>
-              {c.amenities.map((a, i) => (
-                <li key={i}>{a}</li>
+            {/* Color swatches — show real brand palette if extracted */}
+            <div className="flex shrink-0 items-end gap-2">
+              {[
+                { color: c.brand.primary, label: "Primary" },
+                { color: c.brand.accent, label: "Accent" },
+                { color: c.brand.background, label: "Surface" },
+                ...(c.brand.secondary ? [{ color: c.brand.secondary, label: "Secondary" }] : []),
+              ].map((s) => (
+                <div key={s.color} className="text-center">
+                  <div
+                    className="h-12 w-12 rounded border border-black/5"
+                    style={{ backgroundColor: s.color }}
+                    title={s.color}
+                  />
+                  <p className="mt-1 text-[9.5px] font-medium uppercase tracking-wider text-sand-500">{s.label}</p>
+                  <p className="font-mono text-[9.5px] text-sand-400">{s.color}</p>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
+        </header>
+
+        {/* Performance KPIs (only if there are past sends) */}
+        {aggregates.sendCount > 0 && (
+          <Card className="mb-8 overflow-hidden p-0">
+            <div className="grid grid-cols-2 divide-x divide-sand-200 sm:grid-cols-5">
+              <Kpi label="Sends · 365d" value={aggregates.sendCount} />
+              <Kpi
+                label="Avg open"
+                value={aggregates.avgOpenPct !== null ? `${aggregates.avgOpenPct}%` : "—"}
+                color={aggregates.avgOpenPct !== null && aggregates.avgOpenPct >= 40 ? "good" : "neutral"}
+              />
+              <Kpi
+                label="Avg click"
+                value={aggregates.avgClickPct !== null ? `${aggregates.avgClickPct}%` : "—"}
+              />
+              <Kpi
+                label="Avg list"
+                value={aggregates.avgRecipients !== null ? aggregates.avgRecipients.toLocaleString() : "—"}
+              />
+              <Kpi
+                label="Best open"
+                value={aggregates.bestOpenPct !== null ? `${aggregates.bestOpenPct}%` : "—"}
+                color="good"
+              />
+            </div>
+          </Card>
         )}
 
-        {c.voiceNotes && (
-          <div>
-            <p style={labelStyle}>Voice notes (used by Claude when drafting)</p>
-            <p style={{ ...valueStyle, lineHeight: 1.6 }}>{c.voiceNotes}</p>
-          </div>
-        )}
-      </section>
+        {/* Two-column layout: identity/brand left, sending/voice/history right */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Contact + identity */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Contact &amp; identity</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Phone (public)">
+                  {c.phone ?? <span className="text-clay-600">not set</span>}
+                </Field>
+                <Field label="Tracking phone (CallRail)" highlight={!!c.trackingPhone}>
+                  {c.trackingPhone ?? <span className="text-clay-600">not set</span>}
+                </Field>
+              </div>
+              <Field label="Email">{c.email ?? <span className="text-clay-600">not set</span>}</Field>
+              <Field label="Website">
+                {c.websiteUrl ? (
+                  <a
+                    href={c.websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:underline"
+                    style={{ color: c.brand.accent }}
+                  >
+                    {c.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                  </a>
+                ) : (
+                  <span className="text-clay-600">not set</span>
+                )}
+              </Field>
+              {c.socials && Object.values(c.socials).some(Boolean) && (
+                <Field label="Social">
+                  <span className="flex flex-wrap gap-3 text-sm">
+                    {Object.entries(c.socials)
+                      .filter(([, v]) => v)
+                      .map(([k, v]) => (
+                        <a
+                          key={k}
+                          href={v as string}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="capitalize hover:underline"
+                          style={{ color: c.brand.accent }}
+                        >
+                          {k}
+                        </a>
+                      ))}
+                  </span>
+                </Field>
+              )}
+            </CardContent>
+          </Card>
 
-      <section style={cardStyle}>
-        <details>
-          <summary style={{ fontSize: 13, cursor: "pointer", color: "#9C7A55", letterSpacing: 1, textTransform: "uppercase" }}>
-            Full registry entry (JSON)
-          </summary>
-          <pre style={{ background: "#FBF7EE", border: "1px solid #E5DAC1", padding: 12, fontSize: 11, marginTop: 12, overflow: "auto", maxHeight: 400 }}>
-            {JSON.stringify(c, null, 2)}
-          </pre>
-        </details>
-      </section>
-    </main>
+          {/* Sending */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Sending</CardTitle>
+              <CardDescription>Who appears in the From: field for this community.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <SectionLabel className="mb-2">From identities ({c.senders.length})</SectionLabel>
+                {c.senders.length === 0 ? (
+                  <p className="rounded-md border border-dashed border-clay-300 bg-clay-50/50 px-3 py-2.5 text-xs text-clay-700">
+                    No senders configured. The drafter falls back to the community display name.
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {c.senders.map((s) => (
+                      <li
+                        key={s.id}
+                        className="flex items-center justify-between rounded-md border border-sand-200 bg-sand-50/40 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-sand-900">{s.name}</p>
+                          <p className="truncate text-xs text-sand-500">{s.email}</p>
+                        </div>
+                        {s.isPrimary && <Badge variant="success">Primary</Badge>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <Field label="HubSpot list ID" highlight={!!c.hubspot.listId}>
+                  {c.hubspot.listId ? (
+                    <code className="rounded bg-sand-100 px-1.5 py-0.5 font-mono text-xs">{c.hubspot.listId}</code>
+                  ) : (
+                    <span className="text-clay-600">not set</span>
+                  )}
+                </Field>
+                <Field label="Marketing director">
+                  {c.marketingDirector ? (
+                    <>
+                      {c.marketingDirector.name}
+                      <br />
+                      <span className="text-xs text-sand-500">{c.marketingDirector.email}</span>
+                    </>
+                  ) : (
+                    <span className="text-sand-400">—</span>
+                  )}
+                </Field>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Brand */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Brand</CardTitle>
+                {hasBrand ? (
+                  <Badge variant="success">Extracted from guide</Badge>
+                ) : (
+                  <Badge variant="warning">Placeholder</Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <SectionLabel className="mb-2">Typography</SectionLabel>
+                <div className="space-y-2 rounded-md border border-sand-200 bg-sand-50/40 p-3">
+                  <div>
+                    <p
+                      className="text-2xl text-sand-900"
+                      style={{ fontFamily: c.brand.fontHeadline }}
+                    >
+                      The quick brown fox
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10.5px] text-sand-500">
+                      Display · {c.brand.fontHeadline}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-base text-sand-800" style={{ fontFamily: c.brand.fontBody }}>
+                      Warm, hospitality-forward copy goes here.
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10.5px] text-sand-500">
+                      Body · {c.brand.fontBody}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {c.brand.supporting && c.brand.supporting.length > 0 && (
+                <div>
+                  <SectionLabel className="mb-2">Supporting palette</SectionLabel>
+                  <div className="flex flex-wrap gap-2">
+                    {c.brand.supporting.map((hex) => (
+                      <div key={hex} className="flex items-center gap-1.5 rounded border border-sand-200 bg-white px-2 py-1">
+                        <span className="block h-4 w-4 rounded-sm border border-black/5" style={{ backgroundColor: hex }} />
+                        <span className="font-mono text-[10.5px] text-sand-600">{hex}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {c.brandGuideUrl && (
+                <a
+                  href={c.brandGuideUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block rounded border border-sand-200 px-3 py-1.5 text-xs font-medium text-sand-700 hover:border-sand-300 hover:bg-sand-50"
+                >
+                  View brand guide PDF →
+                </a>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Voice */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Voice &amp; positioning</CardTitle>
+              <CardDescription>Rules the agents read when drafting.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {c.voice?.tone && c.voice.tone.length > 0 && (
+                <div>
+                  <SectionLabel className="mb-2">Tone</SectionLabel>
+                  <div className="flex flex-wrap gap-1.5">
+                    {c.voice.tone.map((t) => (
+                      <Badge key={t} variant="outline">
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {c.taglines && c.taglines.length > 0 && (
+                <div>
+                  <SectionLabel className="mb-2">Taglines</SectionLabel>
+                  <ul className="space-y-1.5">
+                    {c.taglines.map((t, i) => (
+                      <li
+                        key={i}
+                        className="rounded-md border border-sand-200 bg-sand-50/40 px-3 py-2 text-sm italic text-sand-800"
+                      >
+                        “{t}”
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {c.amenities && c.amenities.length > 0 && (
+                <div>
+                  <SectionLabel className="mb-2">Distinctive amenities</SectionLabel>
+                  <ul className="space-y-1 text-sm text-sand-800">
+                    {c.amenities.map((a, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-sand-400" />
+                        <span>{a}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {c.voice?.dos && c.voice.dos.length > 0 && (
+                <div>
+                  <SectionLabel className="mb-2">Do</SectionLabel>
+                  <ul className="space-y-1 text-sm text-sand-800">
+                    {c.voice.dos.map((d, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="mt-1 text-forest-600">✓</span>
+                        <span>{d}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {c.voice?.donts && c.voice.donts.length > 0 && (
+                <div>
+                  <SectionLabel className="mb-2">Don't</SectionLabel>
+                  <ul className="space-y-1 text-sm text-sand-800">
+                    {c.voice.donts.map((d, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="mt-1 text-clay-600">×</span>
+                        <span>{d}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {!c.voice?.tone && !c.taglines?.length && !c.amenities?.length && (
+                <p className="text-sm text-sand-500">
+                  No structured voice rules yet. Upload the brand guide to populate this automatically.
+                </p>
+              )}
+
+              {c.voiceNotes && (
+                <div>
+                  <SectionLabel className="mb-2">Notes</SectionLabel>
+                  <p className="text-sm leading-relaxed text-sand-700">{c.voiceNotes}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent sends — full-width */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Recent sends</CardTitle>
+                <CardDescription>What the drafter and critic reference.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {recentSends.length === 0 ? (
+                <p className="rounded-md border border-dashed border-sand-300 bg-sand-50/40 px-4 py-6 text-center text-sm text-sand-500">
+                  No past sends in the last 365 days. Once this community sends its first eblast, the agents
+                  will start using it as a reference.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-sand-100 text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500">
+                      <th className="py-2 pr-3 text-left">Subject</th>
+                      <th className="py-2 px-2 text-left">Sent</th>
+                      <th className="py-2 px-2 text-left">From</th>
+                      <th className="py-2 px-2 text-right">Recipients</th>
+                      <th className="py-2 px-2 text-right">Open</th>
+                      <th className="py-2 pl-2 text-right">Click</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-sand-100">
+                    {recentSends.map((s) => {
+                      const openPct =
+                        s.openCount !== null && s.recipientCount && s.recipientCount > 0
+                          ? Math.round((s.openCount / s.recipientCount) * 1000) / 10
+                          : null;
+                      const clickPct =
+                        s.clickCount !== null && s.recipientCount && s.recipientCount > 0
+                          ? Math.round((s.clickCount / s.recipientCount) * 1000) / 10
+                          : null;
+                      return (
+                        <tr key={s.hubspotEmailId}>
+                          <td className="py-2.5 pr-3">
+                            <p className="text-sand-900">{s.subject ?? "(no subject)"}</p>
+                          </td>
+                          <td className="py-2.5 px-2 text-xs text-sand-500 tabular-nums">{s.sentAt ?? "—"}</td>
+                          <td className="py-2.5 px-2 text-xs text-sand-600">{s.fromName ?? "—"}</td>
+                          <td className="py-2.5 px-2 text-right tabular-nums text-sand-700">
+                            {s.recipientCount?.toLocaleString() ?? "—"}
+                          </td>
+                          <td className="py-2.5 px-2 text-right tabular-nums">
+                            {openPct !== null ? (
+                              <span
+                                className={
+                                  openPct >= 40
+                                    ? "text-forest-700 font-medium"
+                                    : openPct >= 25
+                                    ? "text-sand-800"
+                                    : "text-clay-700"
+                                }
+                              >
+                                {openPct}%
+                              </span>
+                            ) : (
+                              <span className="text-sand-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pl-2 text-right tabular-nums text-sand-700">
+                            {clickPct !== null ? `${clickPct}%` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </>
   );
 }
 
-function AssetSlot({
+function Field({
   label,
-  url,
-  accent,
-  previewable,
+  children,
+  highlight,
 }: {
   label: string;
-  url?: string;
-  accent: string;
-  previewable?: boolean;
+  children: React.ReactNode;
+  highlight?: boolean;
 }) {
-  const isImage = previewable && url && !url.toLowerCase().endsWith(".pdf");
   return (
-    <div
-      style={{
-        border: `1px dashed ${url ? accent : "#D9CDB1"}`,
-        borderRadius: 4,
-        padding: 14,
-        background: url ? "#FBF7EE" : "#F5F1EA",
-        minHeight: 120,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <p
-        style={{
-          fontSize: 11,
-          letterSpacing: 2,
-          textTransform: "uppercase",
-          color: "#9C7A55",
-          fontWeight: 500,
-          margin: 0,
-        }}
-      >
-        {label}
+    <div>
+      <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-sand-500">{label}</p>
+      <p className={`mt-0.5 text-sm leading-relaxed ${highlight ? "text-forest-700 font-medium" : "text-sand-900"}`}>
+        {children}
       </p>
-      {url ? (
-        isImage ? (
-          <img src={url} alt={label} style={{ maxWidth: "100%", maxHeight: 100, objectFit: "contain", marginTop: 8 }} />
-        ) : (
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontSize: 13, color: accent, marginTop: 8, wordBreak: "break-all" }}
-          >
-            {url.replace(/^https?:\/\//, "").slice(0, 60)}…
-          </a>
-        )
-      ) : (
-        <p style={{ fontSize: 12, color: "#9C7A55", margin: 0 }}>not set</p>
-      )}
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  color = "neutral",
+}: {
+  label: string;
+  value: React.ReactNode;
+  color?: "good" | "neutral";
+}) {
+  return (
+    <div className="px-5 py-4">
+      <p className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500">{label}</p>
+      <p
+        className={`mt-1 font-serif text-2xl tabular-nums leading-none ${
+          color === "good" ? "text-forest-700" : "text-sand-900"
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }

@@ -19,6 +19,7 @@
 
 import { refineFlyerContent } from "@/lib/anthropic";
 import { reviewDraft, type DraftReview, type CriticFinding } from "@/lib/critic";
+import { craftSubjectLine, type SubjectSpecialistResult } from "@/lib/agents/subject-specialist";
 import type { Community } from "@/data/communities";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import type { ExtractedImage } from "@/lib/pdf-images";
@@ -63,6 +64,9 @@ export interface AgenticDraftResult {
   iterations: AgenticIteration[];
   stoppedReason: StopReason;
   totalRounds: number;
+  /** Subject specialist's full output (winner + alternatives + rationale).
+   *  Null when no past sends in context to compare against. */
+  subjectSpecialist: SubjectSpecialistResult | null;
 }
 
 function severityWeight(s: CriticFinding["severity"]): number {
@@ -121,6 +125,33 @@ export async function agenticDraftLoop(opts: {
   /** Recent sends + performance for this community. Threaded into both drafter and critic so the agents have memory. */
   pastSends?: PastSendForContext[];
 }): Promise<AgenticDraftResult> {
+  // STEP 0: Subject Specialist. Runs once, before the critic ever sees the
+  // draft, so the email arriving at the critic already has its strongest
+  // possible subject + preview pair. Skipped silently on error so a
+  // specialist failure doesn't sink the whole loop.
+  let subjectSpecialist: SubjectSpecialistResult | null = null;
+  try {
+    subjectSpecialist = await craftSubjectLine({
+      flyer: opts.initialDraft,
+      community: opts.community,
+      pastSends: opts.pastSends,
+    });
+    // Only swap if the winner is genuinely different from the drafter's
+    // original — preserves the drafter's voice when it already nailed it.
+    if (
+      subjectSpecialist.winner.subject !== opts.initialDraft.subject ||
+      subjectSpecialist.winner.previewText !== opts.initialDraft.previewText
+    ) {
+      opts.initialDraft = {
+        ...opts.initialDraft,
+        subject: subjectSpecialist.winner.subject,
+        previewText: subjectSpecialist.winner.previewText,
+      };
+    }
+  } catch (e) {
+    console.warn("[agentic-draft] Subject specialist failed; keeping drafter's original subject:", e);
+  }
+
   let currentDraft = opts.initialDraft;
   const excluded = new Set<number>();
 
@@ -240,5 +271,6 @@ export async function agenticDraftLoop(opts: {
     iterations,
     stoppedReason,
     totalRounds: iterations.length,
+    subjectSpecialist,
   };
 }

@@ -14,6 +14,7 @@ import {
   type PastSendForContext,
 } from "@/lib/past-sends-retrieval";
 import { SENIOR_LIVING_CRAFT_DOCTRINE } from "@/lib/senior-living-craft";
+import { SENIOR_60_PLUS_SUBJECT_RESEARCH } from "@/lib/senior-60-plus-research";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -196,6 +197,11 @@ function systemPrompt(community: Community, pastSends?: PastSendForContext[]): s
 You are NOT a forgiving intern. You are a working professional who knows this category cold. If a draft is technically correct but emotionally flat, you say so. If a subject is functional but boring, you say so. The bar is excellence, not adequacy.
 
 ${SENIOR_LIVING_CRAFT_DOCTRINE}
+
+# Audience research — conclusive standards for evaluating subjects + previews
+The data below is conclusive. When you grade subject_line and preview_text findings, hold the draft to it.
+
+${SENIOR_60_PLUS_SUBJECT_RESEARCH}
 
 How to grade severity
 - BLOCKERS: would embarrass us if sent (factual error, missing event detail, broken CTA href, voice violation, fabricated information, anti-pattern language like "facility").

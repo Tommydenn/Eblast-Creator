@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
 import { IntelligenceApplied } from "@/components/IntelligenceApplied";
+import { SubjectSpecialistPanel } from "@/components/SubjectSpecialistPanel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, SectionLabel } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -57,6 +58,20 @@ interface PastSendForContext {
   openRatePct: number | null;
   clickRatePct: number | null;
   fromName: string | null;
+}
+
+interface SubjectCandidate {
+  subject: string;
+  previewText: string;
+  approach: string;
+  charCount: number;
+  rationale: string;
+}
+
+interface SubjectSpecialistResult {
+  winner: SubjectCandidate;
+  alternatives: SubjectCandidate[];
+  chosenRationale: string;
 }
 
 type Stage = "idle" | "drafting" | "preview" | "refining" | "pushing" | "done";
@@ -154,6 +169,8 @@ export default function Home() {
 
   /** Past sends the agents saw — echoed back from /api/draft-from-pdf so we can show them in the post-draft sidebar. */
   const [pastSendsContext, setPastSendsContext] = useState<PastSendForContext[]>([]);
+  /** Subject specialist's full output (winner + alternatives + reasoning). */
+  const [subjectSpecialist, setSubjectSpecialist] = useState<SubjectSpecialistResult | null>(null);
 
   useEffect(() => {
     fetch("/api/communities")
@@ -178,6 +195,7 @@ export default function Home() {
     setReviewError(null);
     setAgentLoop(null);
     setPastSendsContext([]);
+    setSubjectSpecialist(null);
 
     const fd = new FormData();
     fd.append("file", pdf);
@@ -200,6 +218,7 @@ export default function Home() {
       setReview(data.review ?? null);
       setAgentLoop(data.agentLoop ?? null);
       setPastSendsContext(data.pastSendsContext ?? []);
+      setSubjectSpecialist(data.subjectSpecialist ?? null);
       setStage("preview");
     } catch (e: any) {
       setError(String(e));
@@ -537,6 +556,19 @@ export default function Home() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Subject specialist — winner + alternatives, click to swap */}
+              {subjectSpecialist && (
+                <SubjectSpecialistPanel
+                  specialist={subjectSpecialist}
+                  currentSubject={extracted.subject}
+                  onPickAlternative={(subject, previewText) => {
+                    setRefineInput(
+                      `Change the subject line to: "${subject}" and the preview text to: "${previewText}"`,
+                    );
+                  }}
+                />
+              )}
 
               {/* Intelligence applied — what past sends actually shaped this draft */}
               <IntelligenceApplied

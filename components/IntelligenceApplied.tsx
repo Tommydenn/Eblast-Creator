@@ -31,7 +31,8 @@ interface CriticFinding {
     | "structure"
     | "compliance"
     | "send_strategy"
-    | "image_quality";
+    | "image_quality"
+    | "craft";
   field?: string;
   issue: string;
   suggestion?: string;
@@ -46,10 +47,12 @@ export interface IntelligenceAppliedProps {
 
 export function IntelligenceApplied({ drafterRationale, pastSends, findings }: IntelligenceAppliedProps) {
   const sendStrategyFindings = (findings ?? []).filter((f) => f.category === "send_strategy");
+  const craftFindings = (findings ?? []).filter((f) => f.category === "craft");
   const hasAnything =
     !!drafterRationale ||
     (pastSends && pastSends.length > 0) ||
-    sendStrategyFindings.length > 0;
+    sendStrategyFindings.length > 0 ||
+    craftFindings.length > 0;
 
   if (!hasAnything) return null;
 
@@ -72,41 +75,22 @@ export function IntelligenceApplied({ drafterRationale, pastSends, findings }: I
           </div>
         )}
 
+        {craftFindings.length > 0 && (
+          <FindingGroup
+            label="Craft elevation"
+            sublabel="Where this draft can be sharpened toward best-in-class."
+            categoryLabel="craft"
+            findings={craftFindings}
+          />
+        )}
+
         {sendStrategyFindings.length > 0 && (
-          <div>
-            <SectionLabel className="mb-1.5">Performance signals from the critic</SectionLabel>
-            <ul className="space-y-2">
-              {sendStrategyFindings.map((f, i) => (
-                <li key={i} className="rounded-md border border-sand-200 bg-white p-3">
-                  <div className="mb-1 flex items-center gap-2">
-                    <Badge
-                      variant={
-                        f.severity === "blocker"
-                          ? "danger"
-                          : f.severity === "important"
-                          ? "warning"
-                          : "neutral"
-                      }
-                    >
-                      {f.severity === "blocker"
-                        ? "Blocker"
-                        : f.severity === "important"
-                        ? "Important"
-                        : "Polish"}
-                    </Badge>
-                    <span className="text-[10px] uppercase tracking-[0.12em] text-sand-500">
-                      send strategy
-                    </span>
-                    {f.field && <span className="text-[10px] text-sand-400">· {f.field}</span>}
-                  </div>
-                  <p className="text-sm text-sand-900">{f.issue}</p>
-                  {f.rationale && (
-                    <p className="mt-1.5 text-xs italic leading-relaxed text-sand-500">{f.rationale}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <FindingGroup
+            label="Performance signals from history"
+            sublabel="What the critic noticed against this community's track record."
+            categoryLabel="send strategy"
+            findings={sendStrategyFindings}
+          />
         )}
 
         {pastSends && pastSends.length > 0 && (
@@ -153,5 +137,58 @@ export function IntelligenceApplied({ drafterRationale, pastSends, findings }: I
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function FindingGroup({
+  label,
+  sublabel,
+  categoryLabel,
+  findings,
+}: {
+  label: string;
+  sublabel?: string;
+  categoryLabel: string;
+  findings: CriticFinding[];
+}) {
+  return (
+    <div>
+      <SectionLabel className="mb-0.5">{label}</SectionLabel>
+      {sublabel && <p className="mb-2 text-[11px] text-sand-500">{sublabel}</p>}
+      <ul className="space-y-2">
+        {findings.map((f, i) => (
+          <li key={i} className="rounded-md border border-sand-200 bg-white p-3">
+            <div className="mb-1 flex items-center gap-2">
+              <Badge
+                variant={
+                  f.severity === "blocker"
+                    ? "danger"
+                    : f.severity === "important"
+                    ? "warning"
+                    : "neutral"
+                }
+              >
+                {f.severity === "blocker"
+                  ? "Blocker"
+                  : f.severity === "important"
+                  ? "Important"
+                  : "Polish"}
+              </Badge>
+              <span className="text-[10px] uppercase tracking-[0.12em] text-sand-500">{categoryLabel}</span>
+              {f.field && <span className="text-[10px] text-sand-400">· {f.field}</span>}
+            </div>
+            <p className="text-sm text-sand-900">{f.issue}</p>
+            {f.suggestion && (
+              <p className="mt-1.5 rounded border border-dashed border-clay-300 bg-clay-50/40 px-2 py-1.5 text-xs leading-relaxed text-sand-800">
+                → {f.suggestion}
+              </p>
+            )}
+            {f.rationale && (
+              <p className="mt-1.5 text-xs italic leading-relaxed text-sand-500">{f.rationale}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

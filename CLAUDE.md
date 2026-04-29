@@ -24,10 +24,64 @@ Marketing creates a designed PDF flyer per upcoming event/announcement, per comm
 ## Stack
 
 - Next.js 14 App Router on Vercel
-- Anthropic API (Claude Sonnet 4.6) — `lib/anthropic.ts`
+- Anthropic API (Claude Sonnet 4.6) — `lib/anthropic.ts` (drafter), `lib/critic.ts` (reviewer)
 - HubSpot Marketing Email API v3 — `lib/hubspot.ts`
 - pdf-lib (PDF object walking) + mupdf (color-managed image conversion) + sharp (encoder/fallback) — `lib/pdf-images.ts`
-- No database yet (planned: Vercel Postgres for the agentic feedback loop)
+- **Vercel Postgres (Neon-backed)** + Drizzle ORM — community registry, past sends, drafts, approvals. See `lib/db/`.
+
+## Database
+
+Postgres is the source of truth for the registry. Schema in `lib/db/schema.ts`. Tables:
+- `communities` — 22 GLM communities (Caretta x4, Talamore x3, Hayden Grove x2, The Glenn x5, Cottagewood x2, Amira Choice x2, Global Pointe, Seven Hills, Orchards of Minnetonka, The Pillars of Grand Rapids). JSONB columns for nested objects (`brand`, `address`, `hubspot`, `socials`, `voice`, `marketingDirector`, `logos`, `photoLibrary`, `brandGuideExtracted`).
+- `community_senders` — multiple senders per community (real data: Caretta locations share Becky Sobolik + Meranda Lelonek; Talamore St Cloud has Brian Glonek + Josie Brenny; etc.).
+- `past_sends` — HubSpot history mirror. Populated by `npm run sync:past-sends`. Keeps last 365 days of `BATCH_EMAIL` sends only. Each row has subject, preview text, from name+email, state, published_at, recipient/open/click/bounce/unsubscribe counts, and a `raw` JSONB blob with the full HubSpot snapshot.
+- `drafts` — eblasts the agent has produced, with status state machine (`drafting → awaiting_approval → edits_requested → approved → scheduled → sent`).
+- `approval_threads` — magic-link salesperson approvals.
+
+Reads through `lib/db/queries.ts` (`getCommunity(slug)`, `listCommunities()`). All async. Legacy import path `@/data/communities` re-exports the same.
+
+Scripts:
+- `npm run db:push` — push schema to DB (requires TTY; use generate+apply for non-TTY).
+- `npm run db:generate` — generate SQL migration files.
+- `npx tsx lib/db/apply-migrations.ts` — apply generated migrations.
+- `npm run db:seed` — idempotent seed of all 22 communities + senders.
+- `npm run db:studio` — Drizzle Studio (browser DB explorer).
+- `npx tsx scripts/sync-past-sends.ts` — pull last 365 days of BATCH_EMAIL marketing emails into `past_sends` (with stats). Idempotent.
+- `npx tsx scripts/enrich-communities.ts` — read each community's past sends and fill in missing community fields (tracking phone, website, email, senders).
+- `npx tsx scripts/extract-brand-guide.ts <slug> <path/to/pdf>` — read a brand-guide PDF and write `brand` + `voice` + `taglines` + `amenities` onto the community.
+
+Runs via Vercel cron daily (configured in `vercel.json`) — hits `/api/cron/sync-past-sends`.
+
+Required env vars: `DATABASE_URL` (Neon pooled). Set via Vercel Postgres → Connect Project → `.env.local` snippet.
+
+Per-community fields worth knowing:
+- `trackingPhone` — CallRail number used in eblast CTAs. NEVER same as `phone` (which is the public/flyer number).
+- `brandFamily` — brand grouping ("Caretta", "Talamore", "The Glenn"). Communities under the same brand share visuals.
+- `brand.paletteSource` / `fontsSource` — `"default" | "manual" | "brand-guide-extracted"` so we know if a community has real brand data or is still using the placeholder.
+- `brandGuideExtracted` — populated when the brand-guide PDF has been auto-parsed by Claude (not yet wired up — Step 3b).
+
+## Agentic architecture (target)
+
+The app is being shifted from "AI-assisted pipeline" to "marketing agent that replaces the intern role." Five stages:
+
+1. **Drafter ↔ Critic loop** — `lib/agentic-draft.ts` orchestrates this server-side. Drafter writes initial draft from the PDF → critic reviews the draft AND looks at the actual hero/secondary/gallery images → if not ready, drafter applies critic's text findings AND the loop drops any flagged images → critic re-reviews. Up to 3 rounds, with stagnation/regression guards. **The user does not see a preview until the agents converge.**
+
+   The critic uses Claude Sonnet 4.6's vision: each image currently slotted into the rendered email is sent as a labeled image content block. The critic flags blank/corrupted/off-topic/off-brand images via `flaggedImages`. The loop reads that and excludes those slots from the next round (the next-largest available image fills the slot).
+
+   **Both drafter and critic are memory-aware.** Each request fetches the last 12 PUBLISHED sends for the target community via `lib/past-sends-retrieval.ts` and threads them into the agents' system prompts as voice/style/performance reference. The drafter uses them to match what's worked; the critic uses them to flag drift from high-performing patterns (category: `send_strategy`).
+
+   (Built — `lib/anthropic.ts` for the drafter, `lib/critic.ts` for the critic, `lib/agentic-draft.ts` for orchestration. `app/api/draft-from-pdf` runs it; `app/api/critique-eblast` is still exposed for ad-hoc post-refine reviews — note that endpoint is text-only, no images.)
+2. **Manual refinement** — User can still type a free-form refinement instruction; the existing single-shot refine + per-refine critic call handles this. (Built — `app/api/refine-eblast`.)
+3. **Approval email to site salesperson** — Outbound via **HubSpot single-send transactional email** (we already have the token). Email contains the HubSpot draft link, the critic's notes, and Approve / Edit links. (Not yet built.)
+4. **Magic-link approval form** — Salesperson clicks the link, lands on a one-page form, hits Approve or types edits. No inbound email parsing. (Not yet built.)
+5. **Scheduler** — Once approved, agent picks send time from history and schedules in HubSpot via API. (Not yet built.)
+
+Memory layer (Vercel Postgres) stores draft state, past-send analytics, approval threads. Nightly job pulls open/click rates so the critic has ground truth.
+
+**Locked choices, don't relitigate:**
+- Outbound from agent → HubSpot single-send transactional API (no Resend, no SMTP).
+- Approvals → magic-link form, NOT reply-to-approve (reply parsing is fragile).
+- Critic does NOT auto-fix. It surfaces. The user / salesperson decides what to apply.
 
 ## Required environment variables
 
@@ -92,6 +146,8 @@ Coded email templates need a HubL annotation header and a CAN-SPAM compliant foo
 | `data/communities/{slug}/` | Per-community asset folder placeholders. Real assets live on HubSpot Files. |
 | `data/communities-onboarding.csv` | Template for batch-onboarding the remaining 19 communities. |
 | `lib/anthropic.ts` | Claude PDF extraction with structured tool output + the chat refinement function. |
+| `lib/critic.ts` | Reviewer agent. Takes ExtractedFlyer + Community → severity-tagged findings, suggestions, subject alternatives. |
+| `lib/agentic-draft.ts` | Drafter ↔ critic loop orchestrator. `agenticDraftLoop({pdfBase64, community})` returns the converged final draft + iteration trace. Used by `app/api/draft-from-pdf`. |
 | `lib/hubspot.ts` | HubSpot API client — marketing emails, file manager, design manager. |
 | `lib/pdf-images.ts` | Embedded image extraction + CMYK normalization. |
 | `lib/render-email.ts` | The HTML email template — one template, brand-adapted per community. |
@@ -101,6 +157,7 @@ Coded email templates need a HubL annotation header and a CAN-SPAM compliant foo
 | `app/communities/[slug]/page.tsx` | Per-community detail page. |
 | `app/api/draft-from-pdf/route.ts` | Extract + render endpoint. |
 | `app/api/refine-eblast/route.ts` | Chat refinement. |
+| `app/api/critique-eblast/route.ts` | Reviewer endpoint. POST `{ extracted, communitySlug }` → `{ review }`. |
 | `app/api/push-eblast/route.ts` | Push to HubSpot (image upload + template upload + email create). |
 | `app/api/marketing-emails/recent/route.ts` | Read past sends from HubSpot for analysis. |
 | `app/api/communities/route.ts` | JSON registry endpoint for client-side rendering. |
@@ -114,12 +171,13 @@ Coded email templates need a HubL annotation header and a CAN-SPAM compliant foo
 - **Image handling** — every flyer is CMYK because they're print-export PDFs from Adobe products. Always assume CMYK and normalize.
 - **HubSpot Private App scopes** — currently just `content` and `files`. Adding `crm.lists.read` planned (for resolving recipient list IDs by name) but not yet in use.
 
-## Next milestones (planned, not built)
+## Build order for remaining agent stages
 
-1. **Vercel Postgres + outcomes capture** — every send's metadata + HubSpot analytics persisted.
-2. **Scheduled job** — pull HubSpot campaign analytics 24h post-send, update DB.
-3. **Retrieval-augmented drafting** — feed the last N sends + their open rates into Claude's context for the next draft. This is where "learning over time" lives.
-4. **Subagent split** — copywriter agent, editor/critic agent, send-time strategist agent.
-5. **Pipeline dashboard** — Draft / Approved / Sent kanban view.
+1. **Postgres + analytics ingestion** — Vercel Postgres, schema for `drafts`, `past_sends`, `approval_threads`. Scheduled job pulls HubSpot open/click rates per email (`/marketing/v3/emails/{id}/statistics` or analytics API). Once this lands, the critic gains a `lookup_past_sends_for_community(slug)` tool and becomes a real tool-use loop.
+2. **Outbound approval email** — `lib/hubspot.ts` adds `sendSingleSendTransactional()`. New `lib/approval-email.ts` builds the salesperson email body (critic notes + draft link + magic-link buttons).
+3. **Magic-link approval form** — `/approve/[token]` page. Token-signed URL maps to a draft. Page shows preview + Approve / Request Edits buttons + free-text edit box.
+4. **Edit handler** — Salesperson types edits → reuses existing refine flow → critic re-runs → second approval email goes out.
+5. **Scheduler** — `lib/scheduler.ts` picks send time from past-send patterns, calls HubSpot's email-schedule API.
+6. **Pipeline dashboard** — Draft / Awaiting approval / Approved / Scheduled / Sent kanban.
 
-The strategic note: the highest-leverage feature is the feedback loop (sends → analytics → next draft context). Don't skip to multi-agent architecture before that's wired up.
+Strategic note: the highest-leverage feature is the feedback loop (sends → analytics → next draft context). The critic is shipped as a v1 single-call agent; it stays useful but becomes substantially better once Postgres + analytics ingestion (Step 1) is wired up.

@@ -7,8 +7,8 @@ import { listCommunities } from "@/data/communities";
 
 export const dynamic = "force-dynamic";
 
-export default function CommunitiesPage() {
-  const communities = listCommunities();
+export default async function CommunitiesPage() {
+  const communities = await listCommunities();
 
   const labelStyle: React.CSSProperties = {
     fontSize: 11,
@@ -70,7 +70,7 @@ export default function CommunitiesPage() {
         {communities.map((c) => {
           const assetSummary = [
             c.brandGuideUrl ? "guide" : null,
-            c.logoUrl ? "logo" : null,
+            c.logos?.length ? `${c.logos.length} logo${c.logos.length === 1 ? "" : "s"}` : null,
             c.photoLibrary?.length ? `${c.photoLibrary.length} photo${c.photoLibrary.length === 1 ? "" : "s"}` : null,
           ].filter(Boolean).join(" · ") || "—";
 
@@ -98,8 +98,17 @@ export default function CommunitiesPage() {
                 {c.nameAbbreviation ?? <span style={{ color: "#B5683E" }}>—</span>}
               </div>
               <div style={{ fontSize: 13, color: "#3A3A3A" }}>
-                <div>{c.sender.name}</div>
-                <div style={{ fontSize: 11, color: "#9C7A55" }}>{c.sender.email}</div>
+                {c.senders[0] ? (
+                  <>
+                    <div>{c.senders[0].name}</div>
+                    <div style={{ fontSize: 11, color: "#9C7A55" }}>{c.senders[0].email}</div>
+                    {c.senders.length > 1 && (
+                      <div style={{ fontSize: 10, color: "#B5683E", marginTop: 2 }}>+{c.senders.length - 1} more</div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ color: "#B5683E" }}>no sender</div>
+                )}
               </div>
               <div style={{ fontSize: 13, color: "#3A3A3A" }}>
                 {c.hubspot.listId ? (
@@ -107,10 +116,10 @@ export default function CommunitiesPage() {
                 ) : (
                   <div style={{ color: "#B5683E" }}>list not set</div>
                 )}
-                {c.hubspot.activeDomain && (
-                  <div style={{ fontSize: 11, color: "#9C7A55", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {c.hubspot.activeDomain}
-                  </div>
+                {c.trackingPhone ? (
+                  <div style={{ fontSize: 11, color: "#9C7A55" }}>{c.trackingPhone}</div>
+                ) : (
+                  <div style={{ fontSize: 11, color: "#B5683E" }}>no tracking #</div>
                 )}
               </div>
               <div style={{ textAlign: "right", fontSize: 12, color: "#9C7A55" }}>{assetSummary}</div>

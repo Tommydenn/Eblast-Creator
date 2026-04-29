@@ -194,9 +194,10 @@ export function buildEblastHtml(
     <td style="padding: 36px 36px 28px 36px;" align="center">
       <p style="font-family: ${brand.fontHeadline}; font-size: 18px; color: ${brand.primary}; letter-spacing: 1px; margin: 0 0 4px 0;">${escapeHtml(community.displayName)}</p>
       <p style="font-family: ${brand.fontBody}; font-size: 13px; color: #6B6B6B; line-height: 1.7; margin: 0;">
-        ${escapeHtml(community.address.street)} · ${escapeHtml(community.address.city)}, ${escapeHtml(community.address.state)} ${escapeHtml(community.address.zip)}<br>
-        <a href="${community.websiteUrl}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.websiteUrl.replace(/^https?:\/\//, ""))}</a> ·
-        <a href="mailto:${community.email}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.email)}</a>
+        ${escapeHtml(community.address.street ?? "")} · ${escapeHtml(community.address.city ?? "")}, ${escapeHtml(community.address.state ?? "")} ${escapeHtml(community.address.zip ?? "")}<br>
+        ${community.websiteUrl ? `<a href="${community.websiteUrl}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.websiteUrl.replace(/^https?:\/\//, ""))}</a>` : ""}
+        ${community.websiteUrl && community.email ? " · " : ""}
+        ${community.email ? `<a href="mailto:${community.email}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.email)}</a>` : ""}
       </p>
     </td>
   </tr>`;

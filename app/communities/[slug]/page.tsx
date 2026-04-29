@@ -4,28 +4,45 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+interface CommunitySender {
+  id: string;
+  name: string;
+  email: string;
+  title?: string | null;
+  isPrimary: boolean;
+}
+
+interface CommunityLogo {
+  url: string;
+  variant: string;
+  onColor?: string;
+}
+
 interface Community {
+  id: string;
   slug: string;
   displayName: string;
   shortName: string;
-  nameAbbreviation?: string;
+  brandFamily?: string | null;
+  nameAbbreviation?: string | null;
   type: string;
-  careTypes?: string[];
-  brand: { primary: string; accent: string; background: string; fontHeadline: string; fontBody: string };
-  address: { street: string; city: string; state: string; zip: string };
-  phone: string;
-  email: string;
-  websiteUrl: string;
+  careTypes?: string[] | null;
+  brand: { primary: string; accent: string; background: string; fontHeadline: string; fontBody: string; secondary?: string; supporting?: string[] };
+  address: { street?: string; city?: string; state?: string; zip?: string };
+  phone?: string | null;
+  email?: string | null;
+  websiteUrl?: string | null;
+  trackingPhone?: string | null;
   socials?: { facebook?: string; instagram?: string; linkedin?: string; youtube?: string };
-  sender: { name: string; email: string; title?: string };
-  marketingDirector?: { name: string; email: string };
-  hubspot: { listId?: number; additionalListIds?: number[]; businessUnitId?: number; activeDomain?: string };
-  brandGuideUrl?: string;
-  logoUrl?: string;
+  senders: CommunitySender[];
+  marketingDirector?: { name: string; email: string } | null;
+  hubspot: { listId?: number; additionalListIds?: number[]; businessUnitId?: number };
+  brandGuideUrl?: string | null;
+  logos?: CommunityLogo[];
   photoLibrary?: Array<{ url: string; caption?: string; tags?: string[] }>;
-  taglines?: string[];
-  amenities?: string[];
-  voiceNotes?: string;
+  taglines?: string[] | null;
+  amenities?: string[] | null;
+  voiceNotes?: string | null;
   templates: string[];
 }
 
@@ -118,7 +135,7 @@ export default function CommunityDetailPage() {
             {c.displayName}
           </h1>
           <p style={{ fontSize: 14, color: "#5C5C5C", margin: 0 }}>
-            {c.address.street} · {c.address.city}, {c.address.state} {c.address.zip}
+            {[c.address.street, [c.address.city, c.address.state].filter(Boolean).join(", "), c.address.zip].filter(Boolean).join(" · ") || <em style={{ color: "#B5683E" }}>address not set</em>}
           </p>
         </div>
         <div
@@ -155,19 +172,23 @@ export default function CommunityDetailPage() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
             <div>
               <p style={labelStyle}>Phone</p>
-              <p style={valueStyle}>{c.phone}</p>
+              <p style={valueStyle}>{c.phone ?? <em style={{ color: "#B5683E" }}>not set</em>}</p>
             </div>
             <div>
               <p style={labelStyle}>Email</p>
-              <p style={valueStyle}>{c.email}</p>
+              <p style={valueStyle}>{c.email ?? <em style={{ color: "#B5683E" }}>not set</em>}</p>
             </div>
           </div>
           <div>
             <p style={labelStyle}>Website</p>
             <p style={valueStyle}>
-              <a href={c.websiteUrl} target="_blank" rel="noreferrer" style={{ color: c.brand.accent }}>
-                {c.websiteUrl.replace(/^https?:\/\//, "")}
-              </a>
+              {c.websiteUrl ? (
+                <a href={c.websiteUrl} target="_blank" rel="noreferrer" style={{ color: c.brand.accent }}>
+                  {c.websiteUrl.replace(/^https?:\/\//, "")}
+                </a>
+              ) : (
+                <em style={{ color: "#B5683E" }}>not set</em>
+              )}
             </p>
           </div>
           {c.socials && Object.values(c.socials).some(Boolean) && (
@@ -191,10 +212,24 @@ export default function CommunityDetailPage() {
             Sending
           </h2>
           <div style={{ marginBottom: 14 }}>
-            <p style={labelStyle}>From (recipient sees)</p>
-            <p style={valueStyle}>
-              {c.sender.name} &lt;{c.sender.email}&gt;
-            </p>
+            <p style={labelStyle}>From (recipients see this)</p>
+            {c.senders.length === 0 ? (
+              <p style={{ ...valueStyle, color: "#B5683E", fontStyle: "italic" }}>No sender configured</p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
+                {c.senders.map((s) => (
+                  <li key={s.id} style={{ marginBottom: 4 }}>
+                    <span style={valueStyle}>{s.name}</span>
+                    {s.isPrimary && (
+                      <span style={{ marginLeft: 8, fontSize: 9, padding: "1px 6px", background: c.brand.background, color: c.brand.accent, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700 }}>
+                        primary
+                      </span>
+                    )}
+                    <div style={{ fontSize: 12, color: "#9C7A55" }}>{s.email}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           {c.marketingDirector && (
             <div style={{ marginBottom: 14 }}>
@@ -212,9 +247,9 @@ export default function CommunityDetailPage() {
               </p>
             </div>
             <div>
-              <p style={labelStyle}>Sending domain</p>
-              <p style={{ ...valueStyle, fontSize: 12 }}>
-                {c.hubspot.activeDomain ?? <em style={{ color: "#9C7A55" }}>auto</em>}
+              <p style={labelStyle}>Tracking phone (CallRail)</p>
+              <p style={{ ...valueStyle, fontSize: 13 }}>
+                {c.trackingPhone ?? <em style={{ color: "#B5683E" }}>not set</em>}
               </p>
             </div>
           </div>
@@ -230,8 +265,8 @@ export default function CommunityDetailPage() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-          <AssetSlot label="Brand guide PDF" url={c.brandGuideUrl} accent={c.brand.accent} />
-          <AssetSlot label="Logo" url={c.logoUrl} accent={c.brand.accent} previewable />
+          <AssetSlot label="Brand guide PDF" url={c.brandGuideUrl ?? undefined} accent={c.brand.accent} />
+          <AssetSlot label={`Logos (${c.logos?.length ?? 0})`} url={c.logos?.[0]?.url} accent={c.brand.accent} previewable />
           <AssetSlot
             label={`Photo library (${c.photoLibrary?.length ?? 0})`}
             url={c.photoLibrary?.[0]?.url}

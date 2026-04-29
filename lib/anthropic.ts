@@ -1,6 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Community } from "@/data/communities";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
+import {
+  formatPastSendsForPrompt,
+  type PastSendForContext,
+} from "@/lib/past-sends-retrieval";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -67,21 +71,53 @@ const extractFlyerToolSchema = {
   },
 };
 
-function systemPrompt(community: Community): string {
-  return `You are a senior marketing copywriter for ${community.displayName}, a ${community.type.replace(/_/g, " ")} senior living community in ${community.address.city}, ${community.address.state}.
+function systemPrompt(community: Community, pastSends?: PastSendForContext[]): string {
+  const voiceBlock = community.voice
+    ? [
+        community.voice.tone?.length ? `Tone: ${community.voice.tone.join(", ")}.` : null,
+        community.voice.dos?.length ? `Do: ${community.voice.dos.join(" / ")}` : null,
+        community.voice.donts?.length ? `Don't: ${community.voice.donts.join(" / ")}` : null,
+        community.voice.prohibited?.length ? `Never use these words/phrases: ${community.voice.prohibited.join(", ")}.` : null,
+        community.voice.approvedClaims?.length ? `Approved claims you may use: ${community.voice.approvedClaims.join(" / ")}` : null,
+        community.voice.photoStyleNotes ? `Photo direction: ${community.voice.photoStyleNotes}` : null,
+      ].filter(Boolean).join("\n")
+    : "";
+
+  const hasVoice = voiceBlock.length > 0;
+  const fallbackVoice =
+    community.voiceNotes ??
+    "Warm, hospitable, dignified. Speak to both prospective residents and the adult children making the decision for a parent.";
+
+  const trackingPhoneNote = community.trackingPhone
+    ? `\n- For phone CTAs in this email, use ${community.trackingPhone} (the community's tracking number) — do NOT use any other phone number from the flyer, even if the flyer prints a different one.`
+    : "";
+
+  const pastSendsBlock =
+    pastSends && pastSends.length > 0
+      ? `
+
+Recent eblasts from ${community.displayName} (use as voice/style/length reference; do NOT copy lines verbatim):
+${formatPastSendsForPrompt(pastSends)}
+
+Notes on using this:
+- High-performing past subjects (higher open %) are signals about what works for this audience. Match their structure when the topic fits.
+- The drafts that already shipped represent the brand's accepted voice — match it. If your draft sounds noticeably different, that's a yellow flag.`
+      : "";
+
+  return `You are a senior marketing copywriter for ${community.displayName}, a ${community.type.replace(/_/g, " ")} senior living community${community.address.city ? ` in ${community.address.city}, ${community.address.state ?? ""}`.trim() : ""}.
 
 Your job: take a printed flyer (provided as a PDF) and translate it into the structured fields for a marketing email that will be sent to that community's contact list.
 
 Voice and audience:
-${community.voiceNotes ?? "Warm, hospitable, dignified. Speak to both prospective residents and the adult children making the decision for a parent."}
+${hasVoice ? voiceBlock : fallbackVoice}
 
 Hard rules:
 - Never invent facts. Every name, date, phone number, time, and quote in your output must appear in the flyer. If something isn't in the flyer, leave that field empty.
 - Use the community's actual name (${community.displayName}) — not generic terms like "our community."
 - Subject lines are specific and benefit-led, not vague ("You're invited: ..." is fine; "Important update" is not).
-- Body copy is grounded and warm, not salesy. Avoid superlatives, exclamation points, and emoji.
-- Honor the flyer's tone. If the flyer is event-focused, your email is event-focused. If it's a service announcement, ours is too.
-- Keep paragraphs to 2-4 sentences. Write for skim-readers in inboxes, not for posters.
+- Body copy is grounded and warm, not salesy. Avoid superlatives and exclamation points. Single thoughtful emoji in subject lines is allowed when it's seasonal/celebratory and the brand has used emoji historically — otherwise omit.
+- Honor the flyer's tone. If the flyer is event-focused, your email is event-focused.
+- Keep paragraphs to 2-4 sentences. Write for skim-readers in inboxes.${trackingPhoneNote}${pastSendsBlock}
 
 Output format: call the \`extract_flyer\` tool with a fully-populated structured object. Do not write prose; only call the tool.`;
 }
@@ -92,13 +128,14 @@ Output format: call the \`extract_flyer\` tool with a fully-populated structured
 export async function extractFlyerContent(opts: {
   pdfBase64: string;
   community: Community;
+  pastSends?: PastSendForContext[];
 }): Promise<ExtractedFlyer> {
   const c = client();
 
   const response = await c.messages.create({
     model: MODEL,
     max_tokens: 2048,
-    system: systemPrompt(opts.community),
+    system: systemPrompt(opts.community, opts.pastSends),
     tools: [
       {
         name: "extract_flyer",
@@ -142,13 +179,14 @@ export async function refineFlyerContent(opts: {
   current: ExtractedFlyer;
   instruction: string;
   community: Community;
+  pastSends?: PastSendForContext[];
 }): Promise<ExtractedFlyer> {
   const c = client();
 
   const response = await c.messages.create({
     model: MODEL,
     max_tokens: 2048,
-    system: `${systemPrompt(opts.community)}
+    system: `${systemPrompt(opts.community, opts.pastSends)}
 
 You are now in REFINEMENT mode. The user has an existing extracted draft and wants targeted changes.
 - Apply the user's specific instruction. Touch only what they ask about.

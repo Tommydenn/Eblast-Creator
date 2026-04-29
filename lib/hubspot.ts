@@ -132,6 +132,29 @@ export async function getMarketingEmail(emailId: string): Promise<ApiCallResult>
   return { step: "get_marketing_email", ok: res.ok, status: res.status, body: parsed };
 }
 
+/**
+ * Fetch a marketing email's statistics: processed, opens, clicks, bounces,
+ * unsubscribes. The new /marketing/v3/.../statistics endpoint isn't enabled
+ * for all portals (returns 404 for ours), so we use the legacy v1 campaign
+ * endpoint which IS enabled. The marketing-email row carries a
+ * `primaryEmailCampaignId` — that's what we look up.
+ *
+ * Returns the campaign body verbatim. The shape this portal returns is:
+ *   { id, groupId, contentId, subject, name, counters: { processed, sent,
+ *     delivered, dropped, deferred, suppressed, open, click, bounce,
+ *     unsubscribed, statuschange }, scheduledAt, processingState, type, ... }
+ */
+export async function getMarketingEmailCampaign(campaignId: number | string): Promise<ApiCallResult> {
+  const res = await fetch(`${HUBSPOT_BASE}/email/public/v1/campaigns/${campaignId}`, {
+    method: "GET",
+    headers: authHeader(),
+  });
+  const text = await res.text();
+  let parsed: any;
+  try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
+  return { step: "get_email_campaign", ok: res.ok, status: res.status, body: parsed };
+}
+
 // ---------- File Manager (image hosting) ---------------------------------
 
 export interface UploadedFile {

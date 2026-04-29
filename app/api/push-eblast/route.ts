@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const community = getCommunity(body.communitySlug);
+  const community = await getCommunity(body.communitySlug);
   if (!community) {
     return NextResponse.json({
       ok: false,
@@ -133,8 +133,8 @@ export async function POST(req: NextRequest) {
     name: body.name ?? `${community.displayName} – ${body.subject}`,
     subject: body.subject,
     previewText: body.previewText,
-    fromName: community.sender.name,
-    replyTo: community.sender.email,
+    fromName: community.senders[0]?.name ?? community.displayName,
+    replyTo: community.senders[0]?.email ?? community.email ?? "",
     templatePath: hubspotPath,
     contactListId: community.hubspot.listId,
   });

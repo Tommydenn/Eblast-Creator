@@ -8,8 +8,9 @@ interface Community {
   shortName: string;
   type: string;
   brand: { primary: string; accent: string; background: string };
-  sender: { name: string; email: string };
+  senders: Array<{ id: string; name: string; email: string; isPrimary: boolean }>;
   hubspot: { listId?: number };
+  trackingPhone?: string | null;
   templates: string[];
 }
 
@@ -46,6 +47,55 @@ interface RefinementEntry {
   ok: boolean;
 }
 
+type ReviewVerdict = "ready" | "needs_revision" | "blocking_issues";
+type FindingSeverity = "blocker" | "important" | "nice_to_have";
+type FindingCategory =
+  | "voice"
+  | "brand"
+  | "field_completeness"
+  | "subject_line"
+  | "preview_text"
+  | "cta"
+  | "structure"
+  | "compliance"
+  | "send_strategy";
+
+interface CriticFinding {
+  severity: FindingSeverity;
+  category: FindingCategory;
+  field?: string;
+  issue: string;
+  suggestion?: string;
+  rationale: string;
+}
+
+interface DraftReview {
+  verdict: ReviewVerdict;
+  summary: string;
+  findings: CriticFinding[];
+  subjectLineAlternatives?: string[];
+  sendTimeRecommendation?: string;
+  recipientListNote?: string;
+}
+
+type StopReason = "ready" | "max_iterations" | "no_progress" | "regressed";
+
+interface AgentLoopIterationSummary {
+  round: number;
+  verdict: ReviewVerdict;
+  summary: string;
+  findingsCount: number;
+  appliedSuggestions: string[];
+  droppedImageSlots: string[];
+}
+
+interface AgentLoopSummary {
+  stoppedReason: StopReason;
+  totalRounds: number;
+  imagesExcluded: number;
+  iterations: AgentLoopIterationSummary[];
+}
+
 export default function Home() {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string>("");
@@ -62,6 +112,11 @@ export default function Home() {
 
   const [refineInput, setRefineInput] = useState("");
   const [refineHistory, setRefineHistory] = useState<RefinementEntry[]>([]);
+
+  const [review, setReview] = useState<DraftReview | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [agentLoop, setAgentLoop] = useState<AgentLoopSummary | null>(null);
 
   const [pushResult, setPushResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +140,9 @@ export default function Home() {
     setHtml("");
     setPushResult(null);
     setRefineHistory([]);
+    setReview(null);
+    setReviewError(null);
+    setAgentLoop(null);
 
     const fd = new FormData();
     fd.append("file", pdf);
@@ -98,6 +156,9 @@ export default function Home() {
         setStage("idle");
         return;
       }
+      // The endpoint now runs the drafter ↔ critic loop server-side and only
+      // returns once they've converged (or hit the iteration cap). No preview
+      // is shown until that happens.
       setExtracted(data.extracted);
       setHtml(data.html);
       setHeroImageUrl(data.heroImageUrl);
@@ -105,10 +166,35 @@ export default function Home() {
       setGalleryImageUrls(data.galleryImageUrls ?? []);
       setImageCount(data.imageCount ?? 0);
       setImageDiagnostic(data.imageDiagnostic ?? null);
+      setReview(data.review ?? null);
+      setAgentLoop(data.agentLoop ?? null);
       setStage("preview");
     } catch (e: any) {
       setError(String(e));
       setStage("idle");
+    }
+  }
+
+  async function runReview(targetExtracted?: ExtractedFlyer, targetSlug?: string) {
+    const flyer = targetExtracted ?? extracted;
+    const slug = targetSlug ?? selectedSlug;
+    if (!flyer || !slug) return;
+    setReviewing(true);
+    setReviewError(null);
+    setReview(null);
+    try {
+      const res = await fetch("/api/critique-eblast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extracted: flyer, communitySlug: slug }),
+      });
+      const data = await res.json();
+      if (data.ok) setReview(data.review);
+      else setReviewError(data.error ?? "Review failed");
+    } catch (e: any) {
+      setReviewError(String(e));
+    } finally {
+      setReviewing(false);
     }
   }
 
@@ -143,6 +229,8 @@ export default function Home() {
       setHtml(data.html);
       setRefineHistory((h) => [...h, { instruction, ok: true }]);
       setStage("preview");
+      // Re-review against the refined draft so the sidebar reflects the new state.
+      runReview(data.extracted, selectedSlug);
     } catch (e: any) {
       setError(String(e));
       setRefineHistory((h) => [...h, { instruction, ok: false }]);
@@ -265,7 +353,8 @@ export default function Home() {
             }}
           >
             <strong style={{ color: selected.brand.primary }}>{selected.displayName}</strong>
-            {" · "}From: {selected.sender.name} &lt;{selected.sender.email}&gt;
+            {" · "}From: {selected.senders[0]?.name ?? <em style={{ color: "#B5683E" }}>no sender</em>}
+            {selected.senders[0] && ` <${selected.senders[0].email}>`}
             {" · "}List: {selected.hubspot.listId ?? <em style={{ color: "#B5683E" }}>not set</em>}
           </div>
         )}
@@ -289,16 +378,20 @@ export default function Home() {
           }}
         >
           {stage === "drafting" && <span className="eb-spinner" />}
-          {stage === "drafting" ? "Reading flyer..." : "Generate eblast draft"}
+          {stage === "drafting" ? "Drafter and critic working..." : "Generate eblast draft"}
         </button>
 
         {stage === "drafting" && (
-          <p style={{ marginTop: 12, fontSize: 12, color: "#6B6B6B", lineHeight: 1.5 }}>
-            <span className="eb-fade-pulse">
-              Claude is reading the flyer and extracting copy. Pulling images out of the PDF in parallel.
-              This usually takes 15–30 seconds.
-            </span>
-          </p>
+          <div style={{ marginTop: 14, fontSize: 12, color: "#6B6B6B", lineHeight: 1.7 }}>
+            <p style={{ margin: 0 }} className="eb-fade-pulse">
+              Drafter reading the flyer, pulling images, and writing an initial draft. Critic reviewing it.
+              If the critic flags issues, drafter applies the fixes and the critic re-reviews — up to 3 rounds.
+              No preview until they converge.
+            </p>
+            <p style={{ margin: "6px 0 0 0", fontSize: 11, opacity: 0.8 }}>
+              Typically 30–90 seconds.
+            </p>
+          </div>
         )}
 
         {error && (
@@ -312,6 +405,266 @@ export default function Home() {
       {extracted && (
         <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 380px) 1fr", gap: 24, marginBottom: 24 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Reviewer panel — second pair of eyes between draft and HubSpot */}
+            <div style={{ background: "white", border: "1px solid #E5DAC1", padding: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <p style={{ ...labelStyle, marginBottom: 0 }}>Reviewer</p>
+                <button
+                  onClick={() => runReview()}
+                  disabled={reviewing || !extracted}
+                  style={{
+                    background: "transparent",
+                    color: selected?.brand.primary ?? "#1F4538",
+                    border: `1px solid ${selected?.brand.primary ?? "#1F4538"}`,
+                    padding: "4px 10px",
+                    fontSize: 10,
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                    fontWeight: 500,
+                    cursor: reviewing ? "wait" : "pointer",
+                    opacity: reviewing || !extracted ? 0.5 : 1,
+                  }}
+                >
+                  {reviewing ? "Reviewing..." : "Re-run"}
+                </button>
+              </div>
+
+              {reviewing && !review && (
+                <p style={{ fontSize: 12, color: "#6B6B6B", margin: 0 }}>
+                  <span className="eb-fade-pulse">A second pair of eyes is reading the draft...</span>
+                </p>
+              )}
+
+              {reviewError && (
+                <div style={{ padding: "8px 10px", background: "#FBE4DC", borderLeft: "3px solid #B5683E", fontSize: 12 }}>
+                  {reviewError}
+                </div>
+              )}
+
+              {review && (
+                <>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                    <div
+                      style={{
+                        display: "inline-block",
+                        padding: "3px 10px",
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        textTransform: "uppercase",
+                        fontWeight: 700,
+                        background:
+                          review.verdict === "ready"
+                            ? "#E6F0EA"
+                            : review.verdict === "needs_revision"
+                            ? "#FCEFD8"
+                            : "#FBE4DC",
+                        color:
+                          review.verdict === "ready"
+                            ? "#1F4538"
+                            : review.verdict === "needs_revision"
+                            ? "#9C7A55"
+                            : "#B5683E",
+                      }}
+                    >
+                      {review.verdict.replace(/_/g, " ")}
+                    </div>
+                    {agentLoop && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          letterSpacing: 1,
+                          textTransform: "uppercase",
+                          color: "#6B6B6B",
+                        }}
+                        title={`Stopped: ${agentLoop.stoppedReason.replace(/_/g, " ")}`}
+                      >
+                        Agents converged · {agentLoop.totalRounds} round{agentLoop.totalRounds === 1 ? "" : "s"}
+                        {agentLoop.imagesExcluded > 0 && (
+                          <span style={{ color: "#B5683E", marginLeft: 4 }}>
+                            · {agentLoop.imagesExcluded} image{agentLoop.imagesExcluded === 1 ? "" : "s"} dropped
+                          </span>
+                        )}
+                        {agentLoop.stoppedReason !== "ready" && (
+                          <span style={{ color: "#9C7A55", marginLeft: 4 }}>
+                            ({agentLoop.stoppedReason.replace(/_/g, " ")})
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 13, lineHeight: 1.55, color: "#3A3A3A", margin: "0 0 14px 0" }}>{review.summary}</p>
+
+                  {agentLoop && agentLoop.iterations.length > 1 && (
+                    <details style={{ marginBottom: 14 }}>
+                      <summary
+                        style={{
+                          fontSize: 11,
+                          color: "#9C7A55",
+                          letterSpacing: 1,
+                          textTransform: "uppercase",
+                          cursor: "pointer",
+                        }}
+                      >
+                        How the agents got here ({agentLoop.totalRounds} rounds)
+                      </summary>
+                      <ol style={{ paddingLeft: 18, margin: "8px 0 0 0", fontSize: 12, color: "#3A3A3A", lineHeight: 1.6 }}>
+                        {agentLoop.iterations.map((it) => (
+                          <li key={it.round} style={{ marginBottom: 8 }}>
+                            <strong style={{ color: "#1F2937" }}>Round {it.round}:</strong> verdict{" "}
+                            <em>{it.verdict.replace(/_/g, " ")}</em>, {it.findingsCount} finding{it.findingsCount === 1 ? "" : "s"}.
+                            {it.droppedImageSlots.length > 0 && (
+                              <div style={{ fontSize: 11, color: "#B5683E", marginTop: 4, lineHeight: 1.6 }}>
+                                Dropped image{it.droppedImageSlots.length === 1 ? "" : "s"}: {it.droppedImageSlots.join("; ")}
+                              </div>
+                            )}
+                            {it.appliedSuggestions.length > 0 && (
+                              <ul style={{ paddingLeft: 16, margin: "4px 0 0 0", fontSize: 11, color: "#6B6B6B", lineHeight: 1.6 }}>
+                                {it.appliedSuggestions.map((s, i) => (
+                                  <li key={i}>{s}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  )}
+
+                  {review.findings.length === 0 ? (
+                    <p style={{ fontSize: 12, color: "#6B6B6B", fontStyle: "italic", margin: 0 }}>
+                      No findings. Reviewer thinks this is clean.
+                    </p>
+                  ) : (
+                    <ul style={{ paddingLeft: 0, margin: 0, listStyle: "none" }}>
+                      {review.findings.map((f, i) => (
+                        <li
+                          key={i}
+                          style={{
+                            marginBottom: 12,
+                            paddingBottom: 12,
+                            borderBottom: i === review.findings.length - 1 ? "0" : "1px solid #EFE7D5",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                            <span
+                              style={{
+                                fontSize: 9,
+                                letterSpacing: 1.2,
+                                textTransform: "uppercase",
+                                fontWeight: 700,
+                                padding: "2px 6px",
+                                background:
+                                  f.severity === "blocker"
+                                    ? "#FBE4DC"
+                                    : f.severity === "important"
+                                    ? "#FCEFD8"
+                                    : "#E5DAC1",
+                                color:
+                                  f.severity === "blocker"
+                                    ? "#B5683E"
+                                    : f.severity === "important"
+                                    ? "#9C7A55"
+                                    : "#3A3A3A",
+                              }}
+                            >
+                              {f.severity}
+                            </span>
+                            <span style={{ fontSize: 10, color: "#9C7A55", letterSpacing: 1, textTransform: "uppercase" }}>
+                              {f.category.replace(/_/g, " ")}
+                            </span>
+                            {f.field && <span style={{ fontSize: 10, color: "#6B6B6B" }}>· {f.field}</span>}
+                          </div>
+                          <p style={{ fontSize: 12, lineHeight: 1.55, margin: "0 0 4px 0", color: "#1F2937" }}>{f.issue}</p>
+                          {f.suggestion && (
+                            <button
+                              onClick={() => setRefineInput(f.suggestion!)}
+                              title="Click to load this into the refine box"
+                              style={{
+                                background: "#FBF7EE",
+                                border: "1px dashed #C8AE76",
+                                color: "#3A3A3A",
+                                padding: "6px 8px",
+                                fontSize: 11,
+                                lineHeight: 1.5,
+                                textAlign: "left",
+                                cursor: "pointer",
+                                width: "100%",
+                                margin: "4px 0",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              → {f.suggestion}
+                            </button>
+                          )}
+                          <p style={{ fontSize: 11, color: "#6B6B6B", margin: 0, fontStyle: "italic" }}>{f.rationale}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {review.subjectLineAlternatives && review.subjectLineAlternatives.length > 0 && (
+                    <details style={{ marginTop: 12 }}>
+                      <summary
+                        style={{
+                          fontSize: 11,
+                          color: "#9C7A55",
+                          letterSpacing: 1,
+                          textTransform: "uppercase",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Alternative subject lines
+                      </summary>
+                      <ul style={{ paddingLeft: 0, listStyle: "none", margin: "8px 0 0 0" }}>
+                        {review.subjectLineAlternatives.map((alt, i) => (
+                          <li key={i} style={{ marginBottom: 4 }}>
+                            <button
+                              onClick={() => setRefineInput(`Change the subject line to: "${alt}"`)}
+                              style={{
+                                background: "#FBF7EE",
+                                border: "1px dashed #C8AE76",
+                                color: "#3A3A3A",
+                                padding: "6px 8px",
+                                fontSize: 11,
+                                lineHeight: 1.5,
+                                textAlign: "left",
+                                cursor: "pointer",
+                                width: "100%",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              → {alt}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+
+                  {review.sendTimeRecommendation && (
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: "#6B6B6B",
+                        margin: "12px 0 0 0",
+                        paddingTop: 10,
+                        borderTop: "1px solid #EFE7D5",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <strong style={{ color: "#3A3A3A" }}>Send-time hint:</strong> {review.sendTimeRecommendation}
+                    </p>
+                  )}
+
+                  {review.recipientListNote && (
+                    <p style={{ fontSize: 11, color: "#B5683E", margin: "8px 0 0 0", lineHeight: 1.5 }}>
+                      <strong>List:</strong> {review.recipientListNote}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+
             {/* Refinement chat */}
             <div style={{ background: "white", border: "1px solid #E5DAC1", padding: 18 }}>
               <p style={{ ...labelStyle, marginBottom: 8 }}>Refine with a prompt</p>

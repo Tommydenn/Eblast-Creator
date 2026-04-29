@@ -4,13 +4,14 @@ import { readdir } from "node:fs/promises";
 import path from "node:path";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * Returns the registered communities plus, for each, the list of HTML
  * templates available under data/communities/{slug}/templates/.
  */
 export async function GET() {
-  const communities = listCommunities();
+  const communities = await listCommunities();
   const enriched = await Promise.all(
     communities.map(async (c) => {
       let templates: string[] = [];

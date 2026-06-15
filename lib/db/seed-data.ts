@@ -70,7 +70,7 @@ const SEVEN_HILLS_BRAND = {
 const THE_GLENN_BRAND = {
   primary: "#4F8736",   // forest green
   accent: "#4C7F94",    // slate blue
-  background: "#FBF7EE",
+  background: "#B1B3B6", // warm gray
   fontHeadline: "BigCity Grotesque Pro",
   fontBody: "Minion",
   paletteSource: "brand-guide-extracted" as const,
@@ -78,8 +78,8 @@ const THE_GLENN_BRAND = {
 };
 
 const HAYDEN_GROVE_BRAND = {
-  primary: "#3D4D55",   // Navy (Pantone 5463 U)
-  accent: "#B08642",    // Pumpkin (warm gold accent)
+  primary: "#457574",   // Jade (Pantone 7720 U)
+  accent: "#C9DED3",    // Gold (Pantone 5807 U)
   background: "#DBD6D1", // Stone (warm light gray)
   fontHeadline: "Georgia, 'Times New Roman', serif", // typography page not in brand guide
   fontBody: "'Helvetica Neue', Arial, sans-serif",
@@ -107,15 +107,16 @@ const PILLARS_BRAND = {
   fontsSource: "brand-guide-extracted" as const,
 };
 
-// Global Pointe brand guide lists only PMS codes (no hex). Colors left at
-// default until confirmed hex values are available. Fonts confirmed.
+// Colors sampled directly from the Global Pointe Logo.png master file.
+// PMS 445 U slate gray (wordmark + circle) → #626C6E
+// PMS 7416 U coral (AL dots) → #F1716A
 const GLOBAL_POINTE_BRAND = {
-  primary: "#1F4538",
-  accent: "#B5683E",
+  primary: "#626C6E",   // slate gray — wordmark + circle outline
+  accent: "#F1716A",    // coral — the warmest/most distinctive brand color
   background: "#FBF7EE",
   fontHeadline: "Adobe Caslon Pro",
   fontBody: "Montserrat",
-  paletteSource: "default" as const,
+  paletteSource: "brand-guide-extracted" as const,
   fontsSource: "brand-guide-extracted" as const,
 };
 

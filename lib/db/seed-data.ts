@@ -108,9 +108,9 @@ const PILLARS_BRAND = {
 };
 
 const GLOBAL_POINTE_BRAND = {
-  primary: "#585552",   // PMS 445 U — dark charcoal (ALL COMMUNITY anchor color)
+  primary: "#6B999B",   // PMS 5497 U — muted teal (IL property color)
   accent: "#E8604C",    // PMS 7416 U — coral/salmon (AL property color)
-  background: "#FBF7EE",
+  background: "#C1C6C8", // PMS 428 U — light cool gray (accent/surface)
   fontHeadline: "Adobe Caslon Pro",
   fontBody: "Montserrat",
   paletteSource: "brand-guide-extracted" as const,

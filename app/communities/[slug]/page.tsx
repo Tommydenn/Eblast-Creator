@@ -95,7 +95,6 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
         >
           ← All communities
         </Link>
-        <p className="text-xs font-mono text-red-500">DB values: primary={c.brand.primary} accent={c.brand.accent} bg={c.brand.background}</p>
 
         {/* Hero */}
         <header className="mt-3 mb-8">

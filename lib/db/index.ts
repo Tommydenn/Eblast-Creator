@@ -18,7 +18,7 @@ function getDb(): DrizzleClient {
       "DATABASE_URL is not set. Provision Vercel Postgres and add to .env.local.",
     );
   }
-  _db = drizzle(neon(process.env.DATABASE_URL), { schema });
+  _db = drizzle(neon(process.env.DATABASE_URL, { fetchOptions: { cache: "no-store" } }), { schema });
   return _db;
 }
 

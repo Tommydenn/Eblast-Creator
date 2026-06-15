@@ -107,12 +107,9 @@ const PILLARS_BRAND = {
   fontsSource: "brand-guide-extracted" as const,
 };
 
-// Colors sampled directly from the Global Pointe Logo.png master file.
-// PMS 445 U slate gray (wordmark + circle) → #626C6E
-// PMS 7416 U coral (AL dots) → #F1716A
 const GLOBAL_POINTE_BRAND = {
-  primary: "#626C6E",   // slate gray — wordmark + circle outline
-  accent: "#F1716A",    // coral — the warmest/most distinctive brand color
+  primary: "#585552",   // PMS 445 U — dark charcoal (ALL COMMUNITY anchor color)
+  accent: "#E8604C",    // PMS 7416 U — coral/salmon (AL property color)
   background: "#FBF7EE",
   fontHeadline: "Adobe Caslon Pro",
   fontBody: "Montserrat",

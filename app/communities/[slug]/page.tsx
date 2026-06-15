@@ -82,7 +82,8 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
   ]);
 
   const c = community;
-  const hasBrand = c.brandGuideExtracted !== null && c.brandGuideExtracted !== undefined;
+  const hasBrand =
+    (c.brandGuideExtracted != null) || c.brand.paletteSource === "brand-guide-extracted";
 
   return (
     <>

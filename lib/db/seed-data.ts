@@ -24,8 +24,7 @@ export interface SeedCommunity {
   senders: SeedSender[];
 }
 
-// Default brand placeholder — every community should override this with their
-// actual palette (filled in via the control center or brand-guide extraction).
+// Default brand placeholder — used for communities with no confirmed brand guide data.
 const DEFAULT_BRAND = {
   primary: "#1F4538",
   accent: "#B5683E",
@@ -36,16 +35,88 @@ const DEFAULT_BRAND = {
   fontsSource: "default" as const,
 };
 
-// Brand-family-level overrides — slightly more accurate placeholders than
-// the global default. Tommy will replace these with brand-guide values.
+// ── Extracted from brand guides June 2025 ────────────────────────────────────
+
 const CARETTA_BRAND = {
+  primary: "#064C3F",   // PMS 3435C — dark forest green
+  accent: "#995B25",    // copper brown
+  background: "#FBF7EE",
+  fontHeadline: "Bookman Old Style",
+  fontBody: "Josefin Sans",
+  paletteSource: "brand-guide-extracted" as const,
+  fontsSource: "brand-guide-extracted" as const,
+};
+
+const TALAMORE_BRAND = {
+  primary: "#004D71",   // deep blue
+  accent: "#CCAC77",    // warm gold
+  background: "#FBF7EE",
+  fontHeadline: "Nexa",
+  fontBody: "Nexa",
+  paletteSource: "brand-guide-extracted" as const,
+  fontsSource: "brand-guide-extracted" as const,
+};
+
+const SEVEN_HILLS_BRAND = {
+  primary: "#588074",   // Summit Green
+  accent: "#322110",    // Brownstone (dark warm brown)
+  background: "#F1ECE6", // Sandstone
+  fontHeadline: "Garamond BE",
+  fontBody: "Garamond BE",
+  paletteSource: "brand-guide-extracted" as const,
+  fontsSource: "brand-guide-extracted" as const,
+};
+
+const THE_GLENN_BRAND = {
+  primary: "#4F8736",   // forest green
+  accent: "#4C7F94",    // slate blue
+  background: "#FBF7EE",
+  fontHeadline: "BigCity Grotesque Pro",
+  fontBody: "Minion",
+  paletteSource: "brand-guide-extracted" as const,
+  fontsSource: "brand-guide-extracted" as const,
+};
+
+const HAYDEN_GROVE_BRAND = {
+  primary: "#3D4D55",   // Navy (Pantone 5463 U)
+  accent: "#B08642",    // Pumpkin (warm gold accent)
+  background: "#DBD6D1", // Stone (warm light gray)
+  fontHeadline: "Georgia, 'Times New Roman', serif", // typography page not in brand guide
+  fontBody: "'Helvetica Neue', Arial, sans-serif",
+  paletteSource: "brand-guide-extracted" as const,
+  fontsSource: "default" as const,
+};
+
+const AMIRA_CHOICE_BRAND = {
+  primary: "#303B56",   // Amira Navy (PMS 2378)
+  accent: "#524B43",    // Amira Taupe (PMS 4231CP)
+  background: "#DDDDDB", // Amira Gray (Cool Gray 1)
+  fontHeadline: "P22 Mackinac",
+  fontBody: "F37 Moon",
+  paletteSource: "brand-guide-extracted" as const,
+  fontsSource: "brand-guide-extracted" as const,
+};
+
+const PILLARS_BRAND = {
+  primary: "#59611D",   // Fern Frond (dark olive green)
+  accent: "#AF7C58",    // Limed Oak (toffee copper)
+  background: "#FBF7EE",
+  fontHeadline: "Bebas Neue",
+  fontBody: "Neutra Text",
+  paletteSource: "brand-guide-extracted" as const,
+  fontsSource: "brand-guide-extracted" as const,
+};
+
+// Global Pointe brand guide lists only PMS codes (no hex). Colors left at
+// default until confirmed hex values are available. Fonts confirmed.
+const GLOBAL_POINTE_BRAND = {
   primary: "#1F4538",
   accent: "#B5683E",
   background: "#FBF7EE",
-  fontHeadline: "Georgia, 'Times New Roman', serif",
-  fontBody: "'Helvetica Neue', Arial, sans-serif",
-  paletteSource: "manual" as const,
-  fontsSource: "default" as const,
+  fontHeadline: "Adobe Caslon Pro",
+  fontBody: "Montserrat",
+  paletteSource: "default" as const,
+  fontsSource: "brand-guide-extracted" as const,
 };
 
 export const seedCommunities: SeedCommunity[] = [
@@ -167,7 +238,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "St Cloud", state: "MN" },
       websiteUrl: "https://www.talamoreseniorliving.com",
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: TALAMORE_BRAND,
       socials: {},
     },
     senders: [
@@ -185,7 +256,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Sun Prairie", state: "WI" },
       websiteUrl: "https://www.talamoresunprairie.com",
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: TALAMORE_BRAND,
       socials: {},
     },
     senders: [{ name: "Shannon Francis", email: "sfrancis@talamoresunprairie.com", isPrimary: true }],
@@ -200,7 +271,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Woodbury", state: "MN" },
       websiteUrl: "https://www.talamoreseniorliving.com",
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: TALAMORE_BRAND,
       socials: {},
     },
     senders: [
@@ -222,7 +293,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Bloomington", state: "MN" },
       websiteUrl: "https://www.haydengroveseniorliving.com",
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: HAYDEN_GROVE_BRAND,
       socials: {},
     },
     senders: [
@@ -240,7 +311,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "St Anthony", state: "MN" },
       websiteUrl: "https://www.haydengroveseniorliving.com",
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: HAYDEN_GROVE_BRAND,
       socials: {},
     },
     senders: [
@@ -262,7 +333,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Buffalo", state: "MN" },
       websiteUrl: null,
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: THE_GLENN_BRAND,
       socials: {},
     },
     senders: [], // TODO: confirm sender per The Glenn Buffalo AL
@@ -278,7 +349,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Buffalo", state: "MN" },
       websiteUrl: null,
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: THE_GLENN_BRAND,
       socials: {},
     },
     senders: [],
@@ -293,7 +364,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Hopkins", state: "MN" },
       websiteUrl: null,
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: THE_GLENN_BRAND,
       socials: {},
     },
     senders: [],
@@ -308,7 +379,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Minnetonka", state: "MN" },
       websiteUrl: null,
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: THE_GLENN_BRAND,
       socials: {},
     },
     senders: [], // YTD shows "The Glenn Minnetonka" subjects via @greatlakesmc.com — confirm sender
@@ -323,7 +394,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "West St Paul", state: "MN" },
       websiteUrl: null,
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: THE_GLENN_BRAND,
       socials: {},
     },
     senders: [],
@@ -372,7 +443,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Arvada", state: "CO" },
       websiteUrl: null,
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: AMIRA_CHOICE_BRAND,
       socials: {},
     },
     senders: [],
@@ -387,7 +458,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Bloomington", state: "MN" },
       websiteUrl: null,
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: AMIRA_CHOICE_BRAND,
       socials: {},
     },
     // YTD shows a sender alias literally named "Amira Choice Bloomington" via
@@ -406,7 +477,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: {},
       websiteUrl: "https://www.globalpointeseniorliving.com",
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: GLOBAL_POINTE_BRAND,
       socials: {},
     },
     senders: [{ name: "Lisa Zehner", email: "lzehner@globalpointeseniorliving.com", isPrimary: true }],
@@ -421,7 +492,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: {},
       websiteUrl: "https://www.sevenhillsseniorliving.com",
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: SEVEN_HILLS_BRAND,
       socials: {},
     },
     senders: [{ name: "Angela Elwell", email: "aelwell@sevenhillsseniorliving.com", isPrimary: true }],
@@ -451,7 +522,7 @@ export const seedCommunities: SeedCommunity[] = [
       address: { city: "Grand Rapids", state: "MN" },
       websiteUrl: null,
       hubspot: {},
-      brand: DEFAULT_BRAND,
+      brand: PILLARS_BRAND,
       socials: {},
     },
     senders: [],

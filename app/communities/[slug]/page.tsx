@@ -82,6 +82,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
   ]);
 
   const c = community;
+  console.log(`[brand-debug] ${c.slug} primary=${c.brand.primary} accent=${c.brand.accent} bg=${c.brand.background}`);
   const hasBrand =
     (c.brandGuideExtracted != null) || c.brand.paletteSource === "brand-guide-extracted";
 

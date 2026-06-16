@@ -209,11 +209,11 @@ export function buildEblastHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(flyer.subject)}</title>
 </head>
-<body style="margin:0; padding:0; background:#EDE5D2; font-family: ${brand.fontHeadline};">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#EDE5D2; padding: 32px 0;">
+<body style="margin:0; padding:0; background:#f5f5f5; font-family: ${brand.fontHeadline};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f5f5; padding: 32px 0;">
   <tr><td align="center">
     <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">${escapeHtml(flyer.previewText)}</div>
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px; max-width:100%; margin:0 auto; background:${brand.background};">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px; max-width:100%; margin:0 auto; background:#ffffff;">
       ${header}
       ${hero}
       ${story}

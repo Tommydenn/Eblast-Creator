@@ -167,6 +167,9 @@ export default function Home() {
   const [pushResult, setPushResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [duplicateWarning, setDuplicateWarning] = useState<{ name: string; generatedAt: string; community: string } | null>(null);
+  const [pendingHash, setPendingHash] = useState<string | null>(null);
+
   /** Past sends the agents saw — echoed back from /api/draft-from-pdf so we can show them in the post-draft sidebar. */
   const [pastSendsContext, setPastSendsContext] = useState<PastSendForContext[]>([]);
   /** Subject specialist's full output (winner + alternatives + reasoning). */
@@ -182,6 +185,42 @@ export default function Home() {
   }, []);
 
   const selected = communities.find((c) => c.slug === selectedSlug);
+
+  async function hashFile(file: File): Promise<string> {
+    const buf = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  const PDF_HISTORY_KEY = "eblast-pdf-history";
+  type PdfRecord = { hash: string; name: string; generatedAt: string; community: string };
+
+  function getPdfHistory(): PdfRecord[] {
+    try { return JSON.parse(localStorage.getItem(PDF_HISTORY_KEY) ?? "[]"); } catch { return []; }
+  }
+
+  function savePdfRecord(hash: string, name: string, community: string) {
+    const history = getPdfHistory().filter((r) => r.hash !== hash);
+    history.unshift({ hash, name, generatedAt: new Date().toISOString(), community });
+    localStorage.setItem(PDF_HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
+  }
+
+  async function handleFileChange(file: File | null) {
+    setPdf(file);
+    setDuplicateWarning(null);
+    setPendingHash(null);
+    if (!file) return;
+    const hash = await hashFile(file);
+    setPendingHash(hash);
+    const match = getPdfHistory().find((r) => r.hash === hash || r.name === file.name);
+    if (match) {
+      setDuplicateWarning({
+        name: match.name,
+        generatedAt: match.generatedAt,
+        community: match.community,
+      });
+    }
+  }
 
   async function generateDraft() {
     if (!pdf || !selectedSlug) return;
@@ -220,6 +259,8 @@ export default function Home() {
       setPastSendsContext(data.pastSendsContext ?? []);
       setSubjectSpecialist(data.subjectSpecialist ?? null);
       setStage("preview");
+      if (pendingHash) savePdfRecord(pendingHash, pdf!.name, selectedSlug);
+      setDuplicateWarning(null);
     } catch (e: any) {
       setError(String(e));
       setStage("idle");
@@ -382,14 +423,31 @@ export default function Home() {
                   id="pdf"
                   type="file"
                   accept="application/pdf"
-                  onChange={(e) => setPdf(e.target.files?.[0] ?? null)}
+                  onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
                   className="h-auto py-2 file:mr-3 file:rounded file:border-0 file:bg-sand-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-sand-700 hover:file:bg-sand-200"
                 />
               </div>
 
+              {duplicateWarning && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                  <p className="font-medium">This looks like a file you&apos;ve already uploaded.</p>
+                  <p className="mt-0.5 text-amber-700">
+                    <span className="font-medium">{duplicateWarning.name}</span> was last generated on{" "}
+                    {new Date(duplicateWarning.generatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    {duplicateWarning.community !== selectedSlug ? ` (for a different community)` : ""}.
+                  </p>
+                  <button
+                    className="mt-1.5 text-amber-600 underline underline-offset-2 hover:text-amber-800"
+                    onClick={() => setDuplicateWarning(null)}
+                  >
+                    Generate anyway
+                  </button>
+                </div>
+              )}
+
               <Button
                 onClick={generateDraft}
-                disabled={!pdf || !selectedSlug || stage === "drafting"}
+                disabled={!pdf || !selectedSlug || stage === "drafting" || !!duplicateWarning}
                 loading={stage === "drafting"}
                 size="lg"
                 className="w-full"

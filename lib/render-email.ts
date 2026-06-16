@@ -36,8 +36,7 @@ export function buildEblastHtml(
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
   // Determine if brand.background is light or dark so we can pick the logo
-  // variant that is designed for that background. The header is ALWAYS
-  // brand.background — we never flip it to accommodate the logo.
+  // variant designed for that background. The header is ALWAYS brand.background.
   const bgLum = (() => {
     const h = brand.background.replace("#", "");
     const r = parseInt(h.slice(0, 2), 16) / 255;
@@ -59,7 +58,7 @@ export function buildEblastHtml(
   const headerStripe = brand.accent;
   const isDarkHeader = !bgIsLight;
 
-  // Text fallback: brand name centered, location below it.
+  // Text fallback when no logo asset is available.
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();
   const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "rgba(255,255,255,0.7)" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
@@ -72,29 +71,26 @@ export function buildEblastHtml(
   const ctaHref = ctaPhone
     ? `tel:+1${ctaPhone.replace(/\D/g, "")}`
     : flyer.ctaButtonHref;
+  // Format as (XXX) XXX-XXXX for display in the button text.
+  const formattedPhone = ctaPhone
+    ? ctaPhone.replace(/\D/g, "").replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
+    : null;
+  const ctaDisplayText = formattedPhone ? `Call ${formattedPhone} to RSVP!` : flyer.ctaButtonLabel;
 
-  const cityState = [community.address.city, community.address.state].filter(Boolean).join(", ");
-  const dividerColor = isDarkHeader ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.10)";
-  const cityTextColor = isDarkHeader ? "rgba(255,255,255,0.60)" : brand.accent;
+  // Component fragments — kept as inline HTML because email clients reward
+  // redundancy and table-based layouts. CSS variables/classes don't survive Outlook.
+  // data-section and data-field attributes are used by the preview's interactive
+  // script for hover labels and inline text editing; email clients ignore them.
 
-  // Component fragments — kept as inline HTML because email clients reward redundancy
-  // and table-based layouts. CSS variables/classes don't survive Outlook.
   const header = `
-  <tr>
-    <td style="padding: 28px 36px ${cityState ? "22px" : "24px"}; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
-      ${logoContent}${cityState ? `
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 14px auto 0 auto;">
-        <tr>
-          <td style="padding: 10px 24px 0 24px; border-top: 1px solid ${dividerColor}; text-align:center; white-space:nowrap;">
-            <span style="font-family: ${brand.fontBody}; font-size: 10px; letter-spacing: 3.5px; color: ${cityTextColor}; text-transform: uppercase;">${escapeHtml(cityState)}</span>
-          </td>
-        </tr>
-      </table>` : ""}
+  <tr data-section="Header">
+    <td style="padding: 28px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
+      ${logoContent}
     </td>
   </tr>`;
 
   const hero = `
-  <tr>
+  <tr data-section="Hero">
     <td>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
         ${heroImg ? `
@@ -105,9 +101,9 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
-            <p style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 12px 0;">${escapeHtml(flyer.eyebrow)}</p>
-            <p style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
-            ${flyer.scriptSubheadline ? `<p style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 44px; color: #F0E2C0; line-height: 1; margin: 0 0 18px 0;">${escapeHtml(flyer.scriptSubheadline)}</p>` : ""}
+            <p data-field="eyebrow" style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 12px 0;">${escapeHtml(flyer.eyebrow)}</p>
+            <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
+            ${flyer.scriptSubheadline ? `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 44px; color: #F0E2C0; line-height: 1; margin: 0 0 18px 0;">${escapeHtml(flyer.scriptSubheadline)}</p>` : ""}
             ${eventDateLine ? `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 6px auto 22px auto;">
               <tr>
@@ -117,8 +113,8 @@ export function buildEblastHtml(
                 </td>
               </tr>
             </table>` : ""}
-            <p style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 16px; line-height: 1.55; color: #E8DDC4; max-width: 460px; margin: 0 auto 24px auto;">${escapeHtml(flyer.heroHook)}</p>
-            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.accent}; color:#FFFFFF !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(flyer.ctaButtonLabel)}</a>
+            <p data-field="heroHook" style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 16px; line-height: 1.55; color: #E8DDC4; max-width: 460px; margin: 0 auto 24px auto;">${escapeHtml(flyer.heroHook)}</p>
+            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.accent}; color:#FFFFFF !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
           </td>
         </tr>
       </table>
@@ -126,24 +122,24 @@ export function buildEblastHtml(
   </tr>`;
 
   const story = `
-  <tr>
+  <tr data-section="Story">
     <td style="padding: 44px 36px 12px 36px;">
-      <p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow)}</p>
-      ${flyer.storyScriptTitle ? `<p style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${escapeHtml(flyer.storyScriptTitle)}</p>` : ""}
+      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow)}</p>
+      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${escapeHtml(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
   ${flyer.bodyParagraphs
     .map(
       (p, i) => `
-  <tr>
+  <tr data-section="Story">
     <td style="padding: 0 36px ${i === flyer.bodyParagraphs.length - 1 ? "28px" : "16px"} 36px;">
-      <p style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${escapeHtml(p)}</p>
+      <p data-field="bodyParagraphs.${i}" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${escapeHtml(p)}</p>
     </td>
   </tr>`,
     )
     .join("")}
   ${secondaryImg ? `
-  <tr>
+  <tr data-section="Secondary Image">
     <td style="padding: 0 36px 28px 36px;">
       <img src="${secondaryImg}" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:100%; max-width:528px; height:auto; border:0;">
     </td>
@@ -152,14 +148,14 @@ export function buildEblastHtml(
 
   const pullQuote = flyer.pullQuote
     ? `
-  <tr>
+  <tr data-section="Pull Quote">
     <td>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${brand.primary};">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${flyer.pullQuoteEyebrow ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #C8B98A; margin: 0 0 14px 0;">${escapeHtml(flyer.pullQuoteEyebrow)}</p>` : ""}
-            <p style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 26px; line-height: 1.4; color: ${brand.background}; margin: 0 auto; max-width: 460px;">${escapeHtml(flyer.pullQuote)}</p>
-            ${flyer.pullQuoteAttribution ? `<p style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #C8B98A; margin: 20px 0 0 0;">${escapeHtml(flyer.pullQuoteAttribution)}</p>` : ""}
+            ${flyer.pullQuoteEyebrow ? `<p data-field="pullQuoteEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #C8B98A; margin: 0 0 14px 0;">${escapeHtml(flyer.pullQuoteEyebrow)}</p>` : ""}
+            <p data-field="pullQuote" style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 26px; line-height: 1.4; color: ${brand.background}; margin: 0 auto; max-width: 460px;">${escapeHtml(flyer.pullQuote)}</p>
+            ${flyer.pullQuoteAttribution ? `<p data-field="pullQuoteAttribution" style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #C8B98A; margin: 20px 0 0 0;">${escapeHtml(flyer.pullQuoteAttribution)}</p>` : ""}
           </td>
         </tr>
       </table>
@@ -186,12 +182,12 @@ export function buildEblastHtml(
     }
 
     return `
-  <tr>
+  <tr data-section="Photo Gallery">
     <td style="padding: 44px 36px 12px 36px;" align="center">
       <p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">A Look Around ${escapeHtml(community.shortName)}</p>
     </td>
   </tr>
-  <tr>
+  <tr data-section="Photo Gallery">
     <td style="padding: 16px 36px 32px 36px;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: separate; border-spacing: 6px;">
         ${rows
@@ -215,15 +211,15 @@ export function buildEblastHtml(
   })();
 
   const finalCta = `
-  <tr>
+  <tr data-section="Call to Action">
     <td>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${brand.accent};">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            <p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 12px 0;">${escapeHtml(flyer.ctaEyebrow)}</p>
-            <p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 6px 0;">${escapeHtml(flyer.ctaHeadline)}</p>
-            <p style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 3px; color: #FBE2CD; text-transform: uppercase; margin: 0 0 26px 0;">${escapeHtml(flyer.ctaSubline)}</p>
-            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.background}; color:${brand.accent} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(flyer.ctaButtonLabel)}</a>
+            <p data-field="ctaEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 12px 0;">${escapeHtml(flyer.ctaEyebrow)}</p>
+            <p data-field="ctaHeadline" style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 6px 0;">${escapeHtml(flyer.ctaHeadline)}</p>
+            <p data-field="ctaSubline" style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 3px; color: #FBE2CD; text-transform: uppercase; margin: 0 0 26px 0;">${escapeHtml(flyer.ctaSubline)}</p>
+            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.background}; color:${brand.accent} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
           </td>
         </tr>
       </table>
@@ -231,7 +227,7 @@ export function buildEblastHtml(
   </tr>`;
 
   const footer = `
-  <tr>
+  <tr data-section="Footer">
     <td style="padding: 36px 36px 28px 36px;" align="center">
       <p style="font-family: ${brand.fontHeadline}; font-size: 18px; color: ${brand.primary}; letter-spacing: 1px; margin: 0 0 4px 0;">${escapeHtml(community.displayName)}</p>
       <p style="font-family: ${brand.fontBody}; font-size: 13px; color: #6B6B6B; line-height: 1.7; margin: 0;">

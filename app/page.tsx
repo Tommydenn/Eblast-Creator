@@ -16,6 +16,48 @@ import {
   type SavedDraft,
 } from "@/context/DraftContext";
 
+// ─── Interactive preview script ───────────────────────────────────────────────
+// Injected into the iframe after load. Adds floating section labels on hover
+// and makes data-field elements editable on click, posting changes back via
+// window.parent.postMessage({ type: 'eblast-field-edit', field, value }).
+
+const EBLAST_EDIT_SCRIPT = `(function(){
+  var lb=document.createElement('div');
+  lb.style.cssText='position:fixed;top:8px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,0.85);color:#fff;font:700 10px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border-radius:4px;pointer-events:none;opacity:0;transition:opacity 0.15s;z-index:9999;white-space:nowrap;';
+  document.body.appendChild(lb);
+  document.querySelectorAll('[data-section]').forEach(function(el){
+    el.addEventListener('mouseenter',function(){ lb.textContent=el.getAttribute('data-section'); lb.style.opacity='1'; });
+    el.addEventListener('mouseleave',function(){ lb.style.opacity='0'; });
+  });
+  function finish(el){
+    if(el.contentEditable!=='true') return;
+    el.contentEditable='false'; el.style.outline=''; el.style.cursor='pointer';
+    window.parent.postMessage({type:'eblast-field-edit',field:el.getAttribute('data-field'),value:el.innerText.trim()},'*');
+  }
+  function stopAll(except){
+    document.querySelectorAll('[data-field][contenteditable="true"]').forEach(function(o){ if(o!==except) finish(o); });
+  }
+  document.querySelectorAll('[data-field]').forEach(function(el){
+    el.style.cursor='pointer';
+    el.addEventListener('mouseenter',function(){ if(el.contentEditable!=='true'){ el.style.outline='1px dashed rgba(59,130,246,0.45)'; el.style.outlineOffset='3px'; } });
+    el.addEventListener('mouseleave',function(){ if(el.contentEditable!=='true') el.style.outline=''; });
+    el.addEventListener('click',function(e){
+      e.stopPropagation();
+      if(el.contentEditable==='true') return;
+      stopAll(el);
+      el.contentEditable='true'; el.style.outline='2px solid #3b82f6'; el.style.outlineOffset='2px'; el.style.cursor='text';
+      el.focus();
+      var r=document.createRange(); r.selectNodeContents(el); r.collapse(false); var s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    });
+    el.addEventListener('blur',function(){ finish(el); });
+    el.addEventListener('keydown',function(e){
+      if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); el.blur(); }
+      if(e.key==='Escape'){ el.contentEditable='false'; el.style.outline=''; el.blur(); }
+    });
+  });
+  document.addEventListener('click',function(){ stopAll(null); });
+})();`;
+
 // ─── Display maps ─────────────────────────────────────────────────────────────
 
 const verdictBadge: Record<ReviewVerdict, { label: string; variant: "success" | "warning" | "danger" }> = {
@@ -96,6 +138,7 @@ export default function Home() {
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
     savedDrafts, currentDraftSaved,
+    htmlDirty, syncHtml,
     handleFileChange,
     generateDraft, cancelGeneration,
     refineDraft,
@@ -315,10 +358,15 @@ export default function Home() {
                         <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.12em] text-sand-500">
                           History
                         </summary>
-                        <ol className="mt-2 list-decimal pl-5 text-xs leading-relaxed text-sand-600">
+                        <ol className="mt-2 list-decimal pl-5 text-xs leading-relaxed text-sand-600 space-y-1">
                           {refineHistory.map((r, i) => (
                             <li key={i} className={r.ok ? "" : "text-clay-700"}>
-                              {r.instruction}
+                              <span>{r.instruction}</span>
+                              {r.ok && r.changedFields && r.changedFields.length > 0 && (
+                                <span className="ml-1.5 text-[10px] font-medium text-sand-400">
+                                  → {r.changedFields.join(", ")}
+                                </span>
+                              )}
                             </li>
                           ))}
                         </ol>
@@ -543,17 +591,41 @@ export default function Home() {
                       )}
                     </CardDescription>
                   </div>
-                  {stage === "refining" && (
-                    <p className="eb-pulse-row text-sand-500">
-                      <span className="eb-pulse-dot" />
-                      <span className="eb-pulse-dot" />
-                      <span className="eb-pulse-dot" />
-                    </p>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {htmlDirty && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={syncHtml}
+                        className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      >
+                        Sync preview
+                      </Button>
+                    )}
+                    {stage === "refining" && (
+                      <p className="eb-pulse-row text-sand-500">
+                        <span className="eb-pulse-dot" />
+                        <span className="eb-pulse-dot" />
+                        <span className="eb-pulse-dot" />
+                      </p>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="p-3">
+                  <p className={`mb-2 text-center text-[11px] ${htmlDirty ? "text-amber-600" : "text-sand-400"}`}>
+                    {htmlDirty
+                      ? "Unsaved inline edits — click \"Sync preview\" to re-render with your changes."
+                      : "Hover to identify sections · Click any text to edit it inline"}
+                  </p>
                   <iframe
                     srcDoc={html}
+                    onLoad={(e) => {
+                      const doc = (e.currentTarget as HTMLIFrameElement).contentDocument;
+                      if (!doc?.body) return;
+                      const s = doc.createElement("script");
+                      s.textContent = EBLAST_EDIT_SCRIPT;
+                      doc.body.appendChild(s);
+                    }}
                     className="block h-[820px] w-full rounded-sm border-0 bg-white transition-opacity duration-200"
                     style={{ opacity: stage === "refining" ? 0.55 : 1 }}
                     title="Email preview"

@@ -5,6 +5,34 @@ import { buildEblastHtml } from "@/lib/render-email";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 
+function getChangedFields(before: ExtractedFlyer, after: ExtractedFlyer): string[] {
+  const changes: string[] = [];
+  const fieldLabels: Array<[keyof ExtractedFlyer, string]> = [
+    ["subject", "Subject"],
+    ["previewText", "Preview text"],
+    ["eyebrow", "Eyebrow"],
+    ["headline", "Headline"],
+    ["scriptSubheadline", "Script subheadline"],
+    ["heroHook", "Hero hook"],
+    ["storyEyebrow", "Story eyebrow"],
+    ["storyScriptTitle", "Story title"],
+    ["pullQuoteEyebrow", "Quote eyebrow"],
+    ["pullQuote", "Pull quote"],
+    ["pullQuoteAttribution", "Attribution"],
+    ["ctaEyebrow", "CTA eyebrow"],
+    ["ctaHeadline", "CTA headline"],
+    ["ctaSubline", "CTA subline"],
+    ["ctaButtonLabel", "CTA button"],
+  ];
+  for (const [field, label] of fieldLabels) {
+    if (before[field] !== after[field]) changes.push(label);
+  }
+  const bp1 = before.bodyParagraphs ?? [];
+  const bp2 = after.bodyParagraphs ?? [];
+  if (bp1.length !== bp2.length || bp1.some((p, i) => p !== bp2[i])) changes.push("Body text");
+  return changes;
+}
+
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
@@ -50,7 +78,8 @@ export async function POST(req: NextRequest) {
       secondaryImageUrl: body.secondaryImageUrl,
       galleryImageUrls: body.galleryImageUrls,
     });
-    return NextResponse.json({ ok: true, extracted: updated, html });
+    const changedFields = getChangedFields(body.current, updated);
+    return NextResponse.json({ ok: true, extracted: updated, html, changedFields });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message ?? String(e) }, { status: 500 });
   }

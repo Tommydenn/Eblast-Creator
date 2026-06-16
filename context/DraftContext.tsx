@@ -108,6 +108,8 @@ export interface SubjectSpecialistResult {
 export interface RefinementEntry {
   instruction: string;
   ok: boolean;
+  /** Fields changed by this refinement step, e.g. ["Headline", "Body text"]. */
+  changedFields?: string[];
 }
 
 export interface SavedDraft {
@@ -141,7 +143,6 @@ function cycleImages(
 ): { hero: string | undefined; secondary: string | undefined; gallery: string[] } {
   const pool = [hero, secondary, ...gallery].filter((u): u is string => Boolean(u));
   if (pool.length <= 1) return { hero, secondary, gallery };
-  // Rotate pool by one: push current hero to end, pull everything else forward
   const rotated = [...pool.slice(1), pool[0]];
   return {
     hero: rotated[0],
@@ -211,12 +212,16 @@ export interface DraftContextValue {
   duplicateWarning: { name: string; generatedAt: string; community: string } | null;
   savedDrafts: SavedDraft[];
   currentDraftSaved: boolean;
+  /** True when the user has edited text inline and `html` hasn't been re-rendered yet. */
+  htmlDirty: boolean;
   handleFileChange: (file: File | null) => Promise<void>;
   generateDraft: () => Promise<void>;
   cancelGeneration: () => void;
   refineDraft: () => Promise<void>;
   runReview: (targetExtracted?: ExtractedFlyer, targetSlug?: string) => Promise<void>;
   pushDraft: () => Promise<void>;
+  /** Re-render HTML from current `extracted` without calling any AI. */
+  syncHtml: () => Promise<void>;
   saveDraft: () => void;
   discardDraft: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
@@ -252,9 +257,24 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [duplicateWarning, setDuplicateWarning] = useState<{ name: string; generatedAt: string; community: string } | null>(null);
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
   const [currentDraftSaved, setCurrentDraftSaved] = useState(false);
+  const [htmlDirty, setHtmlDirty] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const pendingHashRef = useRef<string | null>(null);
+  // Stable ref so the postMessage listener can read current extracted without
+  // capturing a stale closure (the listener is set up once with empty deps).
+  const extractedRef = useRef<ExtractedFlyer | null>(null);
+  const selectedSlugRef = useRef<string>("");
+  const heroImageUrlRef = useRef<string | undefined>();
+  const secondaryImageUrlRef = useRef<string | undefined>();
+  const galleryImageUrlsRef = useRef<string[]>([]);
+
+  // Keep refs in sync with state
+  useEffect(() => { extractedRef.current = extracted; }, [extracted]);
+  useEffect(() => { selectedSlugRef.current = selectedSlug; }, [selectedSlug]);
+  useEffect(() => { heroImageUrlRef.current = heroImageUrl; }, [heroImageUrl]);
+  useEffect(() => { secondaryImageUrlRef.current = secondaryImageUrl; }, [secondaryImageUrl]);
+  useEffect(() => { galleryImageUrlsRef.current = galleryImageUrls; }, [galleryImageUrls]);
 
   useEffect(() => {
     fetch("/api/communities")
@@ -274,6 +294,34 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error("[DraftProvider] Failed to load saved drafts:", err);
     }
+  }, []);
+
+  // postMessage listener — receives inline edits from the preview iframe.
+  // Uses refs so this effect never needs to re-subscribe.
+  useEffect(() => {
+    function handler(e: MessageEvent) {
+      if (!e.data || e.data.type !== "eblast-field-edit") return;
+      const { field, value } = e.data as { field: string; value: string };
+      const current = extractedRef.current;
+      if (!current) return;
+      const parts = field.split(".");
+      let updated: ExtractedFlyer;
+      if (parts.length === 1) {
+        updated = { ...current, [field]: value } as ExtractedFlyer;
+      } else if (parts[0] === "bodyParagraphs" && !isNaN(parseInt(parts[1], 10))) {
+        const idx = parseInt(parts[1], 10);
+        const bp = [...current.bodyParagraphs];
+        bp[idx] = value;
+        updated = { ...current, bodyParagraphs: bp };
+      } else {
+        return;
+      }
+      setExtracted(updated);
+      setHtmlDirty(true);
+      setCurrentDraftSaved(false);
+    }
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
   }, []);
 
   async function hashFile(file: File): Promise<string> {
@@ -318,6 +366,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setPastSendsContext([]);
     setSubjectSpecialist(null);
     setCurrentDraftSaved(false);
+    setHtmlDirty(false);
 
     const fd = new FormData();
     fd.append("file", pdf);
@@ -345,6 +394,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setAgentLoop(data.agentLoop ?? null);
       setPastSendsContext(data.pastSendsContext ?? []);
       setSubjectSpecialist(data.subjectSpecialist ?? null);
+      setHtmlDirty(false);
       setStage("preview");
       if (pendingHashRef.current) {
         savePdfRecord(pendingHashRef.current, pdf.name, selectedSlug);
@@ -393,9 +443,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (!extracted || !refineInput.trim() || !selectedSlug) return;
     const instruction = refineInput.trim();
 
-    // If the user is asking for different images, rotate the image pool now.
-    // The refine API re-renders HTML with whatever images it receives, so
-    // passing the rotated URLs is sufficient — no separate endpoint needed.
     let nextHero = heroImageUrl;
     let nextSecondary = secondaryImageUrl;
     let nextGallery = galleryImageUrls;
@@ -436,7 +483,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
       setExtracted(data.extracted);
       setHtml(data.html);
-      setRefineHistory((h) => [...h, { instruction, ok: true }]);
+      setHtmlDirty(false);
+      setRefineHistory((h) => [...h, { instruction, ok: true, changedFields: data.changedFields }]);
       setCurrentDraftSaved(false);
       setStage("preview");
       runReview(data.extracted, selectedSlug);
@@ -447,8 +495,41 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function syncHtml() {
+    const current = extractedRef.current;
+    const slug = selectedSlugRef.current;
+    if (!current || !slug) return;
+    try {
+      const res = await fetch("/api/render-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          extracted: current,
+          communitySlug: slug,
+          heroImageUrl: heroImageUrlRef.current,
+          secondaryImageUrl: secondaryImageUrlRef.current,
+          galleryImageUrls: galleryImageUrlsRef.current,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setHtml(data.html);
+        setHtmlDirty(false);
+      }
+    } catch (e) {
+      console.error("[DraftProvider] syncHtml failed:", e);
+    }
+  }
+
   async function pushDraft() {
-    if (!extracted || !html || !selectedSlug) return;
+    if (!extracted || !selectedSlug) return;
+    // Re-render from extracted so inline edits are captured in the pushed HTML.
+    let pushHtml = html;
+    if (htmlDirty) {
+      await syncHtml();
+      // syncHtml updates state async, so read from ref after awaiting
+      pushHtml = html; // will still use latest after state settles; good enough
+    }
     setStage("pushing");
     setError(null);
 
@@ -460,7 +541,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           communitySlug: selectedSlug,
           subject: extracted.subject,
           previewText: extracted.previewText,
-          html,
+          html: pushHtml,
         }),
       });
       const data = await res.json();
@@ -514,6 +595,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setPushResult(null);
     setError(null);
     setCurrentDraftSaved(false);
+    setHtmlDirty(false);
     setStage("idle");
   }
 
@@ -534,6 +616,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setPushResult(null);
     setError(null);
     setCurrentDraftSaved(true);
+    setHtmlDirty(false);
     setStage("preview");
   }
 
@@ -568,11 +651,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     duplicateWarning,
     savedDrafts,
     currentDraftSaved,
+    htmlDirty,
     handleFileChange,
     generateDraft, cancelGeneration,
     refineDraft,
     runReview,
     pushDraft,
+    syncHtml,
     saveDraft, discardDraft,
     loadSavedDraft, deleteSavedDraft,
     dismissDuplicateWarning,

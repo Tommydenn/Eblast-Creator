@@ -103,11 +103,13 @@ export async function POST(req: NextRequest) {
 
   // Rank images by relevance to the event before entering the loop so the
   // most contextually appropriate photo becomes hero rather than whichever
-  // happened to have the largest pixel area.
-  const rankedImages = await rankImagesByRelevance(
-    imageRun.images,
-    initialDraftResult.value,
-  );
+  // happened to have the largest pixel area. Failures fall back gracefully.
+  let rankedImages = imageRun.images;
+  try {
+    rankedImages = await rankImagesByRelevance(imageRun.images, initialDraftResult.value);
+  } catch {
+    // fall back to area-sorted order
+  }
 
   // Run the drafter ↔ critic loop. The critic now sees the images and can
   // flag broken/blank/off-topic ones; the loop drops those slots and

@@ -137,6 +137,22 @@ export async function POST(req: NextRequest) {
     galleryImageUrls,
   });
 
+  // Append a programmatic finding if no CallRail tracking number is set.
+  const finalReview = community.trackingPhone
+    ? loop.finalReview
+    : {
+        ...loop.finalReview,
+        findings: [
+          ...loop.finalReview.findings,
+          {
+            severity: "important" as const,
+            category: "cta" as const,
+            issue: "No CallRail tracking number set — CTA links to the flyer's phone instead of a tracked line.",
+            rationale: "Add a trackingPhone to this community's record to enable call attribution.",
+          },
+        ],
+      };
+
   return NextResponse.json({
     ok: true,
     community: { slug: community.slug, displayName: community.displayName },
@@ -147,7 +163,7 @@ export async function POST(req: NextRequest) {
     galleryImageUrls,
     imageCount: imageRun.images.length,
     imageDiagnostic: imageRun.diagnostic,
-    review: loop.finalReview,
+    review: finalReview,
     agentLoop: {
       stoppedReason: loop.stoppedReason,
       totalRounds: loop.totalRounds,

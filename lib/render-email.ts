@@ -41,22 +41,30 @@ export function buildEblastHtml(
     community.logos.find(l => l.onColor === "light" || l.onColor === "any") ??
     community.logos[0];
 
-  // If the only available logo is a white knockout, put it on a colored bar.
+  // If the only available logo is a white knockout, use brand.primary as the bar bg.
   const headerBg = chosenLogo?.onColor === "dark" ? brand.primary : "#ffffff";
+  // Accent stripe at top of header: use accent on white, or accent on primary bg.
+  const headerStripe = brand.accent;
 
-  // Text fallback: brand name on top, location below it.
+  // Text fallback: brand name centered, location below it.
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();
-  const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 22px; color: ${brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${brand.accent}; text-transform: uppercase; display:block; margin-top:4px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
+  const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${chosenLogo?.onColor === "dark" ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${chosenLogo?.onColor === "dark" ? "rgba(255,255,255,0.7)" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
   const logoContent = chosenLogo
-    ? `<img src="${chosenLogo.url}" alt="${escapeHtml(community.displayName)}" height="44" style="display:block; height:44px; width:auto; max-width:220px; border:0;">`
+    ? `<img src="${chosenLogo.url}" alt="${escapeHtml(community.displayName)}" height="72" style="display:block; height:72px; width:auto; max-width:260px; border:0; margin:0 auto;">`
     : textFallback;
+
+  // Always use the community's CallRail tracking number for the CTA phone.
+  const ctaPhone = community.trackingPhone;
+  const ctaHref = ctaPhone
+    ? `tel:+1${ctaPhone.replace(/\D/g, "")}`
+    : flyer.ctaButtonHref;
 
   // Component fragments — kept as inline HTML because email clients reward redundancy
   // and table-based layouts. CSS variables/classes don't survive Outlook.
   const header = `
   <tr>
-    <td style="padding: 28px 36px 22px 36px; background:${headerBg};" align="left" valign="middle">
+    <td style="padding: 28px 36px 24px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
       ${logoContent}
     </td>
   </tr>`;
@@ -80,13 +88,13 @@ export function buildEblastHtml(
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 6px auto 22px auto;">
               <tr>
                 <td style="border-top: 1px solid rgba(255,255,255,0.3); border-bottom: 1px solid rgba(255,255,255,0.3); padding: 14px 26px;" align="center">
-                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0;">${escapeHtml(flyer.eventDate ?? "")}</p>
-                  ${flyer.eventTime ? `<p style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 4px; color: #E8DDC4; text-transform: uppercase; margin: 6px 0 0 0;">${escapeHtml(flyer.eventTime)}${flyer.eventLocation ? " · " + escapeHtml(flyer.eventLocation) : ""}</p>` : ""}
+                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0;">${escapeHtml(flyer.eventDate ?? "")}${flyer.eventTime ? ` · ${escapeHtml(flyer.eventTime)}` : ""}</p>
+                  ${flyer.eventLocation ? `<p style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 4px; color: #E8DDC4; text-transform: uppercase; margin: 6px 0 0 0;">${escapeHtml(flyer.eventLocation)}</p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
             <p style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 16px; line-height: 1.55; color: #E8DDC4; max-width: 460px; margin: 0 auto 24px auto;">${escapeHtml(flyer.heroHook)}</p>
-            <a href="${escapeHtml(flyer.ctaButtonHref)}" style="display:inline-block; background:${brand.accent}; color:#FFFFFF !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(flyer.ctaButtonLabel)}</a>
+            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.accent}; color:#FFFFFF !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(flyer.ctaButtonLabel)}</a>
           </td>
         </tr>
       </table>
@@ -189,7 +197,7 @@ export function buildEblastHtml(
             <p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 12px 0;">${escapeHtml(flyer.ctaEyebrow)}</p>
             <p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 6px 0;">${escapeHtml(flyer.ctaHeadline)}</p>
             <p style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 3px; color: #FBE2CD; text-transform: uppercase; margin: 0 0 26px 0;">${escapeHtml(flyer.ctaSubline)}</p>
-            <a href="${escapeHtml(flyer.ctaButtonHref)}" style="display:inline-block; background:${brand.background}; color:${brand.accent} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(flyer.ctaButtonLabel)}</a>
+            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.background}; color:${brand.accent} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(flyer.ctaButtonLabel)}</a>
           </td>
         </tr>
       </table>

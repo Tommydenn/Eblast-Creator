@@ -346,35 +346,31 @@ export async function extractImagesFromPdf(
 
 /**
  * Crop a data-URI image to a target aspect ratio (width/height) via Sharp.
- * Centers the crop horizontally; positions it 1/3 from the top vertically
- * so portrait subjects stay in frame. Returns the original data URI on error.
+ * Uses Sharp's attention-based strategy to keep faces and salient subjects in frame.
+ * Returns the original data URI on error.
  */
 export async function cropDataUriToAspectRatio(dataUri: string, targetRatio: number): Promise<string> {
   try {
     const commaIdx = dataUri.indexOf(",");
     if (commaIdx === -1) return dataUri;
-    const base64Data = dataUri.slice(commaIdx + 1);
-    const buffer = Buffer.from(base64Data, "base64");
+    const buffer = Buffer.from(dataUri.slice(commaIdx + 1), "base64");
 
     const meta = await sharp(buffer, { failOn: "none" }).metadata();
     if (!meta.width || !meta.height) return dataUri;
 
     const srcRatio = meta.width / meta.height;
-    let cropWidth = meta.width;
-    let cropHeight = meta.height;
-
-    if (srcRatio > targetRatio) {
-      cropWidth = Math.round(meta.height * targetRatio);
-    } else {
-      cropHeight = Math.round(meta.width / targetRatio);
-    }
-
-    const left = Math.round((meta.width - cropWidth) / 2);
-    const topRaw = Math.round((meta.height - cropHeight) / 3);
-    const top = Math.max(0, Math.min(topRaw, meta.height - cropHeight));
+    const targetWidth = srcRatio > targetRatio
+      ? Math.round(meta.height * targetRatio)
+      : meta.width;
+    const targetHeight = srcRatio > targetRatio
+      ? meta.height
+      : Math.round(meta.width / targetRatio);
 
     const cropped = await sharp(buffer, { failOn: "none" })
-      .extract({ left, top, width: cropWidth, height: cropHeight })
+      .resize(targetWidth, targetHeight, {
+        fit: "cover",
+        position: "attention",
+      })
       .jpeg({ quality: 88 })
       .toBuffer();
 

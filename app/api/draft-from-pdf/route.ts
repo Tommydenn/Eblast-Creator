@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCommunity } from "@/data/communities";
 import { agenticDraftLoop } from "@/lib/agentic-draft";
 import { extractFlyerContent } from "@/lib/anthropic";
-import { extractImagesFromPdf } from "@/lib/pdf-images";
+import { extractImagesFromPdf, cropDataUriToAspectRatio } from "@/lib/pdf-images";
 import { buildEblastHtml } from "@/lib/render-email";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 
@@ -127,9 +127,18 @@ export async function POST(req: NextRequest) {
   }
 
   const extracted = loop.finalDraft;
-  const heroImageUrl = loop.finalImages.heroDataUri;
-  const secondaryImageUrl = loop.finalImages.secondaryDataUri;
-  const galleryImageUrls = loop.finalImages.galleryDataUris;
+  const rawHero = loop.finalImages.heroDataUri;
+  const rawSecondary = loop.finalImages.secondaryDataUri;
+  const rawGallery = loop.finalImages.galleryDataUris ?? [];
+
+  // Crop all images to consistent aspect ratios so the email grid looks intentional.
+  // Hero + secondary → 16:9 (matches the 600×338 / 528×297 HTML slots).
+  // Gallery tiles → 4:3 (classic photography proportion, works at any column count).
+  const [heroImageUrl, secondaryImageUrl, ...galleryImageUrls] = await Promise.all([
+    rawHero ? cropDataUriToAspectRatio(rawHero, 16 / 9) : Promise.resolve(undefined as string | undefined),
+    rawSecondary ? cropDataUriToAspectRatio(rawSecondary, 16 / 9) : Promise.resolve(undefined as string | undefined),
+    ...rawGallery.map((uri) => cropDataUriToAspectRatio(uri, 4 / 3)),
+  ]);
 
   const html = buildEblastHtml(extracted, community, {
     heroImageUrl,

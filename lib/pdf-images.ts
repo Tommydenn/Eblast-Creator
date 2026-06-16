@@ -343,3 +343,43 @@ export async function extractImagesFromPdf(
     diagnostic: diag,
   };
 }
+
+/**
+ * Crop a data-URI image to a target aspect ratio (width/height) via Sharp.
+ * Centers the crop horizontally; positions it 1/3 from the top vertically
+ * so portrait subjects stay in frame. Returns the original data URI on error.
+ */
+export async function cropDataUriToAspectRatio(dataUri: string, targetRatio: number): Promise<string> {
+  try {
+    const commaIdx = dataUri.indexOf(",");
+    if (commaIdx === -1) return dataUri;
+    const base64Data = dataUri.slice(commaIdx + 1);
+    const buffer = Buffer.from(base64Data, "base64");
+
+    const meta = await sharp(buffer, { failOn: "none" }).metadata();
+    if (!meta.width || !meta.height) return dataUri;
+
+    const srcRatio = meta.width / meta.height;
+    let cropWidth = meta.width;
+    let cropHeight = meta.height;
+
+    if (srcRatio > targetRatio) {
+      cropWidth = Math.round(meta.height * targetRatio);
+    } else {
+      cropHeight = Math.round(meta.width / targetRatio);
+    }
+
+    const left = Math.round((meta.width - cropWidth) / 2);
+    const topRaw = Math.round((meta.height - cropHeight) / 3);
+    const top = Math.max(0, Math.min(topRaw, meta.height - cropHeight));
+
+    const cropped = await sharp(buffer, { failOn: "none" })
+      .extract({ left, top, width: cropWidth, height: cropHeight })
+      .jpeg({ quality: 88 })
+      .toBuffer();
+
+    return `data:image/jpeg;base64,${cropped.toString("base64")}`;
+  } catch {
+    return dataUri;
+  }
+}

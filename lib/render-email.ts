@@ -60,12 +60,24 @@ export function buildEblastHtml(
     ? `tel:+1${ctaPhone.replace(/\D/g, "")}`
     : flyer.ctaButtonHref;
 
+  const isDarkHeader = chosenLogo?.onColor === "dark";
+  const cityState = [community.address.city, community.address.state].filter(Boolean).join(", ");
+  const dividerColor = isDarkHeader ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.10)";
+  const cityTextColor = isDarkHeader ? "rgba(255,255,255,0.60)" : brand.accent;
+
   // Component fragments — kept as inline HTML because email clients reward redundancy
   // and table-based layouts. CSS variables/classes don't survive Outlook.
   const header = `
   <tr>
-    <td style="padding: 28px 36px 24px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
-      ${logoContent}
+    <td style="padding: 28px 36px ${cityState ? "22px" : "24px"}; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
+      ${logoContent}${cityState ? `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 14px auto 0 auto;">
+        <tr>
+          <td style="padding: 10px 24px 0 24px; border-top: 1px solid ${dividerColor}; text-align:center; white-space:nowrap;">
+            <span style="font-family: ${brand.fontBody}; font-size: 10px; letter-spacing: 3.5px; color: ${cityTextColor}; text-transform: uppercase;">${escapeHtml(cityState)}</span>
+          </td>
+        </tr>
+      </table>` : ""}
     </td>
   </tr>`;
 
@@ -152,12 +164,14 @@ export function buildEblastHtml(
     // 4+ images → 2×2 grid for visual symmetry.
     const cols = galleryImgs.length === 3 ? 3 : galleryImgs.length === 1 ? 1 : 2;
     const cellWidth = Math.floor(528 / cols);
+    // Tile dimensions: 4:3 for multi-col grids (images are pre-cropped server-side);
+    // 16:9 for a single full-width image so it isn't too tall.
+    const tileW = cellWidth - (cols > 1 ? 12 : 0);
+    const tileH = cols === 1 ? Math.round(tileW * 9 / 16) : Math.round(tileW * 3 / 4);
     const rows: string[][] = [];
     for (let i = 0; i < galleryImgs.length; i += cols) {
       rows.push(galleryImgs.slice(i, i + cols));
     }
-
-    const eyebrow = flyer.eventLocation || community.displayName;
 
     return `
   <tr>
@@ -175,8 +189,8 @@ export function buildEblastHtml(
           ${row
             .map(
               (src) => `
-          <td valign="top" width="${cellWidth - 12}" style="padding: 0;">
-            <img src="${src}" width="${cellWidth - 12}" alt="${escapeHtml(community.displayName)}" style="display:block; width:100%; max-width:${cellWidth - 12}px; height:auto; border:0;">
+          <td valign="top" width="${tileW}" height="${tileH}" style="padding: 0; overflow:hidden; width:${tileW}px; height:${tileH}px; max-height:${tileH}px;">
+            <img src="${src}" width="${tileW}" height="${tileH}" alt="${escapeHtml(community.displayName)}" style="display:block; width:${tileW}px; height:${tileH}px; object-fit:cover; border:0;">
           </td>`,
             )
             .join("")}

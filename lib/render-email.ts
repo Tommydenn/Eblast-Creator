@@ -35,20 +35,33 @@ export function buildEblastHtml(
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
-  // Pick the best logo. Prefer light-background variants; fall back to any available.
-  const chosenLogo =
-    community.logos.find(l => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary") ??
-    community.logos.find(l => l.onColor === "light" || l.onColor === "any") ??
-    community.logos[0];
+  // Determine if brand.background is light or dark so we can pick the logo
+  // variant that is designed for that background. The header is ALWAYS
+  // brand.background — we never flip it to accommodate the logo.
+  const bgLum = (() => {
+    const h = brand.background.replace("#", "");
+    const r = parseInt(h.slice(0, 2), 16) / 255;
+    const g = parseInt(h.slice(2, 4), 16) / 255;
+    const b = parseInt(h.slice(4, 6), 16) / 255;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  })();
+  const bgIsLight = bgLum > 0.4;
 
-  // If the only available logo is a white knockout, use brand.primary as the bar bg.
-  const headerBg = chosenLogo?.onColor === "dark" ? brand.primary : "#ffffff";
-  // Accent stripe at top of header: use accent on white, or accent on primary bg.
+  const chosenLogo = bgIsLight
+    ? (community.logos.find(l => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary") ??
+       community.logos.find(l => l.onColor === "light" || l.onColor === "any") ??
+       community.logos[0])
+    : (community.logos.find(l => l.onColor === "dark" && l.variant === "primary") ??
+       community.logos.find(l => l.onColor === "dark") ??
+       community.logos[0]);
+
+  const headerBg = brand.background;
   const headerStripe = brand.accent;
+  const isDarkHeader = !bgIsLight;
 
   // Text fallback: brand name centered, location below it.
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();
-  const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${chosenLogo?.onColor === "dark" ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${chosenLogo?.onColor === "dark" ? "rgba(255,255,255,0.7)" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
+  const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "rgba(255,255,255,0.7)" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
   const logoContent = chosenLogo
     ? `<img src="${chosenLogo.url}" alt="${escapeHtml(community.displayName)}" height="72" style="display:block; height:72px; width:auto; max-width:260px; border:0; margin:0 auto;">`
@@ -60,7 +73,6 @@ export function buildEblastHtml(
     ? `tel:+1${ctaPhone.replace(/\D/g, "")}`
     : flyer.ctaButtonHref;
 
-  const isDarkHeader = chosenLogo?.onColor === "dark";
   const cityState = [community.address.city, community.address.state].filter(Boolean).join(", ");
   const dividerColor = isDarkHeader ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.10)";
   const cityTextColor = isDarkHeader ? "rgba(255,255,255,0.60)" : brand.accent;

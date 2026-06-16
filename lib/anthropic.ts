@@ -31,30 +31,30 @@ const extractFlyerToolSchema = {
     subject: { type: "string", description: "Email subject line. <=60 chars. Specific, benefit-led, no clickbait." },
     previewText: { type: "string", description: "Inbox preview text. <=120 chars. Reinforces subject without repeating it." },
 
-    eyebrow: { type: "string", description: "All-caps eyebrow text above the hero headline. 1-3 words, e.g. 'RSVP REQUIRED'." },
-    headline: { type: "string", description: "Hero headline. 2-5 words. Title-case." },
-    scriptSubheadline: { type: "string", description: "Optional script-styled subhead, 1-3 words." },
-    heroHook: { type: "string", description: "One italic sentence below the date in the hero block." },
+    eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
+    headline: { type: "string", description: "The single biggest message. 2–5 words. Title-case. The 'what.' Do not use adjectives here — use the most concrete noun+verb the flyer supports." },
+    scriptSubheadline: { type: "string", description: "Optional script-styled subhead. 1–3 evocative words. Only include if it adds emotional texture not in the headline (e.g. a season, a feeling). Omit rather than echo the headline." },
+    heroHook: { type: "string", description: "One italic sentence below the date. Adds NEW context not in the headline — sensory detail, a specific person, or the 'why attend.' Must NOT restate the headline. Opens with a moment, not 'Join us for...'." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
     eventTime: { type: "string", description: "Event time, e.g. '2:00 PM'." },
     eventLocation: { type: "string" },
 
-    storyEyebrow: { type: "string", description: "Eyebrow above the body copy, e.g. 'A Look Inside Our Kitchen'." },
-    storyScriptTitle: { type: "string", description: "Optional script-styled section title." },
+    storyEyebrow: { type: "string", description: "Section label above the body copy. Must be fresh — must NOT echo the hero eyebrow or headline. Give it a different angle: a place, a person, a process ('Inside Our Kitchen', 'Meet Chef Marcos', 'How It Works')." },
+    storyScriptTitle: { type: "string", description: "Optional script-styled section title. Only include if it opens the story with warmth or personality not covered by storyEyebrow. Omit rather than repeat." },
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2-4 paragraphs of body copy. Plain text. Ground every claim in the flyer — do not invent details.",
+      description: "2–4 paragraphs. Each paragraph advances the story — do NOT restate the headline or heroHook in paragraph 1. Para 1: a moment (sensory, specific). Para 2: what is actually happening / why it matters. Para 3 (optional): one piece of grounding detail (a person, an amenity, a credential). Para 4 (optional): clear CTA-ready line. No exclamation marks.",
     },
 
-    pullQuoteEyebrow: { type: "string", description: "Optional eyebrow above the pull-quote block." },
-    pullQuote: { type: "string", description: "A 1-2 sentence value prop or quoted line from the flyer." },
+    pullQuoteEyebrow: { type: "string", description: "Optional eyebrow above the pull-quote block. Omit if it would just echo the ctaEyebrow." },
+    pullQuote: { type: "string", description: "A 1–2 sentence value prop or verbatim quote from the flyer. Must NOT be a paraphrase of the headline or heroHook — it should be the most credible, specific thing the flyer says." },
     pullQuoteAttribution: { type: "string" },
 
-    ctaEyebrow: { type: "string", description: "Final-CTA eyebrow, e.g. 'Reserve Your Seat'." },
-    ctaHeadline: { type: "string", description: "CTA headline, often the date+time again." },
-    ctaSubline: { type: "string", description: "Supporting subline, e.g. 'Seating is limited'." },
+    ctaEyebrow: { type: "string", description: "Action label above the final CTA block. Must NOT repeat the hero eyebrow. Verb-led and specific: 'Reserve Your Seat', 'Save Saturday', 'Join the Table'." },
+    ctaHeadline: { type: "string", description: "CTA headline — state the date+time OR a final reason to act (not the event name again). E.g. 'Saturday, June 28 · 5:30 PM' or 'Seating Is Limited'." },
+    ctaSubline: { type: "string", description: "One supporting line that reduces friction or adds urgency without hype. E.g. 'Complimentary for residents and their guests.' Omit if nothing fresh to add." },
     ctaButtonLabel: { type: "string", description: "Button text, e.g. 'Call 920.504.3443'." },
     ctaButtonHref: { type: "string", description: "Button href: tel:, mailto:, or https:// URL. Pull from the flyer." },
 

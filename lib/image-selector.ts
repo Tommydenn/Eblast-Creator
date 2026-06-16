@@ -9,7 +9,7 @@ import type { ExtractedFlyer } from "./extracted-flyer";
 import type { ExtractedImage } from "./pdf-images";
 
 const MAX_CANDIDATES = 5;
-const THUMBNAIL_PX = 400; // longest edge — enough to identify content, tiny payload
+const THUMBNAIL_PX = 512; // longest edge — enough to distinguish event content from stock shots
 const RANKING_TIMEOUT_MS = 12_000; // fall back to area-order if Haiku doesn't respond in time
 
 async function toThumbnailDataUri(dataUri: string): Promise<string> {
@@ -19,7 +19,7 @@ async function toThumbnailDataUri(dataUri: string): Promise<string> {
     const buffer = Buffer.from(dataUri.slice(commaIdx + 1), "base64");
     const thumb = await sharp(buffer, { failOn: "none" })
       .resize(THUMBNAIL_PX, THUMBNAIL_PX, { fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality: 65 })
+      .jpeg({ quality: 75 })
       .toBuffer();
     return `data:image/jpeg;base64,${thumb.toString("base64")}`;
   } catch {

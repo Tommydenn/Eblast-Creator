@@ -340,8 +340,8 @@ export default function Home() {
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="text-base">Reviewer</CardTitle>
                       {review && (
-                        <Badge variant={verdictBadge[review.verdict].variant}>
-                          {verdictBadge[review.verdict].label}
+                        <Badge variant={verdictBadge[review.verdict]?.variant ?? "neutral"}>
+                          {verdictBadge[review.verdict]?.label ?? review.verdict}
                         </Badge>
                       )}
                     </div>
@@ -413,8 +413,8 @@ export default function Home() {
                             {review.findings.map((f, i) => (
                               <li key={i} className="rounded-md border border-sand-200 bg-white p-3">
                                 <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                                  <Badge variant={severityBadge[f.severity].variant}>
-                                    {severityBadge[f.severity].label}
+                                  <Badge variant={severityBadge[f.severity]?.variant ?? "neutral"}>
+                                    {severityBadge[f.severity]?.label ?? f.severity}
                                   </Badge>
                                   <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-sand-500">
                                     {f.category.replace(/_/g, " ")}

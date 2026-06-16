@@ -35,22 +35,23 @@ export function buildEblastHtml(
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
+  // Pick the best logo for a light/white background: prefer primary variant,
+  // then any logo suitable for light backgrounds, then any logo at all.
+  const logoUrl =
+    community.logos.find(l => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary")?.url ??
+    community.logos.find(l => l.onColor === "light" || l.onColor === "any")?.url ??
+    community.logos[0]?.url;
+
+  const logoContent = logoUrl
+    ? `<img src="${logoUrl}" alt="${escapeHtml(community.displayName)}" height="44" style="display:block; height:44px; width:auto; max-width:220px; border:0;">`
+    : `<span style="font-family: ${brand.fontHeadline}; font-size: 22px; color: ${brand.primary}; letter-spacing: 1px;">${escapeHtml(community.shortName)}</span>${community.shortName !== community.displayName ? `<span style="font-family: ${brand.fontBody}; font-size: 10px; letter-spacing: 4px; color: ${brand.accent}; text-transform: uppercase; margin-left: 6px;">${escapeHtml(community.displayName.replace(community.shortName, "").trim())}</span>` : ""}`;
+
   // Component fragments — kept as inline HTML because email clients reward redundancy
   // and table-based layouts. CSS variables/classes don't survive Outlook.
   const header = `
   <tr>
-    <td style="padding: 28px 36px 22px 36px;" align="center">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-        <tr>
-          <td align="left" valign="middle">
-            <span style="font-family: ${brand.fontHeadline}; font-size: 22px; color: ${brand.primary}; letter-spacing: 1px;">${escapeHtml(community.shortName)}</span>
-            ${community.shortName !== community.displayName ? `<span style="font-family: ${brand.fontBody}; font-size: 10px; letter-spacing: 4px; color: ${brand.accent}; text-transform: uppercase; margin-left: 6px;">${escapeHtml(community.displayName.replace(community.shortName, "").trim())}</span>` : ""}
-          </td>
-          <td align="right" valign="middle" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: #6B6B6B;">
-            ${escapeHtml(community.type.replace(/_/g, " "))}
-          </td>
-        </tr>
-      </table>
+    <td style="padding: 28px 36px 22px 36px;" align="left" valign="middle">
+      ${logoContent}
     </td>
   </tr>`;
 

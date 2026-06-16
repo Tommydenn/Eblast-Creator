@@ -163,7 +163,6 @@ async function cmykJpegToSrgbViaMupdf(jpegBytes: Buffer): Promise<Buffer | null>
 async function cmykJpegToSrgbViaSharp(jpegBytes: Buffer): Promise<Buffer | null> {
   try {
     return await sharp(jpegBytes, { failOn: "none" })
-      .negate({ alpha: false })
       .toColorspace("srgb")
       .jpeg({ quality: 90 })
       .toBuffer();

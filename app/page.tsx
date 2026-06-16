@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Input, Label, Select, Textarea } from "@/components/ui/Input";
 import {
   useDraft,
-  type FindingSeverity,
   type ReviewVerdict,
   type SavedDraft,
 } from "@/context/DraftContext";
@@ -23,12 +22,6 @@ const verdictBadge: Record<ReviewVerdict, { label: string; variant: "success" | 
   ready: { label: "Ready", variant: "success" },
   needs_work: { label: "Needs work", variant: "warning" },
   major_revision: { label: "Major revision", variant: "danger" },
-};
-
-const severityBadge: Record<FindingSeverity, { label: string; variant: "danger" | "warning" | "neutral" }> = {
-  blocker: { label: "Blocker", variant: "danger" },
-  important: { label: "Important", variant: "warning" },
-  nice_to_have: { label: "Polish", variant: "neutral" },
 };
 
 // ─── Saved Drafts Panel ───────────────────────────────────────────────────────
@@ -223,10 +216,10 @@ export default function Home() {
                 <div className="rounded-md border border-sand-200 bg-sand-50/60 p-3 text-xs leading-relaxed text-sand-600">
                   <p className="eb-fade-pulse">
                     Drafter reading the flyer and pulling images. Critic reviewing each round — if it flags
-                    issues, drafter applies the fixes and the critic re-reviews. Up to 3 rounds.
+                    issues, drafter applies the fixes and the critic re-reviews. Up to 2 rounds.
                   </p>
                   <div className="mt-2 flex items-center justify-between">
-                    <p className="text-[11px] text-sand-500">Typically 30–90 seconds. Safe to switch tabs.</p>
+                    <p className="text-[11px] text-sand-500">Typically 30–60 seconds. Safe to switch tabs.</p>
                     <button
                       onClick={cancelGeneration}
                       className="text-[11px] text-clay-600 underline underline-offset-2 hover:text-clay-800"
@@ -337,17 +330,10 @@ export default function Home() {
                 {/* Reviewer card */}
                 <Card className="eb-rise">
                   <CardHeader>
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-base">Reviewer</CardTitle>
-                      {review && (
-                        <Badge variant={verdictBadge[review.verdict]?.variant ?? "neutral"}>
-                          {verdictBadge[review.verdict]?.label ?? review.verdict}
-                        </Badge>
-                      )}
-                    </div>
+                    <CardTitle className="text-base">Reviewer</CardTitle>
                     {agentLoop && (
                       <CardDescription>
-                        Agents converged in {agentLoop.totalRounds} round{agentLoop.totalRounds === 1 ? "" : "s"}
+                        {agentLoop.totalRounds} round{agentLoop.totalRounds === 1 ? "" : "s"}
                         {agentLoop.imagesExcluded > 0 && (
                           <>
                             {" · "}
@@ -359,7 +345,7 @@ export default function Home() {
                       </CardDescription>
                     )}
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-3">
                     {reviewing && !review && (
                       <p className="eb-fade-pulse text-sm text-sand-600">Re-reviewing the refined draft…</p>
                     )}
@@ -371,7 +357,74 @@ export default function Home() {
 
                     {review && (
                       <>
-                        <p className="text-sm leading-relaxed text-sand-800">{review.summary}</p>
+                        {/* Verdict banner — first and prominent */}
+                        <div className={`flex items-start gap-2.5 rounded-md border px-3 py-2.5 ${
+                          review.verdict === "ready"
+                            ? "border-forest-200 bg-forest-50/60"
+                            : review.verdict === "needs_work"
+                              ? "border-amber-200 bg-amber-50/50"
+                              : "border-clay-200 bg-clay-50/50"
+                        }`}>
+                          <Badge variant={verdictBadge[review.verdict]?.variant ?? "neutral"} className="mt-0.5 shrink-0">
+                            {verdictBadge[review.verdict]?.label ?? review.verdict}
+                          </Badge>
+                          <p className="text-xs leading-relaxed text-sand-700">{review.summary}</p>
+                        </div>
+
+                        {/* Findings — collapsed one-liners */}
+                        {review.findings.length === 0 ? (
+                          <p className="rounded-md border border-dashed border-forest-200 bg-forest-50/50 px-3 py-2.5 text-xs text-forest-700">
+                            No findings. Reviewer thinks this is clean.
+                          </p>
+                        ) : (
+                          <ul className="space-y-1">
+                            {review.findings.map((f, i) => (
+                              <li key={i}>
+                                <details className="group overflow-hidden rounded border border-sand-200 bg-white">
+                                  <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+                                    <span className={`h-2 w-2 shrink-0 rounded-full ${
+                                      f.severity === "blocker"
+                                        ? "bg-clay-600"
+                                        : f.severity === "important"
+                                          ? "bg-amber-500"
+                                          : "bg-sand-300"
+                                    }`} />
+                                    <span className="min-w-0 flex-1 truncate text-sm text-sand-900">{f.issue}</span>
+                                    <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-sand-400">
+                                      {f.category.replace(/_/g, " ")}
+                                    </span>
+                                    <svg
+                                      viewBox="0 0 16 16"
+                                      className="h-3.5 w-3.5 shrink-0 text-sand-300 transition-transform group-open:rotate-180"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    >
+                                      <path d="M4 6l4 4 4-4" />
+                                    </svg>
+                                  </summary>
+                                  <div className="space-y-2.5 border-t border-sand-100 px-3 pb-3 pt-2.5">
+                                    {f.field && (
+                                      <p className="text-[11px] font-medium uppercase tracking-wide text-sand-500">
+                                        Field: {f.field}
+                                      </p>
+                                    )}
+                                    {f.suggestion && (
+                                      <button
+                                        onClick={() => setRefineInput(f.suggestion!)}
+                                        title="Click to load this into the refine box"
+                                        className="w-full rounded border border-dashed border-clay-300 bg-clay-50/40 px-3 py-2 text-left text-xs leading-relaxed text-sand-800 hover:border-clay-400 hover:bg-clay-50/70"
+                                      >
+                                        → {f.suggestion}
+                                      </button>
+                                    )}
+                                    <p className="text-xs italic text-sand-500">{f.rationale}</p>
+                                  </div>
+                                </details>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
 
                         {agentLoop && agentLoop.iterations.length > 1 && (
                           <details className="group rounded-md border border-sand-200 bg-sand-50/60 px-3 py-2">
@@ -393,8 +446,8 @@ export default function Home() {
                                   )}
                                   {it.appliedSuggestions.length > 0 && (
                                     <ul className="ml-4 list-disc space-y-0.5 text-sand-600">
-                                      {it.appliedSuggestions.map((s, i) => (
-                                        <li key={i}>{s}</li>
+                                      {it.appliedSuggestions.map((s, idx) => (
+                                        <li key={idx}>{s}</li>
                                       ))}
                                     </ul>
                                   )}
@@ -402,39 +455,6 @@ export default function Home() {
                               ))}
                             </ol>
                           </details>
-                        )}
-
-                        {review.findings.length === 0 ? (
-                          <p className="rounded-md border border-dashed border-forest-200 bg-forest-50/50 px-3 py-2.5 text-xs text-forest-700">
-                            No findings. Reviewer thinks this is clean.
-                          </p>
-                        ) : (
-                          <ul className="space-y-3">
-                            {review.findings.map((f, i) => (
-                              <li key={i} className="rounded-md border border-sand-200 bg-white p-3">
-                                <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                                  <Badge variant={severityBadge[f.severity]?.variant ?? "neutral"}>
-                                    {severityBadge[f.severity]?.label ?? f.severity}
-                                  </Badge>
-                                  <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-sand-500">
-                                    {f.category.replace(/_/g, " ")}
-                                  </span>
-                                  {f.field && <span className="text-[10px] text-sand-400">· {f.field}</span>}
-                                </div>
-                                <p className="text-sm text-sand-900">{f.issue}</p>
-                                {f.suggestion && (
-                                  <button
-                                    onClick={() => setRefineInput(f.suggestion!)}
-                                    title="Click to load this into the refine box"
-                                    className="mt-2 w-full rounded border border-dashed border-clay-300 bg-clay-50/40 px-3 py-2 text-left text-xs leading-relaxed text-sand-800 hover:border-clay-400 hover:bg-clay-50/70"
-                                  >
-                                    → {f.suggestion}
-                                  </button>
-                                )}
-                                <p className="mt-2 text-xs italic text-sand-500">{f.rationale}</p>
-                              </li>
-                            ))}
-                          </ul>
                         )}
 
                         {review.subjectLineAlternatives && review.subjectLineAlternatives.length > 0 && (

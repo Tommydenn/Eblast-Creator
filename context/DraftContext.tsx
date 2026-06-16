@@ -128,6 +128,28 @@ export interface SavedDraft {
   subjectSpecialist?: SubjectSpecialistResult | null;
 }
 
+// ─── Image cycling helpers ────────────────────────────────────────────────────
+
+function isImageRelatedInstruction(instruction: string): boolean {
+  return /\b(image|images|photo|photos|picture|pictures|hero|gallery|secondary|swap)\b/i.test(instruction);
+}
+
+function cycleImages(
+  hero: string | undefined,
+  secondary: string | undefined,
+  gallery: string[],
+): { hero: string | undefined; secondary: string | undefined; gallery: string[] } {
+  const pool = [hero, secondary, ...gallery].filter((u): u is string => Boolean(u));
+  if (pool.length <= 1) return { hero, secondary, gallery };
+  // Rotate pool by one: push current hero to end, pull everything else forward
+  const rotated = [...pool.slice(1), pool[0]];
+  return {
+    hero: rotated[0],
+    secondary: rotated.length > 1 ? rotated[1] : undefined,
+    gallery: rotated.slice(2),
+  };
+}
+
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
 const PDF_HISTORY_KEY = "eblast-pdf-history";
@@ -370,6 +392,24 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   async function refineDraft() {
     if (!extracted || !refineInput.trim() || !selectedSlug) return;
     const instruction = refineInput.trim();
+
+    // If the user is asking for different images, rotate the image pool now.
+    // The refine API re-renders HTML with whatever images it receives, so
+    // passing the rotated URLs is sufficient — no separate endpoint needed.
+    let nextHero = heroImageUrl;
+    let nextSecondary = secondaryImageUrl;
+    let nextGallery = galleryImageUrls;
+
+    if (isImageRelatedInstruction(instruction)) {
+      const cycled = cycleImages(heroImageUrl, secondaryImageUrl, galleryImageUrls);
+      nextHero = cycled.hero;
+      nextSecondary = cycled.secondary;
+      nextGallery = cycled.gallery;
+      setHeroImageUrl(nextHero);
+      setSecondaryImageUrl(nextSecondary);
+      setGalleryImageUrls(nextGallery);
+    }
+
     setStage("refining");
     setError(null);
     setRefineInput("");
@@ -382,9 +422,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           current: extracted,
           instruction,
           communitySlug: selectedSlug,
-          heroImageUrl,
-          secondaryImageUrl,
-          galleryImageUrls,
+          heroImageUrl: nextHero,
+          secondaryImageUrl: nextSecondary,
+          galleryImageUrls: nextGallery,
         }),
       });
       const data = await res.json();

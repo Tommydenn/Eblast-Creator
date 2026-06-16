@@ -25,7 +25,7 @@ import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import type { ExtractedImage } from "@/lib/pdf-images";
 import type { PastSendForContext } from "@/lib/past-sends-retrieval";
 
-const MAX_ROUNDS = 3;
+const MAX_ROUNDS = 2;
 
 export type StopReason = "ready" | "max_iterations" | "no_progress" | "regressed";
 

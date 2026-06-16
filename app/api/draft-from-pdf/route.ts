@@ -121,14 +121,16 @@ export async function POST(req: NextRequest) {
       pastSends,
     });
   } catch (e: any) {
-    // Log the full stack to the server console so we never have to debug
-    // these from a one-line UI error again.
     console.error("[draft-from-pdf] Agent loop threw:", e);
+    const isTransient = e?.status === 500 || e?.status === 503 || e?.status === 529;
     return NextResponse.json(
       {
         ok: false,
-        error: `Agent loop failed: ${e.message ?? String(e)}`,
+        error: isTransient
+          ? "Anthropic's API returned a temporary error. Please try generating again — it usually resolves on the next attempt."
+          : `Agent loop failed: ${e.message ?? String(e)}`,
         step: "loop",
+        retryable: isTransient,
         stack: process.env.NODE_ENV === "development" ? e.stack : undefined,
       },
       { status: 500 },

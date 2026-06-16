@@ -13,7 +13,7 @@ function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set");
   }
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 3 });
 }
 
 // JSON Schema for the ExtractedFlyer — used as a tool input schema so Claude

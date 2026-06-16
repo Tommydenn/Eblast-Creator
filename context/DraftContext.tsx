@@ -1,0 +1,540 @@
+"use client";
+
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+
+// ─── Shared types ─────────────────────────────────────────────────────────────
+
+export type Stage = "idle" | "drafting" | "preview" | "refining" | "pushing" | "done";
+
+export interface Community {
+  slug: string;
+  displayName: string;
+  shortName: string;
+  type: string;
+  brand: { primary: string; accent: string; background: string };
+  senders: Array<{ id: string; name: string; email: string; isPrimary: boolean }>;
+  hubspot: { listId?: number };
+  trackingPhone?: string | null;
+  templates: string[];
+}
+
+export interface ExtractedFlyer {
+  subject: string;
+  previewText: string;
+  eyebrow: string;
+  headline: string;
+  scriptSubheadline?: string;
+  heroHook: string;
+  eventDate?: string;
+  eventTime?: string;
+  eventLocation?: string;
+  storyEyebrow: string;
+  storyScriptTitle?: string;
+  bodyParagraphs: string[];
+  pullQuoteEyebrow?: string;
+  pullQuote?: string;
+  pullQuoteAttribution?: string;
+  ctaEyebrow: string;
+  ctaHeadline: string;
+  ctaSubline: string;
+  ctaButtonLabel: string;
+  ctaButtonHref: string;
+  heroImageAlt: string;
+  heroImageDescription: string;
+  audienceHints: string[];
+  drafterRationale?: string;
+}
+
+export type FindingSeverity = "blocker" | "important" | "nice_to_have";
+export type FindingCategory =
+  | "subject" | "preview" | "cta" | "body" | "images" | "voice" | "craft" | "compliance";
+
+export interface ReviewFinding {
+  severity: FindingSeverity;
+  category: FindingCategory;
+  field?: string;
+  issue: string;
+  suggestion?: string;
+  rationale: string;
+}
+
+export type ReviewVerdict = "ready" | "needs_work" | "major_revision";
+
+export interface DraftReview {
+  verdict: ReviewVerdict;
+  summary: string;
+  findings: ReviewFinding[];
+  subjectLineAlternatives?: string[];
+  sendTimeRecommendation?: string;
+  recipientListNote?: string;
+  flaggedImages?: Array<{ slot: string; reason: string; galleryIndex?: number }>;
+}
+
+export interface AgentLoopIteration {
+  round: number;
+  verdict: string;
+  findingsCount: number;
+  appliedSuggestions: string[];
+  droppedImageSlots: string[];
+}
+
+export interface AgentLoopSummary {
+  stoppedReason: string;
+  totalRounds: number;
+  imagesExcluded: number;
+  iterations: AgentLoopIteration[];
+}
+
+export interface PastSendForContext {
+  subject: string;
+  openRate?: number;
+  clickRate?: number;
+  sentAt?: string;
+}
+
+export interface SubjectAlternative {
+  subject: string;
+  previewText: string;
+  rationale: string;
+  score: number;
+}
+
+export interface SubjectSpecialistResult {
+  winner: SubjectAlternative;
+  alternatives: SubjectAlternative[];
+  reasoning: string;
+}
+
+export interface RefinementEntry {
+  instruction: string;
+  ok: boolean;
+}
+
+export interface SavedDraft {
+  id: string;
+  communitySlug: string;
+  communityName: string;
+  savedAt: string;
+  subject: string;
+  extracted: ExtractedFlyer;
+  html: string;
+  heroImageUrl?: string;
+  secondaryImageUrl?: string;
+  galleryImageUrls: string[];
+  imageCount: number;
+  review?: DraftReview | null;
+  agentLoop?: AgentLoopSummary | null;
+  pastSendsContext?: PastSendForContext[];
+  subjectSpecialist?: SubjectSpecialistResult | null;
+}
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+
+const PDF_HISTORY_KEY = "eblast-pdf-history";
+const DRAFTS_KEY = "eblast-saved-drafts";
+const MAX_SAVED_DRAFTS = 5;
+
+type PdfRecord = { hash: string; name: string; generatedAt: string; community: string };
+
+function getPdfHistory(): PdfRecord[] {
+  try { return JSON.parse(localStorage.getItem(PDF_HISTORY_KEY) ?? "[]"); } catch { return []; }
+}
+
+function savePdfRecord(hash: string, name: string, community: string) {
+  const history = getPdfHistory().filter((r) => r.hash !== hash);
+  history.unshift({ hash, name, generatedAt: new Date().toISOString(), community });
+  localStorage.setItem(PDF_HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
+}
+
+function getSavedDrafts(): SavedDraft[] {
+  try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? "[]"); } catch { return []; }
+}
+
+function persistSavedDrafts(drafts: SavedDraft[]) {
+  try {
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+  } catch {
+    // QuotaExceededError — drop oldest draft and retry once
+    if (drafts.length > 1) {
+      try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts.slice(0, drafts.length - 1))); } catch {}
+    }
+  }
+}
+
+// ─── Context interface ────────────────────────────────────────────────────────
+
+export interface DraftContextValue {
+  communities: Community[];
+  selectedSlug: string;
+  setSelectedSlug: (slug: string) => void;
+  pdf: File | null;
+  stage: Stage;
+  extracted: ExtractedFlyer | null;
+  html: string;
+  heroImageUrl: string | undefined;
+  secondaryImageUrl: string | undefined;
+  galleryImageUrls: string[];
+  imageCount: number;
+  refineInput: string;
+  setRefineInput: (v: string) => void;
+  refineHistory: RefinementEntry[];
+  review: DraftReview | null;
+  reviewing: boolean;
+  reviewError: string | null;
+  agentLoop: AgentLoopSummary | null;
+  pushResult: any;
+  error: string | null;
+  pastSendsContext: PastSendForContext[];
+  subjectSpecialist: SubjectSpecialistResult | null;
+  duplicateWarning: { name: string; generatedAt: string; community: string } | null;
+  savedDrafts: SavedDraft[];
+  currentDraftSaved: boolean;
+  handleFileChange: (file: File | null) => Promise<void>;
+  generateDraft: () => Promise<void>;
+  cancelGeneration: () => void;
+  refineDraft: () => Promise<void>;
+  runReview: (targetExtracted?: ExtractedFlyer, targetSlug?: string) => Promise<void>;
+  pushDraft: () => Promise<void>;
+  saveDraft: () => void;
+  discardDraft: () => void;
+  loadSavedDraft: (draft: SavedDraft) => void;
+  deleteSavedDraft: (id: string) => void;
+  dismissDuplicateWarning: () => void;
+}
+
+const DraftContext = createContext<DraftContextValue | null>(null);
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+export function DraftProvider({ children }: { children: React.ReactNode }) {
+  const [communities, setCommunities] = useState<Community[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState<string>("");
+  const [pdf, setPdf] = useState<File | null>(null);
+  const [stage, setStage] = useState<Stage>("idle");
+  const [extracted, setExtracted] = useState<ExtractedFlyer | null>(null);
+  const [html, setHtml] = useState<string>("");
+  const [heroImageUrl, setHeroImageUrl] = useState<string | undefined>();
+  const [secondaryImageUrl, setSecondaryImageUrl] = useState<string | undefined>();
+  const [galleryImageUrls, setGalleryImageUrls] = useState<string[]>([]);
+  const [imageCount, setImageCount] = useState<number>(0);
+  const [refineInput, setRefineInput] = useState("");
+  const [refineHistory, setRefineHistory] = useState<RefinementEntry[]>([]);
+  const [review, setReview] = useState<DraftReview | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [agentLoop, setAgentLoop] = useState<AgentLoopSummary | null>(null);
+  const [pushResult, setPushResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pastSendsContext, setPastSendsContext] = useState<PastSendForContext[]>([]);
+  const [subjectSpecialist, setSubjectSpecialist] = useState<SubjectSpecialistResult | null>(null);
+  const [duplicateWarning, setDuplicateWarning] = useState<{ name: string; generatedAt: string; community: string } | null>(null);
+  const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
+  const [currentDraftSaved, setCurrentDraftSaved] = useState(false);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const pendingHashRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/communities")
+      .then((r) => r.json())
+      .then((d) => {
+        setCommunities(d.communities);
+        if (d.communities.length > 0) {
+          setSelectedSlug((prev) => prev || d.communities[0].slug);
+        }
+      });
+    setSavedDrafts(getSavedDrafts());
+  }, []);
+
+  async function hashFile(file: File): Promise<string> {
+    const buf = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  async function handleFileChange(file: File | null) {
+    setPdf(file);
+    setDuplicateWarning(null);
+    pendingHashRef.current = null;
+    if (!file) return;
+    const hash = await hashFile(file);
+    pendingHashRef.current = hash;
+    const match = getPdfHistory().find((r) => r.hash === hash || r.name === file.name);
+    if (match) {
+      setDuplicateWarning({
+        name: match.name,
+        generatedAt: match.generatedAt,
+        community: match.community,
+      });
+    }
+  }
+
+  async function generateDraft() {
+    if (!pdf || !selectedSlug) return;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setStage("drafting");
+    setError(null);
+    setExtracted(null);
+    setHtml("");
+    setPushResult(null);
+    setRefineHistory([]);
+    setReview(null);
+    setReviewError(null);
+    setAgentLoop(null);
+    setPastSendsContext([]);
+    setSubjectSpecialist(null);
+    setCurrentDraftSaved(false);
+
+    const fd = new FormData();
+    fd.append("file", pdf);
+    fd.append("communitySlug", selectedSlug);
+
+    try {
+      const res = await fetch("/api/draft-from-pdf", {
+        method: "POST",
+        body: fd,
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setError(data.error ?? "Draft failed");
+        setStage("idle");
+        return;
+      }
+      setExtracted(data.extracted);
+      setHtml(data.html);
+      setHeroImageUrl(data.heroImageUrl);
+      setSecondaryImageUrl(data.secondaryImageUrl);
+      setGalleryImageUrls(data.galleryImageUrls ?? []);
+      setImageCount(data.imageCount ?? 0);
+      setReview(data.review ?? null);
+      setAgentLoop(data.agentLoop ?? null);
+      setPastSendsContext(data.pastSendsContext ?? []);
+      setSubjectSpecialist(data.subjectSpecialist ?? null);
+      setStage("preview");
+      if (pendingHashRef.current) {
+        savePdfRecord(pendingHashRef.current, pdf.name, selectedSlug);
+      }
+      setDuplicateWarning(null);
+    } catch (e: any) {
+      if (e?.name === "AbortError") {
+        setStage("idle");
+        return;
+      }
+      setError(String(e));
+      setStage("idle");
+    }
+  }
+
+  function cancelGeneration() {
+    abortControllerRef.current?.abort();
+    setStage("idle");
+    setError(null);
+  }
+
+  async function runReview(targetExtracted?: ExtractedFlyer, targetSlug?: string) {
+    const flyer = targetExtracted ?? extracted;
+    const slug = targetSlug ?? selectedSlug;
+    if (!flyer || !slug) return;
+    setReviewing(true);
+    setReviewError(null);
+    setReview(null);
+    try {
+      const res = await fetch("/api/critique-eblast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extracted: flyer, communitySlug: slug }),
+      });
+      const data = await res.json();
+      if (data.ok) setReview(data.review);
+      else setReviewError(data.error ?? "Review failed");
+    } catch (e: any) {
+      setReviewError(String(e));
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  async function refineDraft() {
+    if (!extracted || !refineInput.trim() || !selectedSlug) return;
+    const instruction = refineInput.trim();
+    setStage("refining");
+    setError(null);
+    setRefineInput("");
+
+    try {
+      const res = await fetch("/api/refine-eblast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current: extracted,
+          instruction,
+          communitySlug: selectedSlug,
+          heroImageUrl,
+          secondaryImageUrl,
+          galleryImageUrls,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setError(data.error ?? "Refinement failed");
+        setRefineHistory((h) => [...h, { instruction, ok: false }]);
+        setStage("preview");
+        return;
+      }
+      setExtracted(data.extracted);
+      setHtml(data.html);
+      setRefineHistory((h) => [...h, { instruction, ok: true }]);
+      setCurrentDraftSaved(false);
+      setStage("preview");
+      runReview(data.extracted, selectedSlug);
+    } catch (e: any) {
+      setError(String(e));
+      setRefineHistory((h) => [...h, { instruction, ok: false }]);
+      setStage("preview");
+    }
+  }
+
+  async function pushDraft() {
+    if (!extracted || !html || !selectedSlug) return;
+    setStage("pushing");
+    setError(null);
+
+    try {
+      const res = await fetch("/api/push-eblast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          communitySlug: selectedSlug,
+          subject: extracted.subject,
+          previewText: extracted.previewText,
+          html,
+        }),
+      });
+      const data = await res.json();
+      setPushResult(data);
+      setStage("done");
+    } catch (e: any) {
+      setError(String(e));
+      setStage("preview");
+    }
+  }
+
+  function saveDraft() {
+    if (!extracted || !html) return;
+    const community = communities.find((c) => c.slug === selectedSlug);
+    const draft: SavedDraft = {
+      id: `${Date.now()}`,
+      communitySlug: selectedSlug,
+      communityName: community?.displayName ?? selectedSlug,
+      savedAt: new Date().toISOString(),
+      subject: extracted.subject,
+      extracted,
+      html,
+      heroImageUrl,
+      secondaryImageUrl,
+      galleryImageUrls,
+      imageCount,
+      review,
+      agentLoop,
+      pastSendsContext,
+      subjectSpecialist,
+    };
+    const updated = [draft, ...getSavedDrafts()].slice(0, MAX_SAVED_DRAFTS);
+    persistSavedDrafts(updated);
+    setSavedDrafts(updated);
+    setCurrentDraftSaved(true);
+  }
+
+  function discardDraft() {
+    setExtracted(null);
+    setHtml("");
+    setHeroImageUrl(undefined);
+    setSecondaryImageUrl(undefined);
+    setGalleryImageUrls([]);
+    setImageCount(0);
+    setReview(null);
+    setAgentLoop(null);
+    setPastSendsContext([]);
+    setSubjectSpecialist(null);
+    setRefineHistory([]);
+    setRefineInput("");
+    setPushResult(null);
+    setError(null);
+    setCurrentDraftSaved(false);
+    setStage("idle");
+  }
+
+  function loadSavedDraft(draft: SavedDraft) {
+    setSelectedSlug(draft.communitySlug);
+    setExtracted(draft.extracted);
+    setHtml(draft.html);
+    setHeroImageUrl(draft.heroImageUrl);
+    setSecondaryImageUrl(draft.secondaryImageUrl);
+    setGalleryImageUrls(draft.galleryImageUrls);
+    setImageCount(draft.imageCount);
+    setReview(draft.review ?? null);
+    setAgentLoop(draft.agentLoop ?? null);
+    setPastSendsContext(draft.pastSendsContext ?? []);
+    setSubjectSpecialist(draft.subjectSpecialist ?? null);
+    setRefineHistory([]);
+    setRefineInput("");
+    setPushResult(null);
+    setError(null);
+    setCurrentDraftSaved(true);
+    setStage("preview");
+  }
+
+  function deleteSavedDraft(id: string) {
+    const updated = getSavedDrafts().filter((d) => d.id !== id);
+    persistSavedDrafts(updated);
+    setSavedDrafts(updated);
+  }
+
+  function dismissDuplicateWarning() {
+    setDuplicateWarning(null);
+  }
+
+  const value: DraftContextValue = {
+    communities,
+    selectedSlug, setSelectedSlug,
+    pdf,
+    stage,
+    extracted,
+    html,
+    heroImageUrl, secondaryImageUrl, galleryImageUrls,
+    imageCount,
+    refineInput, setRefineInput,
+    refineHistory,
+    review,
+    reviewing, reviewError,
+    agentLoop,
+    pushResult,
+    error,
+    pastSendsContext,
+    subjectSpecialist,
+    duplicateWarning,
+    savedDrafts,
+    currentDraftSaved,
+    handleFileChange,
+    generateDraft, cancelGeneration,
+    refineDraft,
+    runReview,
+    pushDraft,
+    saveDraft, discardDraft,
+    loadSavedDraft, deleteSavedDraft,
+    dismissDuplicateWarning,
+  };
+
+  return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>;
+}
+
+export function useDraft(): DraftContextValue {
+  const ctx = useContext(DraftContext);
+  if (!ctx) throw new Error("useDraft must be used within DraftProvider");
+  return ctx;
+}

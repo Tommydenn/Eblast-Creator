@@ -49,8 +49,8 @@ const extractFlyerToolSchema = {
     },
 
     pullQuoteEyebrow: { type: "string", description: "Optional eyebrow above the pull-quote block. Omit if it would just echo the ctaEyebrow." },
-    pullQuote: { type: "string", description: "A 1–2 sentence value prop or verbatim quote from the flyer. Must NOT be a paraphrase of the headline or heroHook — it should be the most credible, specific thing the flyer says." },
-    pullQuoteAttribution: { type: "string" },
+    pullQuote: { type: "string", description: "A verbatim or near-verbatim line taken DIRECTLY from the flyer — a tagline printed on the flyer, a quote from a named person, or the flyer's most specific value statement word-for-word. Do NOT compose a new sentence. Do NOT paraphrase. If the flyer contains no quotable line, leave this field EMPTY." },
+    pullQuoteAttribution: { type: "string", description: "The name or role of the person quoted, exactly as it appears in the flyer (e.g. 'Chef Marco Rossi' or 'Mary B., Resident'). Leave EMPTY if no attribution is in the flyer — never invent one." },
 
     ctaEyebrow: { type: "string", description: "Action label above the final CTA block. Must NOT repeat the hero eyebrow. Verb-led and specific: 'Reserve Your Seat', 'Save Saturday', 'Join the Table'." },
     ctaHeadline: { type: "string", description: "CTA headline — state the date+time OR a final reason to act (not the event name again). E.g. 'Saturday, June 28 · 5:30 PM' or 'Seating Is Limited'." },
@@ -123,6 +123,7 @@ ${hasVoice ? voiceBlock : fallbackVoice}
 
 Inviolable rules
 - Never invent facts. Every name, date, phone number, time, location, and quote in your output must appear in the flyer. If a detail isn't in the flyer, leave that field empty.
+- pullQuote must be a verbatim or near-verbatim lift from the flyer's printed text — not a sentence you composed. If no quotable line exists in the flyer, leave pullQuote AND pullQuoteAttribution EMPTY. A composed value proposition is not a quote.
 - Use the community's actual name (${community.displayName}) — never generic substitutes like "our community" or "the community."${trackingPhoneNote}
 - The CTA href is the tracking number above (or a real mailto:/https:// from the flyer). The CTA label is human-formatted ("Call 920.504.3028", not "Click here").
 - Honor the flyer's intent. If the flyer is event-focused, your email is event-focused. Do not invent angles the flyer doesn't support.${pastSendsBlock}

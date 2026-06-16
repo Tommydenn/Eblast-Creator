@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { Header } from "@/components/Header";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
 import { IntelligenceApplied } from "@/components/IntelligenceApplied";

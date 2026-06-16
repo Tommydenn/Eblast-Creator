@@ -238,12 +238,20 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     fetch("/api/communities")
       .then((r) => r.json())
       .then((d) => {
+        if (!Array.isArray(d.communities)) return;
         setCommunities(d.communities);
         if (d.communities.length > 0) {
           setSelectedSlug((prev) => prev || d.communities[0].slug);
         }
+      })
+      .catch((err) => {
+        console.error("[DraftProvider] Failed to load communities:", err);
       });
-    setSavedDrafts(getSavedDrafts());
+    try {
+      setSavedDrafts(getSavedDrafts());
+    } catch (err) {
+      console.error("[DraftProvider] Failed to load saved drafts:", err);
+    }
   }, []);
 
   async function hashFile(file: File): Promise<string> {

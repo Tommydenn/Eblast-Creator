@@ -100,6 +100,20 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
         <header className="mt-3 mb-8">
           <div className="flex items-start justify-between gap-8 border-b border-sand-200 pb-6">
             <div>
+              {(() => {
+                const logo =
+                  c.logos.find(l => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary") ??
+                  c.logos.find(l => l.onColor === "light" || l.onColor === "any") ??
+                  c.logos[0];
+                return logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={logo.url}
+                    alt={c.displayName}
+                    className="mb-4 h-14 w-auto max-w-[280px] object-contain"
+                  />
+                ) : null;
+              })()}
               <p className="text-[10.5px] font-medium uppercase tracking-[0.16em]" style={{ color: c.brand.accent }}>
                 {c.brandFamily ?? c.shortName}
                 {c.careTypes && c.careTypes.length > 0 && (

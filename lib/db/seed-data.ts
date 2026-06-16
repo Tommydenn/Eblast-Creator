@@ -10,7 +10,18 @@
 //
 // To re-seed: `npm run db:seed` (idempotent — uses INSERT...ON CONFLICT).
 
-import type { NewCommunityRow } from "./schema";
+import type { NewCommunityRow, CommunityLogo } from "./schema";
+
+// Helpers for the two common logo patterns
+function twoLogos(slug: string): CommunityLogo[] {
+  return [
+    { url: `/logos/${slug}/primary.png`, variant: "primary", onColor: "light" },
+    { url: `/logos/${slug}/knockout.png`, variant: "knockout", onColor: "dark" },
+  ];
+}
+function oneLogoLight(slug: string): CommunityLogo[] {
+  return [{ url: `/logos/${slug}/primary.png`, variant: "primary", onColor: "light" }];
+}
 
 export interface SeedSender {
   name: string;
@@ -135,6 +146,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "920-504-3028",
       hubspot: {},
       brand: CARETTA_BRAND,
+      logos: twoLogos("caretta-bellevue"),
       taglines: [
         "Caretta seeks to enrich the rhythms of our residents' lives by fostering meaningful relationships, creating engaging experiences, and providing exceptional care.",
       ],
@@ -174,6 +186,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "715-334-8959",
       hubspot: {},
       brand: CARETTA_BRAND,
+      logos: twoLogos("caretta-eau-claire"),
       socials: {},
       marketingDirector: { name: "Amelia Ozell", email: "aozell@greatlakesmc.com" },
     },
@@ -196,6 +209,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "608-351-0755",
       hubspot: {},
       brand: CARETTA_BRAND,
+      logos: twoLogos("caretta-holmen"),
       socials: {},
       marketingDirector: { name: "Amelia Ozell", email: "aozell@greatlakesmc.com" },
     },
@@ -218,6 +232,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "651-319-8608",
       hubspot: {},
       brand: CARETTA_BRAND,
+      logos: twoLogos("caretta-maplewood"),
       socials: {},
       marketingDirector: { name: "Amelia Ozell", email: "aozell@greatlakesmc.com" },
     },
@@ -240,6 +255,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "320-746-5582",
       hubspot: {},
       brand: TALAMORE_BRAND,
+      logos: twoLogos("talamore-st-cloud"),
       socials: {},
     },
     senders: [
@@ -259,6 +275,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "608-688-8153",
       hubspot: {},
       brand: TALAMORE_BRAND,
+      logos: twoLogos("talamore-sun-prairie"),
       socials: {},
     },
     senders: [{ name: "Shannon Francis", email: "sfrancis@talamoresunprairie.com", isPrimary: true }],
@@ -275,6 +292,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "651-240-3938",
       hubspot: {},
       brand: TALAMORE_BRAND,
+      logos: twoLogos("talamore-woodbury"),
       socials: {},
     },
     senders: [
@@ -298,6 +316,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "952-295-3158",
       hubspot: {},
       brand: HAYDEN_GROVE_BRAND,
+      logos: twoLogos("hayden-grove-bloomington"),
       socials: {},
     },
     senders: [
@@ -317,6 +336,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "612-260-9862",
       hubspot: {},
       brand: HAYDEN_GROVE_BRAND,
+      logos: twoLogos("hayden-grove-st-anthony"),
       socials: {},
     },
     senders: [
@@ -339,6 +359,7 @@ export const seedCommunities: SeedCommunity[] = [
       websiteUrl: null,
       hubspot: {},
       brand: THE_GLENN_BRAND,
+      logos: [],
       socials: {},
     },
     senders: [], // TODO: confirm sender per The Glenn Buffalo AL
@@ -355,6 +376,7 @@ export const seedCommunities: SeedCommunity[] = [
       websiteUrl: null,
       hubspot: {},
       brand: THE_GLENN_BRAND,
+      logos: [],
       socials: {},
     },
     senders: [],
@@ -371,6 +393,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "952-230-1423",
       hubspot: {},
       brand: THE_GLENN_BRAND,
+      logos: oneLogoLight("the-glenn-hopkins"),
       socials: {},
     },
     senders: [],
@@ -387,6 +410,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "952-230-2242",
       hubspot: {},
       brand: THE_GLENN_BRAND,
+      logos: oneLogoLight("the-glenn-minnetonka"),
       socials: {},
     },
     senders: [], // YTD shows "The Glenn Minnetonka" subjects via @greatlakesmc.com — confirm sender
@@ -403,6 +427,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "763-489-2024",
       hubspot: {},
       brand: THE_GLENN_BRAND,
+      logos: twoLogos("the-glenn-w-st-paul"),
       socials: {},
     },
     senders: [],
@@ -420,6 +445,7 @@ export const seedCommunities: SeedCommunity[] = [
       websiteUrl: null,
       hubspot: {},
       brand: DEFAULT_BRAND,
+      logos: [],
       socials: {},
     },
     senders: [],
@@ -436,6 +462,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "507-585-4925",
       hubspot: {},
       brand: DEFAULT_BRAND,
+      logos: [],
       socials: {},
     },
     senders: [],
@@ -454,6 +481,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "720-538-8605",
       hubspot: {},
       brand: AMIRA_CHOICE_BRAND,
+      logos: twoLogos("amira-choice-arvada"),
       socials: {},
     },
     senders: [],
@@ -470,6 +498,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "952-800-9203",
       hubspot: {},
       brand: AMIRA_CHOICE_BRAND,
+      logos: twoLogos("amira-choice-bloomington"),
       socials: {},
     },
     // YTD shows a sender alias literally named "Amira Choice Bloomington" via
@@ -490,6 +519,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "763-325-8107",
       hubspot: {},
       brand: GLOBAL_POINTE_BRAND,
+      logos: twoLogos("global-pointe"),
       socials: {},
     },
     senders: [{ name: "Lisa Zehner", email: "lzehner@globalpointeseniorliving.com", isPrimary: true }],
@@ -506,6 +536,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "651-381-4621",
       hubspot: {},
       brand: SEVEN_HILLS_BRAND,
+      logos: oneLogoLight("seven-hills"),
       socials: {},
     },
     senders: [{ name: "Angela Elwell", email: "aelwell@sevenhillsseniorliving.com", isPrimary: true }],
@@ -522,6 +553,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "763-342-5170",
       hubspot: {},
       brand: DEFAULT_BRAND,
+      logos: oneLogoLight("orchards-of-minnetonka"),
       socials: {},
     },
     senders: [],
@@ -538,6 +570,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "218-245-4147",
       hubspot: {},
       brand: PILLARS_BRAND,
+      logos: oneLogoLight("the-pillars-of-grand-rapids"),
       socials: {},
     },
     senders: [],

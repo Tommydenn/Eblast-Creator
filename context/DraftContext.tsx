@@ -43,6 +43,10 @@ export interface ExtractedFlyer {
   heroImageDescription: string;
   audienceHints: string[];
   drafterRationale?: string;
+  // Inline-edit overrides for community-derived footer/gallery text.
+  galleryLabel?: string;
+  footerName?: string;
+  footerAddress?: string;
 }
 
 export type FindingSeverity = "blocker" | "important" | "nice_to_have";
@@ -221,6 +225,12 @@ export interface DraftContextValue {
   generateDraft: () => Promise<void>;
   cancelGeneration: () => void;
   refineDraft: () => Promise<void>;
+  /** Revert the most recent successful refine (single-level undo). */
+  undoRefine: () => void;
+  /** True when the last refine can still be undone. */
+  canUndoRefine: boolean;
+  /** Instruction text of the refine that undo would revert, for the button label. */
+  lastRefineInstruction: string | null;
   runReview: (targetExtracted?: ExtractedFlyer, targetSlug?: string) => Promise<void>;
   pushDraft: () => Promise<void>;
   /** Directly swap subject + preview text without any AI call. */
@@ -263,6 +273,18 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
   const [currentDraftSaved, setCurrentDraftSaved] = useState(false);
   const [htmlDirty, setHtmlDirty] = useState(false);
+  // Single-level undo for the last successful refine. Captures everything a
+  // refine mutates so the user can revert one AI edit.
+  const [undoSnapshot, setUndoSnapshot] = useState<{
+    extracted: ExtractedFlyer;
+    html: string;
+    heroImageUrl?: string;
+    secondaryImageUrl?: string;
+    galleryImageUrls: string[];
+    htmlDirty: boolean;
+    refineHistory: RefinementEntry[];
+    instruction: string;
+  } | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const pendingHashRef = useRef<string | null>(null);
@@ -372,6 +394,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setSubjectSpecialist(null);
     setCurrentDraftSaved(false);
     setHtmlDirty(false);
+    setUndoSnapshot(null);
 
     const fd = new FormData();
     fd.append("file", pdf);
@@ -448,6 +471,18 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (!extracted || !refineInput.trim() || !selectedSlug) return;
     const instruction = refineInput.trim();
 
+    // Snapshot the pre-refine state so this AI edit can be undone.
+    const prevSnapshot = {
+      extracted,
+      html,
+      heroImageUrl,
+      secondaryImageUrl,
+      galleryImageUrls,
+      htmlDirty,
+      refineHistory,
+      instruction,
+    };
+
     let nextHero = heroImageUrl;
     let nextSecondary = secondaryImageUrl;
     let nextGallery = galleryImageUrls;
@@ -491,12 +526,26 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setHtmlDirty(false);
       setRefineHistory((h) => [...h, { instruction, ok: true, changedFields: data.changedFields }]);
       setCurrentDraftSaved(false);
+      setUndoSnapshot(prevSnapshot);
       setStage("preview");
     } catch (e: any) {
       setError(String(e));
       setRefineHistory((h) => [...h, { instruction, ok: false }]);
       setStage("preview");
     }
+  }
+
+  function undoRefine() {
+    if (!undoSnapshot) return;
+    setExtracted(undoSnapshot.extracted);
+    setHtml(undoSnapshot.html);
+    setHeroImageUrl(undoSnapshot.heroImageUrl);
+    setSecondaryImageUrl(undoSnapshot.secondaryImageUrl);
+    setGalleryImageUrls(undoSnapshot.galleryImageUrls);
+    setHtmlDirty(undoSnapshot.htmlDirty);
+    setRefineHistory(undoSnapshot.refineHistory);
+    setCurrentDraftSaved(false);
+    setUndoSnapshot(null);
   }
 
   function swapSubjectLine(subject: string, previewText: string) {
@@ -609,6 +658,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setCurrentDraftSaved(false);
     setHtmlDirty(false);
+    setUndoSnapshot(null);
     setStage("idle");
   }
 
@@ -630,6 +680,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setCurrentDraftSaved(true);
     setHtmlDirty(false);
+    setUndoSnapshot(null);
     setStage("preview");
   }
 
@@ -668,6 +719,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     handleFileChange,
     generateDraft, cancelGeneration,
     refineDraft,
+    undoRefine,
+    canUndoRefine: undoSnapshot !== null,
+    lastRefineInstruction: undoSnapshot?.instruction ?? null,
     runReview,
     pushDraft,
     swapSubjectLine,

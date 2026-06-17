@@ -54,6 +54,17 @@ export interface ExtractedFlyer {
   audienceHints: string[];
 
   /**
+   * Inline-edit overrides for text that is normally pulled from the community
+   * record (not the flyer). The drafter never sets these; they're only written
+   * when the user edits that text directly in the preview, so the renderer can
+   * prefer them over the community defaults. Keeps "every visible word is
+   * editable" working without mutating the saved community record.
+   */
+  galleryLabel?: string;   // default: "A Look Around {shortName}"
+  footerName?: string;     // default: community.displayName
+  footerAddress?: string;  // default: "{street} · {city}, {state} {zip}"
+
+  /**
    * 1–2 sentences from the drafter explaining which past-send patterns or
    * brand rules they leaned on. Surfaced in the UI under "Intelligence
    * applied" so the user can see how the agent's memory shaped the draft.

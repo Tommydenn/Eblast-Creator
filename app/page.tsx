@@ -143,7 +143,7 @@ export default function Home() {
     htmlDirty, syncHtml, swapSubjectLine,
     handleFileChange,
     generateDraft, cancelGeneration,
-    refineDraft,
+    refineDraft, undoRefine, canUndoRefine, lastRefineInstruction,
     saveDraft, discardDraft,
     loadSavedDraft, deleteSavedDraft,
     pushDraft,
@@ -341,15 +341,30 @@ export default function Home() {
                       disabled={stage === "refining"}
                     />
                     <div className="flex items-center justify-between gap-3">
-                      <Button
-                        onClick={refineDraft}
-                        disabled={!refineInput.trim() || stage === "refining"}
-                        loading={stage === "refining"}
-                        variant="secondary"
-                        size="sm"
-                      >
-                        {stage === "refining" ? "Refining…" : "Apply change"}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={refineDraft}
+                          disabled={!refineInput.trim() || stage === "refining"}
+                          loading={stage === "refining"}
+                          variant="secondary"
+                          size="sm"
+                        >
+                          {stage === "refining" ? "Refining…" : "Apply change"}
+                        </Button>
+                        {canUndoRefine && stage !== "refining" && (
+                          <button
+                            type="button"
+                            onClick={undoRefine}
+                            title={lastRefineInstruction ? `Undo: "${lastRefineInstruction}"` : "Undo last refine"}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-sand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
+                          >
+                            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                              <path d="M3 8a5 5 0 1 1 1.5 3.5M3 8V4.5M3 8h3.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            Undo edit
+                          </button>
+                        )}
+                      </div>
                       {refineHistory.length > 0 && (
                         <span className="text-[11px] text-sand-500">
                           {refineHistory.length} refinement{refineHistory.length === 1 ? "" : "s"} applied

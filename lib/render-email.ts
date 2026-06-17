@@ -75,7 +75,7 @@ export function buildEblastHtml(
   const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "rgba(255,255,255,0.7)" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
   const logoContent = chosenLogo
-    ? `<img src="${chosenLogo.url}" alt="${escapeHtml(community.displayName)}" height="72" style="display:block; height:72px; width:auto; max-width:260px; border:0; margin:0 auto;">`
+    ? `<img src="${chosenLogo.url}" alt="${escapeHtml(community.displayName)}" height="88" style="display:block; height:88px; width:auto; max-width:300px; border:0; margin:0 auto;">`
     : textFallback;
 
   // Always use the community's CallRail tracking number for the CTA phone.
@@ -96,7 +96,7 @@ export function buildEblastHtml(
 
   const header = `
   <tr data-section="Header">
-    <td style="padding: 28px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
+    <td style="padding: 22px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
       ${logoContent}
     </td>
   </tr>`;
@@ -120,8 +120,8 @@ export function buildEblastHtml(
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 6px auto 22px auto;">
               <tr>
                 <td style="border-top: 1px solid rgba(255,255,255,0.3); border-bottom: 1px solid rgba(255,255,255,0.3); padding: 14px 26px;" align="center">
-                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0;">${escapeHtml(flyer.eventDate ?? "")}${flyer.eventTime ? ` · ${escapeHtml(flyer.eventTime)}` : ""}</p>
-                  ${flyer.eventLocation ? `<p style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 4px; color: #E8DDC4; text-transform: uppercase; margin: 6px 0 0 0;">${escapeHtml(flyer.eventLocation)}</p>` : ""}
+                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>
+                  ${flyer.eventLocation ? `<p data-field="eventLocation" style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 4px; color: #E8DDC4; text-transform: uppercase; margin: 6px 0 0 0;">${escapeHtml(flyer.eventLocation)}</p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -196,7 +196,7 @@ export function buildEblastHtml(
     return `
   <tr data-section="Photo Gallery">
     <td style="padding: 44px 36px 12px 36px;" align="center">
-      <p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">A Look Around ${escapeHtml(community.shortName)}</p>
+      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${escapeHtml(flyer.galleryLabel ?? `A Look Around ${community.shortName}`)}</p>
     </td>
   </tr>
   <tr data-section="Photo Gallery">
@@ -238,12 +238,13 @@ export function buildEblastHtml(
     </td>
   </tr>`;
 
+  const footerAddressDefault = `${community.address.street ?? ""} · ${community.address.city ?? ""}, ${community.address.state ?? ""} ${community.address.zip ?? ""}`;
   const footer = `
   <tr data-section="Footer">
     <td style="padding: 36px 36px 28px 36px;" align="center">
-      <p style="font-family: ${brand.fontHeadline}; font-size: 18px; color: ${brand.primary}; letter-spacing: 1px; margin: 0 0 4px 0;">${escapeHtml(community.displayName)}</p>
+      <p data-field="footerName" style="font-family: ${brand.fontHeadline}; font-size: 18px; color: ${brand.primary}; letter-spacing: 1px; margin: 0 0 4px 0;">${escapeHtml(flyer.footerName ?? community.displayName)}</p>
       <p style="font-family: ${brand.fontBody}; font-size: 13px; color: #6B6B6B; line-height: 1.7; margin: 0;">
-        ${escapeHtml(community.address.street ?? "")} · ${escapeHtml(community.address.city ?? "")}, ${escapeHtml(community.address.state ?? "")} ${escapeHtml(community.address.zip ?? "")}<br>
+        <span data-field="footerAddress">${escapeHtml(flyer.footerAddress ?? footerAddressDefault)}</span><br>
         ${community.websiteUrl ? `<a href="${community.websiteUrl}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.websiteUrl.replace(/^https?:\/\//, ""))}</a>` : ""}
         ${community.websiteUrl && community.email ? " · " : ""}
         ${community.email ? `<a href="mailto:${community.email}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.email)}</a>` : ""}

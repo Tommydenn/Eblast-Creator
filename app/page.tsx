@@ -95,10 +95,12 @@ function SavedDraftsPanel({
               <p className="truncate text-sm font-medium text-sand-900">{d.subject}</p>
               <p className="mt-0.5 text-[11px] text-sand-500">
                 {d.communityName} ·{" "}
-                {new Date(d.savedAt).toLocaleDateString(undefined, {
+                {new Date(d.savedAt).toLocaleString(undefined, {
                   month: "short",
                   day: "numeric",
                   year: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
                 })}
               </p>
             </div>
@@ -184,7 +186,7 @@ export default function Home() {
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="community">Community</Label>
-                <Select id="community" value={selectedSlug} onChange={(e) => setSelectedSlug(e.target.value)}>
+                <Select id="community" value={selectedSlug} onChange={(e) => setSelectedSlug(e.target.value)} disabled={stage === "drafting"}>
                   {communities.map((c) => (
                     <option key={c.slug} value={c.slug}>
                       {c.displayName}
@@ -222,7 +224,14 @@ export default function Home() {
                   id="pdf"
                   type="file"
                   accept="application/pdf"
-                  onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+                  disabled={stage === "drafting"}
+                  onChange={(e) => {
+                    // Only act on a real selection. Opening the picker and
+                    // hitting Cancel fires onChange with an empty FileList —
+                    // ignore it so the existing file isn't wiped.
+                    const file = e.target.files?.[0];
+                    if (file) handleFileChange(file);
+                  }}
                   className="h-auto py-2 file:mr-3 file:rounded file:border-0 file:bg-sand-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-sand-700 hover:file:bg-sand-200"
                 />
               </div>
@@ -384,22 +393,54 @@ export default function Home() {
                         </span>
                       )}
                     </div>
+                    {(() => {
+                      // Immediate feedback on the last refine — especially when
+                      // nothing changed, so a no-op never looks like a silent success.
+                      const last = refineHistory[refineHistory.length - 1];
+                      if (!last || !last.ok || (!last.note && !last.noChange)) return null;
+                      return (
+                        <div
+                          className={`rounded-md border px-3 py-2 text-xs leading-relaxed ${
+                            last.noChange
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : "border-sand-200 bg-sand-50 text-sand-700"
+                          }`}
+                        >
+                          {last.noChange
+                            ? last.note ??
+                              "No change was applied. Try rephrasing — name the specific text or photo you want changed."
+                            : last.note}
+                        </div>
+                      );
+                    })()}
                     {refineHistory.length > 0 && (
                       <details>
                         <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.12em] text-sand-500">
                           History
                         </summary>
                         <ol className="mt-2 list-decimal pl-5 text-xs leading-relaxed text-sand-600 space-y-1">
-                          {refineHistory.map((r, i) => (
-                            <li key={i} className={r.ok ? "" : "text-clay-700"}>
-                              <span>{r.instruction}</span>
-                              {r.ok && r.changedFields && r.changedFields.length > 0 && (
-                                <span className="ml-1.5 text-[10px] font-medium text-sand-400">
-                                  → {r.changedFields.join(", ")}
-                                </span>
-                              )}
-                            </li>
-                          ))}
+                          {refineHistory.map((r, i) => {
+                            const parts = [...(r.changedFields ?? [])];
+                            if (r.imagesChanged) parts.push("Photos");
+                            return (
+                              <li key={i} className={r.ok ? "" : "text-clay-700"}>
+                                <span>{r.instruction}</span>
+                                {r.ok && parts.length > 0 && (
+                                  <span className="ml-1.5 text-[10px] font-medium text-sand-400">
+                                    → {parts.join(", ")}
+                                  </span>
+                                )}
+                                {r.ok && r.noChange && (
+                                  <span className="ml-1.5 text-[10px] font-medium text-amber-600">
+                                    → no change applied
+                                  </span>
+                                )}
+                                {!r.ok && (
+                                  <span className="ml-1.5 text-[10px] font-medium text-clay-600">→ failed</span>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ol>
                       </details>
                     )}
@@ -467,10 +508,16 @@ export default function Home() {
                             <p className="text-sm leading-relaxed text-sand-800">{review.summary}</p>
                           </div>
 
-                          {/* Findings — send_strategy and craft are shown in Intelligence Applied, not here */}
+                          {/* Findings — send_strategy and craft are shown in Intelligence Applied, not here.
+                              Alt-text / image-direction findings are also dropped: alt text isn't visible or
+                              editable in the app, so flagging it is a dead end (also scrubs stale saved drafts). */}
                           {(() => {
+                            const ALT_FIELDS = ["heroImageAlt", "secondaryImageAlt", "heroImageDescription", "secondaryImageDescription"];
                             const reviewerFindings = review.findings.filter(
-                              (f) => f.category !== "send_strategy" && f.category !== "craft"
+                              (f) =>
+                                f.category !== "send_strategy" &&
+                                f.category !== "craft" &&
+                                !(f.category === "image_quality" && f.field && ALT_FIELDS.includes(f.field))
                             );
                             return reviewerFindings.length === 0 ? (
                             <p className="rounded-md border border-dashed border-forest-200 bg-forest-50/50 px-3 py-2.5 text-xs text-forest-700">

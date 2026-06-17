@@ -40,6 +40,17 @@ function pickTextColor(bgHex: string): string {
   return lum > 0.4 ? "#1a1a1a" : "#ffffff";
 }
 
+// Chroma proxy: spread of the RGB channels, 0..255. Near 0 = neutral gray,
+// higher = a real color (warm beige/cream sit ~10-13; true grays sit ~2-7).
+function chroma255(hex: string): number {
+  const h = hex.replace("#", "");
+  if (h.length < 6) return 0;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return Math.max(r, g, b) - Math.min(r, g, b);
+}
+
 // Text color for a button. The button label should match the surrounding
 // section's text color so the button reads as part of that section — we use it
 // in every case where it stays legible on the button fill. We only override it
@@ -77,28 +88,43 @@ export function buildEblastHtml(
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
-  // Determine if brand.background is light or dark so we can pick the logo
-  // variant designed for that background. The header is ALWAYS brand.background.
-  const bgLum = (() => {
-    const h = brand.background.replace("#", "");
-    const r = parseInt(h.slice(0, 2), 16) / 255;
-    const g = parseInt(h.slice(2, 4), 16) / 255;
-    const b = parseInt(h.slice(4, 6), 16) / 255;
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  })();
-  const bgIsLight = bgLum > 0.4;
+  // Header color rule: the header must ALWAYS be a light, non-gray surface —
+  // white (matching the story section's white body), or the community's own
+  // warm/beige surface if it has one. The only exception is a genuinely DARK
+  // brand surface, which gets a dark header AND forces a light/knockout logo.
+  //
+  // Classify brand.background three ways: dark vs light, and (within light)
+  // gray vs warm/beige. brand.background is used directly only when it's a warm
+  // light surface; gray surfaces fall back to white.
+  const bgLum = relLuminance(brand.background) ?? 1; // treat malformed as light
+  const bgChroma = chroma255(brand.background);
+  // Brand grays sit at chroma <=10 (cool grays #B1B3B6=5/#C1C6C8=7/#DDDDDB=2 and
+  // the warm "Stone" #DBD6D1=10); real cream surfaces sit higher (#F1ECE6=11,
+  // #FBF7EE=13). 10 cleanly separates gray-ish surfaces from true beige/cream.
+  const GRAY_CHROMA_MAX = 10;
+  const surfaceIsLight = bgLum > 0.4;
+  const surfaceIsGray = surfaceIsLight && bgChroma <= GRAY_CHROMA_MAX;
 
-  const chosenLogo = bgIsLight
-    ? (community.logos.find(l => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary") ??
-       community.logos.find(l => l.onColor === "light" || l.onColor === "any") ??
-       community.logos[0])
-    : (community.logos.find(l => l.onColor === "dark" && l.variant === "primary") ??
-       community.logos.find(l => l.onColor === "dark") ??
-       community.logos[0]);
-
-  const headerBg = brand.background;
+  // A dark header is only allowed when the brand surface is genuinely dark.
+  const isDarkHeader = !surfaceIsLight;
+  const headerBg = isDarkHeader
+    ? brand.background // genuinely dark brand surface -> dark header
+    : surfaceIsGray
+      ? "#ffffff" // gray surface -> force white (never a gray header)
+      : brand.background; // warm/beige light surface -> keep it
   const headerStripe = brand.accent;
-  const isDarkHeader = !bgIsLight;
+
+  // Logo follows the HEADER, not the raw surface. On a light header use the
+  // light/primary logo; on a dark header require a dark/knockout (or "any")
+  // logo — if none exists, fall through to the white text wordmark below.
+  const lightLogo =
+    community.logos.find(l => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary") ??
+    community.logos.find(l => l.onColor === "light" || l.onColor === "any") ??
+    community.logos[0];
+  const darkLogo =
+    community.logos.find(l => (l.onColor === "dark" || l.onColor === "any") && (l.variant === "knockout" || l.variant === "primary")) ??
+    community.logos.find(l => l.onColor === "dark" || l.onColor === "any");
+  const chosenLogo = isDarkHeader ? (darkLogo ?? null) : lightLogo;
 
   // Text fallback when no logo asset is available.
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();

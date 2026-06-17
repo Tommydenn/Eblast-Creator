@@ -117,6 +117,12 @@ export interface RefinementEntry {
   ok: boolean;
   /** Fields changed by this refinement step, e.g. ["Headline", "Body text"]. */
   changedFields?: string[];
+  /** True if this refine rearranged/removed photos. */
+  imagesChanged?: boolean;
+  /** True if the refine produced no text or image change. */
+  noChange?: boolean;
+  /** Short note from the refiner (what changed, or why nothing did). */
+  note?: string;
 }
 
 /** Full restorable state for one undo/redo step around a refine. */
@@ -148,27 +154,6 @@ export interface SavedDraft {
   agentLoop?: AgentLoopSummary | null;
   pastSendsContext?: PastSendForContext[];
   subjectSpecialist?: SubjectSpecialistResult | null;
-}
-
-// ─── Image cycling helpers ────────────────────────────────────────────────────
-
-function isImageRelatedInstruction(instruction: string): boolean {
-  return /\b(image|images|photo|photos|picture|pictures|hero|gallery|secondary|swap)\b/i.test(instruction);
-}
-
-function cycleImages(
-  hero: string | undefined,
-  secondary: string | undefined,
-  gallery: string[],
-): { hero: string | undefined; secondary: string | undefined; gallery: string[] } {
-  const pool = [hero, secondary, ...gallery].filter((u): u is string => Boolean(u));
-  if (pool.length <= 1) return { hero, secondary, gallery };
-  const rotated = [...pool.slice(1), pool[0]];
-  return {
-    hero: rotated[0],
-    secondary: rotated.length > 1 ? rotated[1] : undefined,
-    gallery: rotated.slice(2),
-  };
 }
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
@@ -373,10 +358,12 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function handleFileChange(file: File | null) {
+    // Never clear an existing selection on a null/empty change (e.g. the user
+    // opened the file picker and cancelled). Only a real file mutates state.
+    if (!file) return;
     setPdf(file);
     setDuplicateWarning(null);
     pendingHashRef.current = null;
-    if (!file) return;
     const hash = await hashFile(file);
     pendingHashRef.current = hash;
     const match = getPdfHistory().find((r) => r.hash === hash || r.name === file.name);
@@ -497,25 +484,15 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       instruction,
     };
 
-    let nextHero = heroImageUrl;
-    let nextSecondary = secondaryImageUrl;
-    let nextGallery = galleryImageUrls;
-
-    if (isImageRelatedInstruction(instruction)) {
-      const cycled = cycleImages(heroImageUrl, secondaryImageUrl, galleryImageUrls);
-      nextHero = cycled.hero;
-      nextSecondary = cycled.secondary;
-      nextGallery = cycled.gallery;
-      setHeroImageUrl(nextHero);
-      setSecondaryImageUrl(nextSecondary);
-      setGalleryImageUrls(nextGallery);
-    }
-
     setStage("refining");
     setError(null);
     setRefineInput("");
 
     try {
+      // Images are never shuffled client-side anymore. We send the CURRENT
+      // image arrangement and the server returns a (possibly identical) one —
+      // photos only change when the user explicitly asked, via the model's
+      // imageLayout. This kills the old "edit text → images randomly rotate" bug.
       const res = await fetch("/api/refine-eblast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -523,9 +500,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           current: extracted,
           instruction,
           communitySlug: selectedSlug,
-          heroImageUrl: nextHero,
-          secondaryImageUrl: nextSecondary,
-          galleryImageUrls: nextGallery,
+          heroImageUrl,
+          secondaryImageUrl,
+          galleryImageUrls,
         }),
       });
       const data = await res.json();
@@ -537,8 +514,25 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
       setExtracted(data.extracted);
       setHtml(data.html);
+      // Apply the server-resolved image arrangement (unchanged unless the user
+      // explicitly asked to change photos).
+      if (data.images) {
+        setHeroImageUrl(data.images.hero ?? undefined);
+        setSecondaryImageUrl(data.images.secondary ?? undefined);
+        setGalleryImageUrls(data.images.gallery ?? []);
+      }
       setHtmlDirty(false);
-      setRefineHistory((h) => [...h, { instruction, ok: true, changedFields: data.changedFields }]);
+      setRefineHistory((h) => [
+        ...h,
+        {
+          instruction,
+          ok: true,
+          changedFields: data.changedFields,
+          imagesChanged: !!data.imagesChanged,
+          noChange: !!data.noChange,
+          note: typeof data.refineNote === "string" && data.refineNote.trim() ? data.refineNote.trim() : undefined,
+        },
+      ]);
       setCurrentDraftSaved(false);
       setUndoSnapshot(prevSnapshot);
       setRedoSnapshot(null); // a fresh refine invalidates any pending redo

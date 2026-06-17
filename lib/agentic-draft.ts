@@ -248,12 +248,13 @@ export async function agenticDraftLoop(opts: {
     if (actionable.length > 0) {
       const instruction = buildRefinementInstruction(review);
       iter.appliedSuggestions = actionable.map((f) => f.suggestion!);
-      currentDraft = await refineFlyerContent({
+      const refined = await refineFlyerContent({
         current: currentDraft,
         instruction,
         community: opts.community,
         pastSends: opts.pastSends,
       });
+      currentDraft = refined.flyer;
     }
   }
 

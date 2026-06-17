@@ -54,7 +54,7 @@ const extractFlyerToolSchema = {
 
     ctaEyebrow: { type: "string", description: "Action label above the final CTA block. Must NOT repeat the hero eyebrow. Verb-led and specific: 'Reserve Your Seat', 'Save Saturday', 'Join the Table'." },
     ctaHeadline: { type: "string", description: "CTA headline — state the date+time OR a final reason to act (not the event name again). E.g. 'Saturday, June 28 · 5:30 PM' or 'Seating Is Limited'." },
-    ctaSubline: { type: "string", description: "One supporting line that reduces friction or adds urgency without hype. E.g. 'Complimentary for residents and their guests.' Omit if nothing fresh to add." },
+    ctaSubline: { type: "string", description: "One supporting, factual line that lowers friction or adds a useful detail (cost, who's invited, what to bring, whether RSVP is needed). E.g. 'Complimentary for residents and their guests.' No urgency, scarcity, or hype. Omit if nothing fresh to add." },
     ctaButtonLabel: { type: "string", description: "Button text, e.g. 'Call 920.504.3443'." },
     ctaButtonHref: { type: "string", description: "Button href: tel:, mailto:, or https:// URL. Pull from the flyer." },
 
@@ -135,7 +135,7 @@ ${
       : "If no past sends or voice rules were in context, leave drafterRationale empty — don't pretend memory you don't have."
   }
 
-Output format: call the \`extract_flyer\` tool with a fully-populated structured object. Do not write prose; only call the tool. Aim for the ceiling, not the floor — boring is a worse outcome than over-reaching.`;
+Output format: call the \`extract_flyer\` tool with a fully-populated structured object. Do not write prose; only call the tool. Write to inform, not to sell: the reader should finish knowing exactly what the event or offering is and why it might genuinely matter to them. Favor plain, specific, honest language over clever hooks or persuasion — clarity and concrete detail carry the email, not salesmanship. Never tease curiosity the body doesn't pay off, and never comment on your own selling (no "this isn't a sales pitch," "no pressure," "no obligation" framing).`;
 }
 
 /**
@@ -187,17 +187,94 @@ export async function extractFlyerContent(opts: {
   return toolUseBlock.input as ExtractedFlyer;
 }
 
+// A desired final image arrangement, expressed by the model in terms of the
+// index numbers in the photo manifest it was shown. -1 means "no photo".
+export interface RefineImageLayout {
+  hero: number;
+  secondary: number;
+  gallery: number[];
+}
+
+export interface RefineResult {
+  /** The updated flyer text fields (imageLayout/refineNote stripped out). */
+  flyer: ExtractedFlyer;
+  /** Present only when the user explicitly asked to change which photos appear. */
+  imageLayout?: RefineImageLayout;
+  /** One-line summary of what changed, or an "I couldn't ..." explanation. */
+  refineNote?: string;
+}
+
+// Refine schema = the extract schema plus two refine-only, non-required fields:
+// imageLayout (to express deliberate photo edits) and refineNote (feedback /
+// "couldn't do it" signal). Kept separate so the initial-extraction call isn't
+// affected.
+const refineFlyerToolSchema = {
+  ...extractFlyerToolSchema,
+  // Require every content field so the model ALWAYS re-emits the full object.
+  // This makes "clear this field" (emit "") reliable and makes accidental
+  // key-omission impossible — no field can be silently dropped on refine. In
+  // refinement there is always an existing value to copy, so requiring a field
+  // never forces fabrication (the model emits "" for fields that were empty).
+  required: [
+    "subject", "previewText", "eyebrow", "headline", "scriptSubheadline", "heroHook",
+    "eventDate", "eventTime", "eventLocation",
+    "storyEyebrow", "storyScriptTitle", "bodyParagraphs",
+    "pullQuoteEyebrow", "pullQuote", "pullQuoteAttribution",
+    "ctaEyebrow", "ctaHeadline", "ctaSubline", "ctaButtonLabel", "ctaButtonHref",
+    "heroImageAlt", "heroImageDescription", "secondaryImageAlt", "secondaryImageDescription",
+    "audienceHints",
+  ],
+  properties: {
+    ...extractFlyerToolSchema.properties,
+    imageLayout: {
+      type: "object",
+      description:
+        "ONLY include this if the user explicitly asked to remove, reorder, swap, or change which photos appear. OMIT IT ENTIRELY otherwise — including it changes the photos. Reference photos by the index numbers in the 'Photos in this email' list.",
+      required: ["hero", "secondary", "gallery"],
+      properties: {
+        hero: { type: "integer", description: "Index of the photo to show as the hero image, or -1 for no hero photo." },
+        secondary: { type: "integer", description: "Index of the photo to show as the inline secondary image, or -1 for none." },
+        gallery: {
+          type: "array",
+          items: { type: "integer" },
+          description: "Indices of the photos to show in the gallery grid, in order. Leave an index out to remove that photo.",
+        },
+      },
+    },
+    refineNote: {
+      type: "string",
+      description:
+        "One short sentence summarizing what you changed. If part of the request is impossible (e.g. recolor a photo, add a photo that isn't already in the email, change fonts/layout), start with \"I couldn't ...\", explain briefly, and make no change for that part.",
+    },
+  },
+};
+
 /**
  * Refine an existing extracted draft based on a user instruction.
- * E.g. "make the headline shorter" or "change the tone to more casual".
+ * E.g. "make the headline shorter", "change the tone to more casual", or —
+ * when an image manifest is supplied — "remove the second photo".
  */
 export async function refineFlyerContent(opts: {
   current: ExtractedFlyer;
   instruction: string;
   community: Community;
   pastSends?: PastSendForContext[];
-}): Promise<ExtractedFlyer> {
+  /** Pre-formatted "[0] hero ..." list of the photos currently in the email.
+   *  When provided, the model may return imageLayout to rearrange them. */
+  imageManifestText?: string;
+}): Promise<RefineResult> {
   const c = client();
+
+  const imageBlock = opts.imageManifestText
+    ? `
+
+Photos in this email
+The email currently contains these photos (refer to them by index):
+${opts.imageManifestText}
+- ONLY change photos if the user explicitly asks to remove, reorder, swap, or change which photo appears. Then return \`imageLayout\` with the desired final arrangement: \`hero\` = the index to show as the hero (or -1 for none), \`secondary\` = the index for the inline image (or -1 for none), \`gallery\` = the list of indices for the gallery grid, in order (leave an index out to remove that photo).
+- If the user does NOT mention photos/images, OMIT \`imageLayout\` entirely — the photos must stay exactly as they are.
+- You can only rearrange or remove the photos listed above. You cannot add new photos, recolor them, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.`
+    : "";
 
   const response = await c.messages.create({
     model: MODEL,
@@ -207,13 +284,15 @@ export async function refineFlyerContent(opts: {
 You are now in REFINEMENT mode. The user has an existing extracted draft and wants targeted changes.
 - Apply the user's specific instruction. Touch only what they ask about.
 - Leave every other field exactly as the user has it. Do not "improve" things you weren't asked to improve.
-- If the user's instruction implies a cascading change (e.g. "make the headline shorter" might naturally also affect a script subhead that quotes it), make the minimum cascading change and explain nothing.
-- Always return the FULL updated object via the extract_flyer tool. Do not return a partial diff.`,
+- To REMOVE the text in a field (e.g. "remove the pull quote"), set that field to an empty string "" — do not invent a replacement.
+- If the user's instruction implies a small cascading change (e.g. shortening a headline that a script subhead quotes), make the minimum cascading change and explain nothing.
+- Always return the FULL updated object via the extract_flyer tool (every text field), so nothing is accidentally dropped.
+- Set \`refineNote\` to one short sentence describing what you changed (or an "I couldn't ..." explanation if part of the request is out of scope).${imageBlock}`,
     tools: [
       {
         name: "extract_flyer",
         description: "Return the FULL updated marketing-email content with the user's refinement applied.",
-        input_schema: extractFlyerToolSchema as any,
+        input_schema: refineFlyerToolSchema as any,
       },
     ],
     tool_choice: { type: "tool", name: "extract_flyer" },
@@ -229,5 +308,10 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
   if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
     throw new Error("Claude did not return tool_use output for refinement.");
   }
-  return toolUseBlock.input as ExtractedFlyer;
+  const { imageLayout, refineNote, ...flyer } = toolUseBlock.input as any;
+  return {
+    flyer: flyer as ExtractedFlyer,
+    imageLayout: imageLayout as RefineImageLayout | undefined,
+    refineNote: typeof refineNote === "string" ? refineNote : undefined,
+  };
 }

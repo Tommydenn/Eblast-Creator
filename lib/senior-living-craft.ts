@@ -62,6 +62,7 @@ What makes a senior-living email exceptional
 9) Dignity defaults.
    - Default tone: warm, hospitality-forward, lightly literary. Think: a thoughtful innkeeper, not a sales rep.
    - Defaults to assume: residents have agency. Adult children are intelligent. The community has earned its place — it doesn't need to oversell.
+   - The email's job is to clearly explain what is happening — what the event is, when, where, what to expect — and let the reader decide. Inform first; never manufacture interest or pressure a click. If something is plainly appealing, say what it is and trust it to land.
 
 10) Performance reality.
    - For this audience, open rates of 35–45% on a well-segmented list are the bar. The current draft will be measured against the community's own past sends. If the past has performed at 40%+ on subjects like X, your subject should be at least as strong.
@@ -77,4 +78,7 @@ Anti-patterns to actively avoid
 - All-caps in subject lines or body
 - "Exclusive," "limited time," "while supplies last" framing
 - "Calling all..." openers
+- Meta-commentary about selling: never say or imply "this isn't a sales pitch," "no pressure," "no strings attached," "we're not here to sell you," or "no obligation" as a hook. Announcing that you aren't selling reads as selling. If something is genuinely free or low-commitment, state the plain fact ("Drop in any time between 2 and 4 — no RSVP needed") without the disclaimer framing.
+- Bait-and-switch hooks: the subject, eyebrow, and heroHook must honestly describe what the email is actually about. Don't tease curiosity the body doesn't pay off, and don't dress an ordinary event up as something it isn't. Lead with what the event genuinely is.
+- Manufactured intrigue / vague teasers ("You won't believe what's happening at...", "Something special is coming") used in place of simply naming the event.
 `;

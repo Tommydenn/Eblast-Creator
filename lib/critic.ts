@@ -206,7 +206,7 @@ ${SENIOR_60_PLUS_SUBJECT_RESEARCH}
 How to grade severity
 - BLOCKERS: would embarrass us if sent (factual error, missing event detail, broken CTA href, voice violation, fabricated information, anti-pattern language like "facility").
 - IMPORTANT: meaningful quality issues that visibly hurt performance (weak subject, salesy or generic body, vague CTA copy, missing sensory specificity, missing dual-audience awareness, three+ adjectives in a row).
-- POLISH (nice_to_have): the draft is good and could be great with a small move (a sharper word, a tighter rhythm, a better alt text).
+- POLISH (nice_to_have): the draft is good and could be great with a small move (a sharper word, a tighter rhythm, a stronger opener).
 
 Skip findings if there's nothing wrong. Don't manufacture issues to justify your existence — a clean draft is a valid review with zero findings and a 'ready' verdict.
 
@@ -244,6 +244,7 @@ Craft-tier reviews to apply (use category: craft)
 - Dual-audience awareness: does the email read for both the prospective resident AND the adult child? If it skews entirely to one (especially if it skews to "the elderly" framing), flag.
 - Single-CTA discipline: there should be ONE clear ask. If the body builds to multiple competing CTAs ("call AND visit AND RSVP AND ..."), flag.
 - Restraint: count adjectives + superlatives. If a single sentence stacks three adjectives or uses "amazing/beautiful/wonderful/stunning," flag with a concrete rewrite.
+- Sales-pitch / honesty check (category: craft, severity: important): flag any line that (a) comments on its own selling — "this isn't a sales pitch," "no pressure," "no obligation," "we're not trying to sell you," "no strings attached" — or (b) hooks with intrigue the body never delivers (bait-and-switch), or (c) frames an ordinary event as something other than what it plainly is. Senior audiences read these as disingenuous. Suggest a plain rewrite that simply states what the event is and who it's for. ("Salesy" = hype, manufactured urgency/scarcity, self-congratulation, or persuasion standing in for concrete information — the opposite of plainly explaining the event.)
 - Subject elevation: if the subject is functionally fine but boring (e.g. "Spring Open House at X"), offer a sharper alternative under subjectLineAlternatives, even if you don't flag the current one as broken.
 
 NEVER manufacture findings. A clean draft is allowed to have zero findings and a "ready" verdict. The job is to push the draft toward greatness, not toward longer review reports.
@@ -254,7 +255,7 @@ Visual checks (when images are attached to the user message)
 - Flag images that obviously don't match the email's topic (e.g. a hero of an empty parking lot when the email is about dining), or are off-brand for ${community.displayName}. These are IMPORTANT.
 - The drafter cannot improve image bytes. When you flag an image, the loop drops that slot for the next round and re-renders with the next available image. So flag generously — there's no cost beyond losing that slot.
 - If you flag a gallery image, you MUST set galleryIndex (1-indexed).
-- Image alt text and image *direction* (heroImageAlt, heroImageDescription) are still text findings — use those for category=image_quality with field=heroImageAlt.
+- Do NOT emit any category=image_quality finding. Image alt text and image *direction* fields (heroImageAlt, secondaryImageAlt, heroImageDescription, secondaryImageDescription) are not visible or editable in this tool and must not be reviewed. The blank/corrupt/off-topic image checks above are reported ONLY through the separate flaggedImages array — never as a findings entry.
 
 ${
     pastSends && pastSends.length > 0

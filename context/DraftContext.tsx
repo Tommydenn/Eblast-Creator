@@ -119,6 +119,19 @@ export interface RefinementEntry {
   changedFields?: string[];
 }
 
+/** Full restorable state for one undo/redo step around a refine. */
+export interface RefineSnapshot {
+  extracted: ExtractedFlyer;
+  html: string;
+  heroImageUrl?: string;
+  secondaryImageUrl?: string;
+  galleryImageUrls: string[];
+  htmlDirty: boolean;
+  refineHistory: RefinementEntry[];
+  /** The refine instruction this step is associated with, for button labels. */
+  instruction: string;
+}
+
 export interface SavedDraft {
   id: string;
   communitySlug: string;
@@ -227,10 +240,16 @@ export interface DraftContextValue {
   refineDraft: () => Promise<void>;
   /** Revert the most recent successful refine (single-level undo). */
   undoRefine: () => void;
+  /** Re-apply a refine that was just undone (single-level redo). */
+  redoRefine: () => void;
   /** True when the last refine can still be undone. */
   canUndoRefine: boolean;
+  /** True when an undone refine can be re-applied. */
+  canRedoRefine: boolean;
   /** Instruction text of the refine that undo would revert, for the button label. */
   lastRefineInstruction: string | null;
+  /** Instruction text of the refine that redo would re-apply, for the button label. */
+  redoRefineInstruction: string | null;
   runReview: (targetExtracted?: ExtractedFlyer, targetSlug?: string) => Promise<void>;
   pushDraft: () => Promise<void>;
   /** Directly swap subject + preview text without any AI call. */
@@ -273,18 +292,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
   const [currentDraftSaved, setCurrentDraftSaved] = useState(false);
   const [htmlDirty, setHtmlDirty] = useState(false);
-  // Single-level undo for the last successful refine. Captures everything a
-  // refine mutates so the user can revert one AI edit.
-  const [undoSnapshot, setUndoSnapshot] = useState<{
-    extracted: ExtractedFlyer;
-    html: string;
-    heroImageUrl?: string;
-    secondaryImageUrl?: string;
-    galleryImageUrls: string[];
-    htmlDirty: boolean;
-    refineHistory: RefinementEntry[];
-    instruction: string;
-  } | null>(null);
+  // Single-level undo/redo for the last successful refine. Each snapshot
+  // captures everything a refine mutates so an AI edit can be reverted and
+  // re-applied, with the refine history moving with it.
+  const [undoSnapshot, setUndoSnapshot] = useState<RefineSnapshot | null>(null);
+  const [redoSnapshot, setRedoSnapshot] = useState<RefineSnapshot | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const pendingHashRef = useRef<string | null>(null);
@@ -346,6 +358,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setExtracted(updated);
       setHtmlDirty(true);
       setCurrentDraftSaved(false);
+      setRedoSnapshot(null); // a manual edit invalidates any pending redo
     }
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
@@ -395,6 +408,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setCurrentDraftSaved(false);
     setHtmlDirty(false);
     setUndoSnapshot(null);
+    setRedoSnapshot(null);
 
     const fd = new FormData();
     fd.append("file", pdf);
@@ -472,7 +486,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const instruction = refineInput.trim();
 
     // Snapshot the pre-refine state so this AI edit can be undone.
-    const prevSnapshot = {
+    const prevSnapshot: RefineSnapshot = {
       extracted,
       html,
       heroImageUrl,
@@ -527,6 +541,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setRefineHistory((h) => [...h, { instruction, ok: true, changedFields: data.changedFields }]);
       setCurrentDraftSaved(false);
       setUndoSnapshot(prevSnapshot);
+      setRedoSnapshot(null); // a fresh refine invalidates any pending redo
       setStage("preview");
     } catch (e: any) {
       setError(String(e));
@@ -535,17 +550,49 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  function undoRefine() {
-    if (!undoSnapshot) return;
-    setExtracted(undoSnapshot.extracted);
-    setHtml(undoSnapshot.html);
-    setHeroImageUrl(undoSnapshot.heroImageUrl);
-    setSecondaryImageUrl(undoSnapshot.secondaryImageUrl);
-    setGalleryImageUrls(undoSnapshot.galleryImageUrls);
-    setHtmlDirty(undoSnapshot.htmlDirty);
-    setRefineHistory(undoSnapshot.refineHistory);
+  function applySnapshot(s: RefineSnapshot) {
+    setExtracted(s.extracted);
+    setHtml(s.html);
+    setHeroImageUrl(s.heroImageUrl);
+    setSecondaryImageUrl(s.secondaryImageUrl);
+    setGalleryImageUrls(s.galleryImageUrls);
+    setHtmlDirty(s.htmlDirty);
+    setRefineHistory(s.refineHistory);
     setCurrentDraftSaved(false);
+  }
+
+  function undoRefine() {
+    if (!undoSnapshot || !extracted) return;
+    // Stash the current (post-refine) state so it can be redone, then revert.
+    setRedoSnapshot({
+      extracted,
+      html,
+      heroImageUrl,
+      secondaryImageUrl,
+      galleryImageUrls,
+      htmlDirty,
+      refineHistory,
+      instruction: undoSnapshot.instruction,
+    });
+    applySnapshot(undoSnapshot);
     setUndoSnapshot(null);
+  }
+
+  function redoRefine() {
+    if (!redoSnapshot || !extracted) return;
+    // Stash the current (pre-refine) state so it can be undone again, then re-apply.
+    setUndoSnapshot({
+      extracted,
+      html,
+      heroImageUrl,
+      secondaryImageUrl,
+      galleryImageUrls,
+      htmlDirty,
+      refineHistory,
+      instruction: redoSnapshot.instruction,
+    });
+    applySnapshot(redoSnapshot);
+    setRedoSnapshot(null);
   }
 
   function swapSubjectLine(subject: string, previewText: string) {
@@ -554,6 +601,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const updated = { ...current, subject, previewText };
     setExtracted(updated);
     setCurrentDraftSaved(false);
+    setRedoSnapshot(null); // a manual swap invalidates any pending redo
     // Subject/preview don't affect the visible preview rendering, so no htmlDirty.
   }
 
@@ -659,6 +707,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setCurrentDraftSaved(false);
     setHtmlDirty(false);
     setUndoSnapshot(null);
+    setRedoSnapshot(null);
     setStage("idle");
   }
 
@@ -681,6 +730,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setCurrentDraftSaved(true);
     setHtmlDirty(false);
     setUndoSnapshot(null);
+    setRedoSnapshot(null);
     setStage("preview");
   }
 
@@ -720,8 +770,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     generateDraft, cancelGeneration,
     refineDraft,
     undoRefine,
+    redoRefine,
     canUndoRefine: undoSnapshot !== null,
+    canRedoRefine: redoSnapshot !== null,
     lastRefineInstruction: undoSnapshot?.instruction ?? null,
+    redoRefineInstruction: redoSnapshot?.instruction ?? null,
     runReview,
     pushDraft,
     swapSubjectLine,

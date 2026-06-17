@@ -418,7 +418,7 @@ export default function Home() {
                   {reviewerOpen && (
                     <div className="space-y-3 border-t border-sand-200 px-5 pb-5 pt-4">
                       {reviewing && !review && (
-                        <p className="eb-fade-pulse text-sm text-sand-600">Re-reviewing the refined draft…</p>
+                        <p className="eb-fade-pulse text-sm text-sand-600">Reviewing draft…</p>
                       )}
                       {reviewError && (
                         <div className="rounded-md border border-clay-200 bg-clay-50 px-3 py-2 text-xs text-clay-700">
@@ -439,14 +439,18 @@ export default function Home() {
                             <p className="text-sm leading-relaxed text-sand-800">{review.summary}</p>
                           </div>
 
-                          {/* Findings */}
-                          {review.findings.length === 0 ? (
+                          {/* Findings — send_strategy and craft are shown in Intelligence Applied, not here */}
+                          {(() => {
+                            const reviewerFindings = review.findings.filter(
+                              (f) => f.category !== "send_strategy" && f.category !== "craft"
+                            );
+                            return reviewerFindings.length === 0 ? (
                             <p className="rounded-md border border-dashed border-forest-200 bg-forest-50/50 px-3 py-2.5 text-xs text-forest-700">
                               No issues found — reviewer thinks this draft is clean.
                             </p>
                           ) : (
                             <ul className="space-y-1.5">
-                              {review.findings.map((f, i) => {
+                              {reviewerFindings.map((f, i) => {
                                 const priority =
                                   f.severity === "blocker"
                                     ? { label: "Must fix", cls: "bg-clay-50 text-clay-700 border-clay-300" }
@@ -490,7 +494,8 @@ export default function Home() {
                                 );
                               })}
                             </ul>
-                          )}
+                          );
+                          })()}
 
                           {/* Agent loop trace */}
                           {agentLoop && agentLoop.iterations.length > 1 && (

@@ -10,7 +10,7 @@ import { SubjectSpecialistPanel } from "@/components/SubjectSpecialistPanel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Input, Label, Select, Textarea } from "@/components/ui/Input";
+import { Label, Select, Textarea } from "@/components/ui/Input";
 import {
   useDraft,
   type ReviewVerdict,
@@ -187,12 +187,47 @@ export default function Home() {
               <div>
                 <Label htmlFor="community">Community</Label>
                 <Select id="community" value={selectedSlug} onChange={(e) => setSelectedSlug(e.target.value)} disabled={stage === "drafting"}>
+                  <option value="">Select a community…</option>
                   {communities.map((c) => (
                     <option key={c.slug} value={c.slug}>
                       {c.displayName}
                     </option>
                   ))}
                 </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="pdf">Flyer PDF</Label>
+                {/* State-driven picker: the shown filename comes from `pdf` state,
+                    not the native widget, so cancelling the file dialog can never
+                    clear the current file. */}
+                <div className="flex items-center gap-3">
+                  <label
+                    htmlFor="pdf"
+                    className={`inline-flex shrink-0 items-center rounded-md border border-sand-300 bg-sand-100 px-3 py-2 text-xs font-medium text-sand-700 ${
+                      stage === "drafting" ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-sand-200"
+                    }`}
+                  >
+                    Choose file
+                  </label>
+                  <span className="min-w-0 flex-1 truncate text-xs text-sand-600">
+                    {pdf ? pdf.name : "No file selected"}
+                  </span>
+                  <input
+                    id="pdf"
+                    type="file"
+                    accept="application/pdf"
+                    disabled={stage === "drafting"}
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileChange(file);
+                      // Reset the native value so re-picking the same file still
+                      // fires onChange and so we never rely on its own display.
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
               </div>
 
               {selected && (
@@ -217,24 +252,6 @@ export default function Home() {
                   </div>
                 </div>
               )}
-
-              <div>
-                <Label htmlFor="pdf">Flyer PDF</Label>
-                <Input
-                  id="pdf"
-                  type="file"
-                  accept="application/pdf"
-                  disabled={stage === "drafting"}
-                  onChange={(e) => {
-                    // Only act on a real selection. Opening the picker and
-                    // hitting Cancel fires onChange with an empty FileList —
-                    // ignore it so the existing file isn't wiped.
-                    const file = e.target.files?.[0];
-                    if (file) handleFileChange(file);
-                  }}
-                  className="h-auto py-2 file:mr-3 file:rounded file:border-0 file:bg-sand-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-sand-700 hover:file:bg-sand-200"
-                />
-              </div>
 
               {duplicateWarning && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
@@ -294,7 +311,17 @@ export default function Home() {
           </Card>
 
           {/* Intelligence */}
-          {selectedSlug && <CommunityIntelligence communitySlug={selectedSlug} />}
+          {selectedSlug ? (
+            <CommunityIntelligence communitySlug={selectedSlug} />
+          ) : (
+            <Card className="eb-rise flex items-center justify-center border-dashed">
+              <CardContent className="px-6 py-10 text-center">
+                <p className="text-sm text-sand-500">
+                  Select a community to see its intelligence — brand voice, past sends, and performance.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Saved drafts */}
@@ -316,17 +343,19 @@ export default function Home() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {!currentDraftSaved && (
-                  <Button size="sm" variant="secondary" onClick={saveDraft}>
-                    Save draft
-                  </Button>
+                  <>
+                    <Button size="sm" variant="secondary" onClick={saveDraft}>
+                      Save draft
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={discardDraft}>
+                      Discard
+                    </Button>
+                  </>
                 )}
-                <Button size="sm" variant="destructive" onClick={discardDraft}>
-                  Discard
-                </Button>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
+            <div className="mt-4 grid items-start gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
               {/* Controls column */}
               <div className="flex flex-col gap-5">
 
@@ -660,7 +689,7 @@ export default function Home() {
               <Card className="eb-rise overflow-hidden p-0">
                 <CardHeader className="flex flex-row items-center justify-between border-b border-sand-200 bg-sand-50/50">
                   <div>
-                    <CardTitle className="text-base">Email preview</CardTitle>
+                    <CardTitle className="text-base">Eblast preview</CardTitle>
                     <CardDescription>
                       Subject:{" "}
                       <span className="font-medium text-sand-900">{extracted.subject}</span>
@@ -673,12 +702,7 @@ export default function Home() {
                   </div>
                   <div className="flex items-center gap-2">
                     {htmlDirty && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={syncHtml}
-                        className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                      >
+                      <Button size="sm" variant="secondary" onClick={syncHtml}>
                         Sync preview
                       </Button>
                     )}
@@ -692,9 +716,9 @@ export default function Home() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-3">
-                  <p className={`mb-2 text-center text-[11px] ${htmlDirty ? "text-amber-600" : "text-sand-400"}`}>
+                  <p className={`mb-2 text-center text-[11px] ${htmlDirty ? "font-medium text-clay-600" : "text-sand-400"}`}>
                     {htmlDirty
-                      ? "Unsaved inline edits — click \"Sync preview\" to re-render with your changes."
+                      ? "Unsaved edits — click Sync preview to apply them."
                       : "Hover to identify sections · Click any text to edit it inline"}
                   </p>
                   <iframe
@@ -706,9 +730,9 @@ export default function Home() {
                       s.textContent = EBLAST_EDIT_SCRIPT;
                       doc.body.appendChild(s);
                     }}
-                    className="block h-[820px] w-full rounded-sm border-0 bg-white transition-opacity duration-200"
+                    className="block h-[820px] min-h-[480px] w-full resize-y overflow-auto rounded-sm border-0 bg-white transition-opacity duration-200"
                     style={{ opacity: stage === "refining" ? 0.55 : 1 }}
-                    title="Email preview"
+                    title="Eblast preview"
                   />
                 </CardContent>
               </Card>

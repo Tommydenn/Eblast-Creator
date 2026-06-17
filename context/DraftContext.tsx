@@ -306,9 +306,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       .then((d) => {
         if (!Array.isArray(d.communities)) return;
         setCommunities(d.communities);
-        if (d.communities.length > 0) {
-          setSelectedSlug((prev) => prev || d.communities[0].slug);
-        }
+        // Intentionally do NOT auto-select a community — the Generate card
+        // loads empty so the user makes an explicit choice.
       })
       .catch((err) => {
         console.error("[DraftProvider] Failed to load communities:", err);

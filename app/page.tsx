@@ -61,10 +61,11 @@ const EBLAST_EDIT_SCRIPT = `(function(){
 
 // ─── Display maps ─────────────────────────────────────────────────────────────
 
+// Keys must match ReviewVerdict values from lib/critic.ts.
 const verdictBadge: Record<ReviewVerdict, { label: string; variant: "success" | "warning" | "danger" }> = {
-  ready: { label: "Ready", variant: "success" },
-  needs_work: { label: "Needs work", variant: "warning" },
-  major_revision: { label: "Major revision", variant: "danger" },
+  ready: { label: "Ready to send", variant: "success" },
+  needs_revision: { label: "Needs revision", variant: "warning" },
+  blocking_issues: { label: "Blocking issues", variant: "danger" },
 };
 
 // ─── Saved Drafts Panel ───────────────────────────────────────────────────────
@@ -139,7 +140,7 @@ export default function Home() {
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
     savedDrafts, currentDraftSaved,
-    htmlDirty, syncHtml,
+    htmlDirty, syncHtml, swapSubjectLine,
     handleFileChange,
     generateDraft, cancelGeneration,
     refineDraft,
@@ -431,7 +432,7 @@ export default function Home() {
                           <div className={`rounded-md border px-3 py-2.5 ${
                             review.verdict === "ready"
                               ? "border-forest-200 bg-forest-50/60"
-                              : review.verdict === "needs_work"
+                              : review.verdict === "needs_revision"
                                 ? "border-amber-200 bg-amber-50/50"
                                 : "border-clay-200 bg-clay-50/50"
                           }`}>
@@ -523,27 +524,6 @@ export default function Home() {
                             </details>
                           )}
 
-                          {/* Subject line alternatives from critic */}
-                          {review.subjectLineAlternatives && review.subjectLineAlternatives.length > 0 && (
-                            <details className="rounded-md border border-sand-200 px-3 py-2">
-                              <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.12em] text-sand-600">
-                                Subject line alternatives
-                              </summary>
-                              <ul className="mt-2 space-y-1.5">
-                                {review.subjectLineAlternatives.map((alt, i) => (
-                                  <li key={i}>
-                                    <button
-                                      onClick={() => setRefineInput(`Change the subject line to: "${alt}"`)}
-                                      className="w-full rounded border border-dashed border-sand-300 px-3 py-2 text-left text-xs text-sand-700 hover:border-forest-400 hover:bg-forest-50/40"
-                                    >
-                                      → {alt}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            </details>
-                          )}
-
                           {/* Send time / list note */}
                           {(review.sendTimeRecommendation || review.recipientListNote) && (
                             <div className="space-y-1 border-t border-sand-100 pt-3 text-xs">
@@ -572,11 +552,7 @@ export default function Home() {
                   <SubjectSpecialistPanel
                     specialist={subjectSpecialist as any}
                     currentSubject={extracted.subject}
-                    onPickAlternative={(subject, previewText) => {
-                      setRefineInput(
-                        `Change the subject line to: "${subject}" and the preview text to: "${previewText}"`,
-                      );
-                    }}
+                    onPickAlternative={swapSubjectLine}
                   />
                 )}
 

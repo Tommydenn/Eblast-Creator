@@ -14,6 +14,18 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// Returns "#ffffff" for dark backgrounds and "#1a1a1a" for light ones.
+// Prevents text from being the same color as its background.
+function pickTextColor(bgHex: string): string {
+  const h = bgHex.replace("#", "");
+  if (h.length < 6) return "#ffffff";
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.4 ? "#1a1a1a" : "#ffffff";
+}
+
 export interface RenderOptions {
   /** Hero image URL or data URI. If omitted, the hero block has no photo — just brand color. */
   heroImageUrl?: string;
@@ -114,7 +126,7 @@ export function buildEblastHtml(
               </tr>
             </table>` : ""}
             <p data-field="heroHook" style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 16px; line-height: 1.55; color: #E8DDC4; max-width: 460px; margin: 0 auto 24px auto;">${escapeHtml(flyer.heroHook)}</p>
-            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.accent}; color:#FFFFFF !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
+            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.accent}; color:${pickTextColor(brand.accent)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
           </td>
         </tr>
       </table>
@@ -154,7 +166,7 @@ export function buildEblastHtml(
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${flyer.pullQuoteEyebrow ? `<p data-field="pullQuoteEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #C8B98A; margin: 0 0 14px 0;">${escapeHtml(flyer.pullQuoteEyebrow)}</p>` : ""}
-            <p data-field="pullQuote" style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 26px; line-height: 1.4; color: ${brand.background}; margin: 0 auto; max-width: 460px;">${escapeHtml(flyer.pullQuote)}</p>
+            <p data-field="pullQuote" style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 26px; line-height: 1.4; color: ${pickTextColor(brand.primary)}; margin: 0 auto; max-width: 460px;">${escapeHtml(flyer.pullQuote)}</p>
             ${flyer.pullQuoteAttribution ? `<p data-field="pullQuoteAttribution" style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #C8B98A; margin: 20px 0 0 0;">${escapeHtml(flyer.pullQuoteAttribution)}</p>` : ""}
           </td>
         </tr>
@@ -219,7 +231,7 @@ export function buildEblastHtml(
             <p data-field="ctaEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 12px 0;">${escapeHtml(flyer.ctaEyebrow)}</p>
             <p data-field="ctaHeadline" style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 6px 0;">${escapeHtml(flyer.ctaHeadline)}</p>
             <p data-field="ctaSubline" style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 3px; color: #FBE2CD; text-transform: uppercase; margin: 0 0 26px 0;">${escapeHtml(flyer.ctaSubline)}</p>
-            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.background}; color:${brand.accent} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
+            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:#ffffff; color:${brand.primary} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
           </td>
         </tr>
       </table>

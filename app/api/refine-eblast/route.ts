@@ -79,14 +79,16 @@ export async function POST(req: NextRequest) {
   try {
     const pastSends = await getRecentSendsForCommunity({ communityId: community.id, limit: 12 });
 
-    // Build a stable photo manifest the model can reference by index. Order:
-    // current hero, current secondary, then gallery photos in order.
-    const pool: Array<{ url: string; role: string }> = [];
-    if (body.heroImageUrl) pool.push({ url: body.heroImageUrl, role: "currently the hero image" });
-    if (body.secondaryImageUrl) pool.push({ url: body.secondaryImageUrl, role: "currently the inline secondary image" });
-    (body.galleryImageUrls ?? []).forEach((u, i) => pool.push({ url: u, role: `currently gallery photo ${i + 1}` }));
+    // Build a stable photo manifest the model can reference by index. The names
+    // here MUST match the hover labels shown on each image in the preview
+    // (render-email.ts data-img-label) so a user can call a photo out by name
+    // and the model maps it to the right slot. Order: hero, secondary, gallery.
+    const pool: Array<{ url: string; name: string }> = [];
+    if (body.heroImageUrl) pool.push({ url: body.heroImageUrl, name: "Hero image" });
+    if (body.secondaryImageUrl) pool.push({ url: body.secondaryImageUrl, name: "Secondary image" });
+    (body.galleryImageUrls ?? []).forEach((u, i) => pool.push({ url: u, name: `Gallery image ${i + 1}` }));
     const imageManifestText = pool.length
-      ? pool.map((p, i) => `  [${i}] ${p.role}`).join("\n")
+      ? pool.map((p, i) => `  [${i}] "${p.name}" (the photo the user sees labeled "${p.name}")`).join("\n")
       : "  (no photos are currently in this email)";
 
     const result = await refineFlyerContent({

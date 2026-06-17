@@ -269,9 +269,9 @@ export async function refineFlyerContent(opts: {
     ? `
 
 Photos in this email
-The email currently contains these photos (refer to them by index):
+Each photo has a NAME (in quotes) that the user sees when hovering it in the preview, and an index. The user will refer to photos by these names (e.g. "swap Gallery image 1 and Gallery image 2", "remove the Secondary image"). Map the named photos the user mentions to their indices below:
 ${opts.imageManifestText}
-- ONLY change photos if the user explicitly asks to remove, reorder, swap, or change which photo appears. Then return \`imageLayout\` with the desired final arrangement: \`hero\` = the index to show as the hero (or -1 for none), \`secondary\` = the index for the inline image (or -1 for none), \`gallery\` = the list of indices for the gallery grid, in order (leave an index out to remove that photo).
+- ONLY change photos if the user explicitly asks to remove, reorder, swap, or change which photo appears. Match the photo NAME(s) in their instruction to the indices above, then return \`imageLayout\` with the desired final arrangement: \`hero\` = the index to show as the hero (or -1 for none), \`secondary\` = the index for the inline image (or -1 for none), \`gallery\` = the list of indices for the gallery grid, in order (leave an index out to remove that photo).
 - If the user does NOT mention photos/images, OMIT \`imageLayout\` entirely — the photos must stay exactly as they are.
 - You can only rearrange or remove the photos listed above. You cannot add new photos, recolor them, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.`
     : "";

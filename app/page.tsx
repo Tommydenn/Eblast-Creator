@@ -26,9 +26,25 @@ const EBLAST_EDIT_SCRIPT = `(function(){
   var lb=document.createElement('div');
   lb.style.cssText='position:fixed;top:8px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,0.85);color:#fff;font:700 10px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border-radius:4px;pointer-events:none;opacity:0;transition:opacity 0.15s;z-index:9999;white-space:nowrap;';
   document.body.appendChild(lb);
-  document.querySelectorAll('[data-section]').forEach(function(el){
-    el.addEventListener('mouseenter',function(){ lb.textContent=el.getAttribute('data-section'); lb.style.opacity='1'; });
-    el.addEventListener('mouseleave',function(){ lb.style.opacity='0'; });
+  function labelFor(t){
+    if(!t||!t.closest) return null;
+    var im=t.closest('[data-img-label]');
+    if(im) return im.getAttribute('data-img-label');
+    var sec=t.closest('[data-section]');
+    if(sec) return sec.getAttribute('data-section');
+    return null;
+  }
+  document.addEventListener('mouseover',function(e){
+    var name=labelFor(e.target);
+    if(name){ lb.textContent=name; lb.style.opacity='1'; } else { lb.style.opacity='0'; }
+  });
+  document.addEventListener('mouseout',function(e){
+    if(!labelFor(e.relatedTarget)) lb.style.opacity='0';
+  });
+  document.querySelectorAll('[data-img-label]').forEach(function(im){
+    im.style.cursor='help';
+    im.addEventListener('mouseenter',function(){ im.style.outline='2px solid rgba(59,130,246,0.6)'; im.style.outlineOffset='2px'; });
+    im.addEventListener('mouseleave',function(){ im.style.outline=''; });
   });
   function finish(el){
     if(el.contentEditable!=='true') return;
@@ -373,32 +389,30 @@ export default function Home() {
                         >
                           {stage === "refining" ? "Refining…" : "Apply change"}
                         </Button>
-                        {canUndoRefine && stage !== "refining" && (
-                          <button
-                            type="button"
-                            onClick={undoRefine}
-                            title={lastRefineInstruction ? `Undo: "${lastRefineInstruction}"` : "Undo last refine"}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-sand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
-                          >
-                            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                              <path d="M3 8a5 5 0 1 1 1.5 3.5M3 8V4.5M3 8h3.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            Undo edit
-                          </button>
-                        )}
-                        {canRedoRefine && stage !== "refining" && (
-                          <button
-                            type="button"
-                            onClick={redoRefine}
-                            title={redoRefineInstruction ? `Redo: "${redoRefineInstruction}"` : "Redo last refine"}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-sand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
-                          >
-                            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                              <path d="M13 8a5 5 0 1 0-1.5 3.5M13 8V4.5M13 8h-3.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            Redo edit
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={undoRefine}
+                          disabled={!canUndoRefine || stage === "refining"}
+                          title={canUndoRefine && lastRefineInstruction ? `Undo: "${lastRefineInstruction}"` : "Nothing to undo"}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-sand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-sand-300 disabled:hover:bg-white"
+                        >
+                          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <path d="M3 8a5 5 0 1 1 1.5 3.5M3 8V4.5M3 8h3.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          Undo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={redoRefine}
+                          disabled={!canRedoRefine || stage === "refining"}
+                          title={canRedoRefine && redoRefineInstruction ? `Redo: "${redoRefineInstruction}"` : "Nothing to redo"}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-sand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-sand-300 disabled:hover:bg-white"
+                        >
+                          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <path d="M13 8a5 5 0 1 0-1.5 3.5M13 8V4.5M13 8h-3.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          Redo
+                        </button>
                       </div>
                       {refineHistory.length > 0 && (
                         <span className="text-[11px] text-sand-500">
@@ -671,10 +685,10 @@ export default function Home() {
 
               {/* Preview pane */}
               <Card className="eb-rise overflow-hidden p-0">
-                <CardHeader className="flex flex-row items-center justify-between border-b border-sand-200 bg-sand-50/50">
-                  <div>
+                <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-sand-200 bg-sand-50/50">
+                  <div className="min-w-0">
                     <CardTitle className="text-base">Eblast preview</CardTitle>
-                    <CardDescription>
+                    <CardDescription className="truncate">
                       Subject:{" "}
                       <span className="font-medium text-sand-900">{extracted.subject}</span>
                       {imageCount > 0 && (
@@ -684,7 +698,7 @@ export default function Home() {
                       )}
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {stage === "refining" && (
                       <p className="eb-pulse-row text-sand-500">
                         <span className="eb-pulse-dot" />

@@ -164,7 +164,7 @@ export function buildEblastHtml(
         ${heroImg ? `
         <tr>
           <td style="background:${brand.primary}; padding: 0;" align="center">
-            <img src="${heroImg}" width="600" height="340" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:100%; max-width:600px; height:auto; border:0;">
+            <img src="${heroImg}" data-img-label="Hero image" width="600" height="340" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:100%; max-width:600px; height:auto; border:0;">
           </td>
         </tr>` : ""}
         <tr>
@@ -209,7 +209,7 @@ export function buildEblastHtml(
   ${secondaryImg ? `
   <tr data-section="Secondary Image">
     <td style="padding: 0 36px 28px 36px;">
-      <img src="${secondaryImg}" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:100%; max-width:528px; height:auto; border:0;">
+      <img src="${secondaryImg}" data-img-label="Secondary image" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:100%; max-width:528px; height:auto; border:0;">
     </td>
   </tr>` : ""}
   `;
@@ -244,9 +244,13 @@ export function buildEblastHtml(
     // 16:9 for a single full-width image so it isn't too tall.
     const tileW = cellWidth - (cols > 1 ? 12 : 0);
     const tileH = cols === 1 ? Math.round(tileW * 9 / 16) : Math.round(tileW * 3 / 4);
-    const rows: string[][] = [];
-    for (let i = 0; i < galleryImgs.length; i += cols) {
-      rows.push(galleryImgs.slice(i, i + cols));
+    // Each tile carries a stable 1-based name ("Gallery image N") that matches
+    // the hover label in the preview and the refine manifest, so users can call
+    // out a specific gallery photo by name.
+    const tiles = galleryImgs.map((src, i) => ({ src, label: `Gallery image ${i + 1}` }));
+    const rows: Array<Array<{ src: string; label: string }>> = [];
+    for (let i = 0; i < tiles.length; i += cols) {
+      rows.push(tiles.slice(i, i + cols));
     }
 
     return `
@@ -264,9 +268,9 @@ export function buildEblastHtml(
         <tr>
           ${row
             .map(
-              (src) => `
+              (tile) => `
           <td valign="top" width="${tileW}" height="${tileH}" style="padding: 0; overflow:hidden; width:${tileW}px; height:${tileH}px; max-height:${tileH}px;">
-            <img src="${src}" width="${tileW}" height="${tileH}" alt="${escapeHtml(community.displayName)}" style="display:block; width:${tileW}px; height:${tileH}px; object-fit:cover; border:0;">
+            <img src="${tile.src}" data-img-label="${tile.label}" width="${tileW}" height="${tileH}" alt="${escapeHtml(community.displayName)}" style="display:block; width:${tileW}px; height:${tileH}px; object-fit:cover; border:0;">
           </td>`,
             )
             .join("")}

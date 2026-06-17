@@ -256,9 +256,18 @@ export default function Home() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-sand-500">List ID</p>
+                    <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-sand-500">Segments</p>
                     <p className="mt-0.5 text-xs font-medium text-sand-900">
-                      {selected.hubspot.listId ?? <span className="text-clay-600">not set</span>}
+                      {selected.hubspot.includedListIds && selected.hubspot.includedListIds.length > 0 ? (
+                        <span title={selected.hubspot.acronym ? `HubSpot acronym: ${selected.hubspot.acronym}` : undefined}>
+                          {selected.hubspot.includedListIds.length} incl
+                          {selected.hubspot.excludedListIds && selected.hubspot.excludedListIds.length > 0
+                            ? ` · ${selected.hubspot.excludedListIds.length} excl`
+                            : ""}
+                        </span>
+                      ) : (
+                        <span className="text-clay-600">not set</span>
+                      )}
                     </p>
                   </div>
                   <div>

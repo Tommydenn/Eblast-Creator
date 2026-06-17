@@ -22,8 +22,12 @@ export interface CreateEmailInput {
   fromName?: string;
   replyTo?: string;
   templatePath?: string;
-  /** Numeric HubSpot list ID for `to.contactLists.include`. */
+  /** Numeric HubSpot list ID for `to.contactLists.include`. Legacy single-list fallback. */
   contactListId?: number;
+  /** HubSpot list IDs to send TO (`to.contactLists.include`). Takes precedence over contactListId. */
+  includedListIds?: number[];
+  /** HubSpot list IDs to suppress (`to.contactLists.exclude`). */
+  excludedListIds?: number[];
 }
 
 export interface ApiCallResult {
@@ -353,8 +357,17 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
     body.emailTemplateMode = "HTML";
     body.content = { templatePath: input.templatePath };
   }
-  if (input.contactListId) {
-    body.to = { contactLists: { include: [input.contactListId], exclude: [] } };
+  // Prefer the included/excluded segment arrays; fall back to the single
+  // contactListId for backward compatibility.
+  const include =
+    input.includedListIds && input.includedListIds.length > 0
+      ? input.includedListIds
+      : input.contactListId
+        ? [input.contactListId]
+        : [];
+  const exclude = input.excludedListIds ?? [];
+  if (include.length > 0 || exclude.length > 0) {
+    body.to = { contactLists: { include, exclude } };
   }
 
   return call("create_email", {

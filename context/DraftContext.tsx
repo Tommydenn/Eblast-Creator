@@ -13,7 +13,7 @@ export interface Community {
   type: string;
   brand: { primary: string; accent: string; background: string };
   senders: Array<{ id: string; name: string; email: string; isPrimary: boolean }>;
-  hubspot: { listId?: number };
+  hubspot: { listId?: number; acronym?: string; includedListIds?: number[]; excludedListIds?: number[] };
   trackingPhone?: string | null;
   templates: string[];
 }

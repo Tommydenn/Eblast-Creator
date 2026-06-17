@@ -137,6 +137,8 @@ export async function POST(req: NextRequest) {
     replyTo: community.senders[0]?.email ?? community.email ?? "",
     templatePath: hubspotPath,
     contactListId: community.hubspot.listId,
+    includedListIds: community.hubspot.includedListIds,
+    excludedListIds: community.hubspot.excludedListIds,
   });
 
   if (!create.ok) {

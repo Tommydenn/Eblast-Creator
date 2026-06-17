@@ -89,6 +89,12 @@ export interface CommunityHubSpot {
   listId?: number;
   additionalListIds?: number[];
   businessUnitId?: number;
+  /** HubSpot segment-naming acronym for this community, e.g. "PGR" → "PGR eBlasts | …". */
+  acronym?: string;
+  /** HubSpot list IDs (Segments) to send TO — active prospects. */
+  includedListIds?: number[];
+  /** HubSpot list IDs (Segments) to SUPPRESS — moved-in/out, closed-lost, referral sources. */
+  excludedListIds?: number[];
 }
 
 export interface CommunityLogo {

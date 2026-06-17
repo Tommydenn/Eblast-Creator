@@ -169,6 +169,7 @@ export default function Home() {
   } = useDraft();
 
   const [reviewerOpen, setReviewerOpen] = useState(true);
+  const [confirmExit, setConfirmExit] = useState(false);
   const selected = communities.find((c) => c.slug === selectedSlug);
 
   return (
@@ -685,54 +686,59 @@ export default function Home() {
 
               {/* Preview pane */}
               <Card className="eb-rise overflow-hidden p-0">
-                <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-sand-200 bg-sand-50/50">
-                  <div className="min-w-0">
+                <CardHeader className="border-b border-sand-200 bg-sand-50/50">
+                  <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">Eblast preview</CardTitle>
-                    <CardDescription className="truncate">
-                      Subject:{" "}
-                      <span className="font-medium text-sand-900">{extracted.subject}</span>
-                      {imageCount > 0 && (
-                        <span className="ml-2 text-sand-500">
-                          · {imageCount} image{imageCount === 1 ? "" : "s"} extracted
-                        </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {stage === "refining" && (
+                        <p className="eb-pulse-row text-sand-500">
+                          <span className="eb-pulse-dot" />
+                          <span className="eb-pulse-dot" />
+                          <span className="eb-pulse-dot" />
+                        </p>
                       )}
-                    </CardDescription>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {stage === "refining" && (
-                      <p className="eb-pulse-row text-sand-500">
-                        <span className="eb-pulse-dot" />
-                        <span className="eb-pulse-dot" />
-                        <span className="eb-pulse-dot" />
-                      </p>
-                    )}
-                    {htmlDirty && (
-                      <Button size="sm" variant="secondary" onClick={syncHtml}>
-                        Sync preview
-                      </Button>
-                    )}
-                    {!currentDraftSaved && (
-                      <>
-                        <Button size="sm" variant="secondary" onClick={saveDraft}>
-                          Save draft
+                      {htmlDirty && (
+                        <Button size="sm" variant="secondary" onClick={syncHtml}>
+                          Sync preview
                         </Button>
-                        <Button size="sm" variant="destructive" onClick={discardDraft}>
-                          Discard
-                        </Button>
-                      </>
-                    )}
-                    <button
-                      type="button"
-                      onClick={discardDraft}
-                      title="Close preview"
-                      aria-label="Close preview"
-                      className="ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sand-400 hover:bg-sand-100 hover:text-clay-600"
-                    >
-                      <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-                      </svg>
-                    </button>
+                      )}
+                      {!currentDraftSaved && (
+                        <>
+                          <Button size="sm" variant="secondary" onClick={saveDraft}>
+                            Save draft
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={discardDraft}>
+                            Discard
+                          </Button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Saved drafts can close freely (the saved copy stays in
+                          // Saved drafts). An unsaved draft is gone for good, so warn first.
+                          if (currentDraftSaved) discardDraft();
+                          else setConfirmExit(true);
+                        }}
+                        title="Close preview"
+                        aria-label="Close preview"
+                        className="ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sand-400 hover:bg-sand-100 hover:text-clay-600"
+                      >
+                        <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
+                  <CardDescription className="truncate">
+                    Subject:{" "}
+                    <span className="font-medium text-sand-900">{extracted.subject}</span>
+                    {imageCount > 0 && (
+                      <span className="ml-2 text-sand-500">
+                        · {imageCount} image{imageCount === 1 ? "" : "s"} extracted
+                      </span>
+                    )}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="p-3">
                   <p className={`mb-2 text-center text-[11px] ${htmlDirty ? "font-medium text-clay-600" : "text-sand-400"}`}>
@@ -756,6 +762,39 @@ export default function Home() {
                 </CardContent>
               </Card>
             </div>
+
+            {confirmExit && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-sand-900/40 px-4"
+                onClick={() => setConfirmExit(false)}
+              >
+                <div
+                  className="w-full max-w-sm rounded-lg border border-sand-200 bg-white p-5 shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className="font-serif text-lg font-medium text-sand-900">Exit without saving?</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-sand-600">
+                    This draft hasn&apos;t been saved. Exiting now will permanently delete it — it won&apos;t
+                    be in your Saved drafts. Save it as a draft first if you want to keep it.
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => setConfirmExit(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => {
+                        setConfirmExit(false);
+                        discardDraft();
+                      }}
+                    >
+                      Exit without saving
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 

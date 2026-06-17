@@ -143,7 +143,7 @@ export default function Home() {
     duplicateWarning,
     savedDrafts, currentDraftSaved,
     htmlDirty, syncHtml, swapSubjectLine,
-    handleFileChange,
+    handleFileChange, clearInputs,
     generateDraft, cancelGeneration,
     refineDraft, undoRefine, redoRefine, canUndoRefine, canRedoRefine, lastRefineInstruction, redoRefineInstruction,
     saveDraft, discardDraft,
@@ -284,6 +284,15 @@ export default function Home() {
                 {stage === "drafting" ? "Drafter & critic working…" : "Generate eblast draft"}
               </Button>
 
+              {(selectedSlug || pdf) && stage !== "drafting" && (
+                <button
+                  onClick={clearInputs}
+                  className="mx-auto block text-[11px] text-sand-500 underline underline-offset-2 hover:text-clay-600"
+                >
+                  Clear community &amp; file
+                </button>
+              )}
+
               {stage === "drafting" && (
                 <div className="rounded-md border border-sand-200 bg-sand-50/60 p-3 text-xs leading-relaxed text-sand-600">
                   <p className="eb-fade-pulse">
@@ -330,32 +339,7 @@ export default function Home() {
         {/* Preview + reviewer */}
         {extracted && (
           <>
-            {/* Draft action bar */}
-            <div className="mt-8 flex items-center justify-between gap-3 rounded-md border border-sand-200 bg-sand-50/60 px-4 py-2.5">
-              <div className="min-w-0 text-xs text-sand-600">
-                {currentDraftSaved ? (
-                  <span className="font-medium text-forest-700">Draft saved</span>
-                ) : (
-                  <span>Unsaved draft</span>
-                )}
-                <span className="mx-1.5 text-sand-300">·</span>
-                <span className="truncate font-medium text-sand-800">{extracted.subject}</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {!currentDraftSaved && (
-                  <>
-                    <Button size="sm" variant="secondary" onClick={saveDraft}>
-                      Save draft
-                    </Button>
-                    <Button size="sm" variant="destructive" onClick={discardDraft}>
-                      Discard
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 grid items-start gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
+            <div className="mt-8 grid items-start gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
               {/* Controls column */}
               <div className="flex flex-col gap-5">
 
@@ -701,11 +685,6 @@ export default function Home() {
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    {htmlDirty && (
-                      <Button size="sm" variant="secondary" onClick={syncHtml}>
-                        Sync preview
-                      </Button>
-                    )}
                     {stage === "refining" && (
                       <p className="eb-pulse-row text-sand-500">
                         <span className="eb-pulse-dot" />
@@ -713,6 +692,32 @@ export default function Home() {
                         <span className="eb-pulse-dot" />
                       </p>
                     )}
+                    {htmlDirty && (
+                      <Button size="sm" variant="secondary" onClick={syncHtml}>
+                        Sync preview
+                      </Button>
+                    )}
+                    {!currentDraftSaved && (
+                      <>
+                        <Button size="sm" variant="secondary" onClick={saveDraft}>
+                          Save draft
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={discardDraft}>
+                          Discard
+                        </Button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={discardDraft}
+                      title="Close preview"
+                      aria-label="Close preview"
+                      className="ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sand-400 hover:bg-sand-100 hover:text-clay-600"
+                    >
+                      <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+                      </svg>
+                    </button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-3">

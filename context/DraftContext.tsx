@@ -220,6 +220,8 @@ export interface DraftContextValue {
   /** True when the user has edited text inline and `html` hasn't been re-rendered yet. */
   htmlDirty: boolean;
   handleFileChange: (file: File | null) => Promise<void>;
+  /** Reset the Generate card — clear the selected community and uploaded file. */
+  clearInputs: () => void;
   generateDraft: () => Promise<void>;
   cancelGeneration: () => void;
   refineDraft: () => Promise<void>;
@@ -373,6 +375,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         community: match.community,
       });
     }
+  }
+
+  function clearInputs() {
+    setSelectedSlug("");
+    setPdf(null);
+    setDuplicateWarning(null);
+    pendingHashRef.current = null;
   }
 
   async function generateDraft() {
@@ -760,6 +769,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     currentDraftSaved,
     htmlDirty,
     handleFileChange,
+    clearInputs,
     generateDraft, cancelGeneration,
     refineDraft,
     undoRefine,

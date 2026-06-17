@@ -1,10 +1,6 @@
-// Subject Specialist surface. Renders the winner + alternatives + the
-// specialist's reasoning. Each alternative is one click away from being
-// swapped in (sends a refinement instruction through the existing pipe).
-
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, SectionLabel } from "./ui/Card";
+import { useState } from "react";
 import { Badge } from "./ui/Badge";
 
 interface SubjectCandidate {
@@ -30,7 +26,7 @@ const APPROACH_LABEL: Record<string, string> = {
   "story-tease": "Story",
   "warmth-led": "Warmth",
   "data-led": "Data",
-  "drafter-original": "Drafter's original",
+  "drafter-original": "Original",
 };
 
 export function SubjectSpecialistPanel({
@@ -42,67 +38,90 @@ export function SubjectSpecialistPanel({
   currentSubject: string;
   onPickAlternative: (subject: string, previewText: string) => void;
 }) {
-  return (
-    <Card className="eb-rise border-l-4 border-l-clay-500">
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base">Subject specialist</CardTitle>
-          <Badge variant="warning">{1 + specialist.alternatives.length} candidates</Badge>
-        </div>
-        <CardDescription>{specialist.chosenRationale}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <div className="mb-1.5 flex items-center gap-2">
-            <SectionLabel className="mb-0">Winner · in use</SectionLabel>
-            <Badge variant="success">{APPROACH_LABEL[specialist.winner.approach] ?? specialist.winner.approach}</Badge>
-            <span className="text-[10px] text-sand-400 tabular-nums">{specialist.winner.charCount} chars</span>
-          </div>
-          <div className="rounded-md border border-forest-200 bg-forest-50/40 p-3">
-            <p className="text-sm font-medium text-sand-900">{specialist.winner.subject}</p>
-            <p className="mt-1 text-xs text-sand-600">{specialist.winner.previewText}</p>
-            <p className="mt-2 text-xs italic text-sand-500">{specialist.winner.rationale}</p>
-          </div>
-        </div>
+  const [open, setOpen] = useState(false);
+  const total = 1 + specialist.alternatives.length;
 
-        {specialist.alternatives.length > 0 && (
+  return (
+    <div className="rounded-lg border border-sand-200 bg-white shadow-card">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between px-5 py-4 text-left"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="font-serif text-base font-medium text-sand-900">Subject specialist</span>
+          <Badge variant="warning">{total} candidates</Badge>
+        </div>
+        <svg
+          viewBox="0 0 16 16"
+          className={`h-3.5 w-3.5 shrink-0 text-sand-300 transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" strokeWidth="2"
+        >
+          <path d="M4 6l4 4 4-4" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="space-y-4 border-t border-sand-200 px-5 pb-5 pt-4">
+          <p className="text-xs leading-relaxed text-sand-600">{specialist.chosenRationale}</p>
+
           <div>
-            <SectionLabel className="mb-2">Strong alternatives · click to swap</SectionLabel>
-            <ul className="space-y-2">
-              {specialist.alternatives.map((alt, i) => {
-                const isCurrent = alt.subject === currentSubject;
-                return (
-                  <li key={i}>
-                    <button
-                      type="button"
-                      onClick={() => onPickAlternative(alt.subject, alt.previewText)}
-                      disabled={isCurrent}
-                      className={`group block w-full rounded-md border p-3 text-left transition-colors ${
-                        isCurrent
-                          ? "cursor-default border-forest-200 bg-forest-50/40"
-                          : "border-sand-200 bg-white hover:border-clay-300 hover:bg-clay-50/40"
-                      }`}
-                    >
-                      <div className="mb-1 flex items-center gap-2">
-                        <Badge variant="outline">{APPROACH_LABEL[alt.approach] ?? alt.approach}</Badge>
-                        <span className="text-[10px] text-sand-400 tabular-nums">{alt.charCount} chars</span>
-                        {isCurrent && (
-                          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-forest-700">
-                            in use
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-sand-900">{alt.subject}</p>
-                      <p className="mt-0.5 text-xs text-sand-600">{alt.previewText}</p>
-                      <p className="mt-1.5 text-xs italic text-sand-500">{alt.rationale}</p>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-sand-500">
+              Current subject line
+            </p>
+            <div className="rounded-md border border-forest-200 bg-forest-50/40 p-3">
+              <div className="mb-1.5 flex items-center gap-2">
+                <Badge variant="outline">
+                  {APPROACH_LABEL[specialist.winner.approach] ?? specialist.winner.approach}
+                </Badge>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-forest-700">In use</span>
+              </div>
+              <p className="text-sm font-medium text-sand-900">{specialist.winner.subject}</p>
+              <p className="mt-1 text-xs text-sand-600">{specialist.winner.previewText}</p>
+            </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {specialist.alternatives.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-sand-500">
+                Alternatives — click to swap
+              </p>
+              <ul className="space-y-2">
+                {specialist.alternatives.map((alt, i) => {
+                  const isCurrent = alt.subject === currentSubject;
+                  return (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        onClick={() => onPickAlternative(alt.subject, alt.previewText)}
+                        disabled={isCurrent}
+                        className={`block w-full rounded-md border p-3 text-left transition-colors ${
+                          isCurrent
+                            ? "cursor-default border-forest-200 bg-forest-50/40"
+                            : "border-sand-200 bg-white hover:border-clay-300 hover:bg-clay-50/40"
+                        }`}
+                      >
+                        <div className="mb-1 flex items-center gap-1.5">
+                          <Badge variant="outline">
+                            {APPROACH_LABEL[alt.approach] ?? alt.approach}
+                          </Badge>
+                          {isCurrent && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-forest-700">
+                              in use
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-sand-900">{alt.subject}</p>
+                        <p className="mt-0.5 text-xs text-sand-500">{alt.previewText}</p>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

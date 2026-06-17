@@ -2,6 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
+import { useState } from "react";
 import { Header } from "@/components/Header";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
 import { IntelligenceApplied } from "@/components/IntelligenceApplied";
@@ -148,6 +149,7 @@ export default function Home() {
     dismissDuplicateWarning,
   } = useDraft();
 
+  const [reviewerOpen, setReviewerOpen] = useState(true);
   const selected = communities.find((c) => c.slug === selectedSlug);
 
   return (
@@ -375,173 +377,195 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                {/* Reviewer card */}
-                <Card className="eb-rise">
-                  <CardHeader>
-                    <CardTitle className="text-base">Reviewer</CardTitle>
-                    {agentLoop && (
-                      <CardDescription>
-                        {agentLoop.totalRounds} round{agentLoop.totalRounds === 1 ? "" : "s"}
-                        {agentLoop.imagesExcluded > 0 && (
-                          <>
-                            {" · "}
-                            <span className="text-clay-600">
-                              {agentLoop.imagesExcluded} image{agentLoop.imagesExcluded === 1 ? "" : "s"} dropped
-                            </span>
-                          </>
-                        )}
-                      </CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {reviewing && !review && (
-                      <p className="eb-fade-pulse text-sm text-sand-600">Re-reviewing the refined draft…</p>
-                    )}
-                    {reviewError && (
-                      <div className="rounded-md border border-clay-200 bg-clay-50 px-3 py-2 text-xs text-clay-700">
-                        {reviewError}
-                      </div>
-                    )}
+                {/* Reviewer — collapsible, open by default */}
+                <div className="rounded-lg border border-sand-200 bg-white shadow-card">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-5 py-4 text-left"
+                    onClick={() => setReviewerOpen((o) => !o)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-serif text-base font-medium text-sand-900">Reviewer</span>
+                      {review && (
+                        <Badge variant={verdictBadge[review.verdict]?.variant ?? "neutral"}>
+                          {verdictBadge[review.verdict]?.label ?? review.verdict}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {reviewing && (
+                        <span className="text-[11px] italic text-sand-400">reviewing…</span>
+                      )}
+                      {agentLoop && (
+                        <span className="text-[11px] text-sand-400">
+                          {agentLoop.totalRounds} round{agentLoop.totalRounds === 1 ? "" : "s"}
+                          {agentLoop.imagesExcluded > 0
+                            ? ` · ${agentLoop.imagesExcluded} image${agentLoop.imagesExcluded === 1 ? "" : "s"} dropped`
+                            : ""}
+                        </span>
+                      )}
+                      <svg
+                        viewBox="0 0 16 16"
+                        className={`h-3.5 w-3.5 shrink-0 text-sand-300 transition-transform ${reviewerOpen ? "rotate-180" : ""}`}
+                        fill="none" stroke="currentColor" strokeWidth="2"
+                      >
+                        <path d="M4 6l4 4 4-4" />
+                      </svg>
+                    </div>
+                  </button>
 
-                    {review && (
-                      <>
-                        {/* Verdict banner — first and prominent */}
-                        <div className={`flex items-start gap-2.5 rounded-md border px-3 py-2.5 ${
-                          review.verdict === "ready"
-                            ? "border-forest-200 bg-forest-50/60"
-                            : review.verdict === "needs_work"
-                              ? "border-amber-200 bg-amber-50/50"
-                              : "border-clay-200 bg-clay-50/50"
-                        }`}>
-                          <Badge variant={verdictBadge[review.verdict]?.variant ?? "neutral"} className="mt-0.5 shrink-0">
-                            {verdictBadge[review.verdict]?.label ?? review.verdict}
-                          </Badge>
-                          <p className="text-xs leading-relaxed text-sand-700">{review.summary}</p>
+                  {reviewerOpen && (
+                    <div className="space-y-3 border-t border-sand-200 px-5 pb-5 pt-4">
+                      {reviewing && !review && (
+                        <p className="eb-fade-pulse text-sm text-sand-600">Re-reviewing the refined draft…</p>
+                      )}
+                      {reviewError && (
+                        <div className="rounded-md border border-clay-200 bg-clay-50 px-3 py-2 text-xs text-clay-700">
+                          {reviewError}
                         </div>
+                      )}
 
-                        {/* Findings — collapsed one-liners */}
-                        {review.findings.length === 0 ? (
-                          <p className="rounded-md border border-dashed border-forest-200 bg-forest-50/50 px-3 py-2.5 text-xs text-forest-700">
-                            No findings. Reviewer thinks this is clean.
-                          </p>
-                        ) : (
-                          <ul className="space-y-1">
-                            {review.findings.map((f, i) => (
-                              <li key={i}>
-                                <details className="group overflow-hidden rounded border border-sand-200 bg-white">
-                                  <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
-                                    <span className={`h-2 w-2 shrink-0 rounded-full ${
-                                      f.severity === "blocker"
-                                        ? "bg-clay-600"
-                                        : f.severity === "important"
-                                          ? "bg-amber-500"
-                                          : "bg-sand-300"
-                                    }`} />
-                                    <span className="min-w-0 flex-1 truncate text-sm text-sand-900">{f.issue}</span>
-                                    <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-sand-400">
-                                      {f.category.replace(/_/g, " ")}
-                                    </span>
-                                    <svg
-                                      viewBox="0 0 16 16"
-                                      className="h-3.5 w-3.5 shrink-0 text-sand-300 transition-transform group-open:rotate-180"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                    >
-                                      <path d="M4 6l4 4 4-4" />
-                                    </svg>
-                                  </summary>
-                                  <div className="space-y-2.5 border-t border-sand-100 px-3 pb-3 pt-2.5">
-                                    {f.field && (
-                                      <p className="text-[11px] font-medium uppercase tracking-wide text-sand-500">
-                                        Field: {f.field}
-                                      </p>
-                                    )}
-                                    {f.suggestion && (
-                                      <button
-                                        onClick={() => setRefineInput(f.suggestion!)}
-                                        title="Click to load this into the refine box"
-                                        className="w-full rounded border border-dashed border-clay-300 bg-clay-50/40 px-3 py-2 text-left text-xs leading-relaxed text-sand-800 hover:border-clay-400 hover:bg-clay-50/70"
-                                      >
-                                        → {f.suggestion}
-                                      </button>
-                                    )}
-                                    <p className="text-xs italic text-sand-500">{f.rationale}</p>
-                                  </div>
-                                </details>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                      {review && (
+                        <>
+                          {/* Verdict summary */}
+                          <div className={`rounded-md border px-3 py-2.5 ${
+                            review.verdict === "ready"
+                              ? "border-forest-200 bg-forest-50/60"
+                              : review.verdict === "needs_work"
+                                ? "border-amber-200 bg-amber-50/50"
+                                : "border-clay-200 bg-clay-50/50"
+                          }`}>
+                            <p className="text-sm leading-relaxed text-sand-800">{review.summary}</p>
+                          </div>
 
-                        {agentLoop && agentLoop.iterations.length > 1 && (
-                          <details className="group rounded-md border border-sand-200 bg-sand-50/60 px-3 py-2">
-                            <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.12em] text-sand-600 group-open:text-sand-900">
-                              How they got here · {agentLoop.totalRounds} rounds
-                            </summary>
-                            <ol className="mt-3 space-y-3 text-xs text-sand-700">
-                              {agentLoop.iterations.map((it) => (
-                                <li key={it.round} className="space-y-1">
-                                  <p className="text-sand-900">
-                                    <span className="font-medium">Round {it.round}:</span>{" "}
-                                    <span className="italic text-sand-600">
-                                      {it.verdict.replace(/_/g, " ")},{" "}
-                                      {it.findingsCount} finding{it.findingsCount === 1 ? "" : "s"}
-                                    </span>
-                                  </p>
-                                  {it.droppedImageSlots.length > 0 && (
-                                    <p className="text-clay-700">↳ Dropped: {it.droppedImageSlots.join("; ")}</p>
-                                  )}
-                                  {it.appliedSuggestions.length > 0 && (
-                                    <ul className="ml-4 list-disc space-y-0.5 text-sand-600">
-                                      {it.appliedSuggestions.map((s, idx) => (
-                                        <li key={idx}>{s}</li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </li>
-                              ))}
-                            </ol>
-                          </details>
-                        )}
-
-                        {review.subjectLineAlternatives && review.subjectLineAlternatives.length > 0 && (
-                          <details className="rounded-md border border-sand-200 px-3 py-2">
-                            <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.12em] text-sand-600">
-                              Alternative subject lines
-                            </summary>
-                            <ul className="mt-2 space-y-1.5">
-                              {review.subjectLineAlternatives.map((alt, i) => (
-                                <li key={i}>
-                                  <button
-                                    onClick={() =>
-                                      setRefineInput(`Change the subject line to: "${alt}"`)
-                                    }
-                                    className="w-full rounded border border-dashed border-sand-300 px-3 py-2 text-left text-xs text-sand-700 hover:border-forest-400 hover:bg-forest-50/40"
-                                  >
-                                    → {alt}
-                                  </button>
-                                </li>
-                              ))}
+                          {/* Findings */}
+                          {review.findings.length === 0 ? (
+                            <p className="rounded-md border border-dashed border-forest-200 bg-forest-50/50 px-3 py-2.5 text-xs text-forest-700">
+                              No issues found — reviewer thinks this draft is clean.
+                            </p>
+                          ) : (
+                            <ul className="space-y-1.5">
+                              {review.findings.map((f, i) => {
+                                const priority =
+                                  f.severity === "blocker"
+                                    ? { label: "Must fix", cls: "bg-clay-50 text-clay-700 border-clay-300" }
+                                    : f.severity === "important"
+                                      ? { label: "Should fix", cls: "bg-amber-50 text-amber-700 border-amber-300" }
+                                      : { label: "Consider", cls: "bg-sand-100 text-sand-600 border-sand-300" };
+                                return (
+                                  <li key={i}>
+                                    <details className="group overflow-hidden rounded-md border border-sand-200 bg-white">
+                                      <summary className="flex cursor-pointer select-none items-start gap-2.5 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+                                        <span className={`mt-px shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${priority.cls}`}>
+                                          {priority.label}
+                                        </span>
+                                        <span className="flex-1 text-sm leading-snug text-sand-900">{f.issue}</span>
+                                        <svg
+                                          viewBox="0 0 16 16"
+                                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sand-300 transition-transform group-open:rotate-180"
+                                          fill="none" stroke="currentColor" strokeWidth="2"
+                                        >
+                                          <path d="M4 6l4 4 4-4" />
+                                        </svg>
+                                      </summary>
+                                      <div className="space-y-2 border-t border-sand-100 px-3 pb-3 pt-2.5">
+                                        {f.suggestion && (
+                                          <button
+                                            onClick={() => setRefineInput(f.suggestion!)}
+                                            title="Click to load this fix into the refine box"
+                                            className="w-full rounded border border-dashed border-clay-300 bg-clay-50/40 px-3 py-2 text-left text-xs leading-relaxed text-sand-800 hover:border-clay-400 hover:bg-clay-50/70"
+                                          >
+                                            Fix: {f.suggestion}
+                                          </button>
+                                        )}
+                                        {f.rationale && (
+                                          <p className="text-xs text-sand-500">
+                                            <span className="font-medium text-sand-700">Why: </span>{f.rationale}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </details>
+                                  </li>
+                                );
+                              })}
                             </ul>
-                          </details>
-                        )}
+                          )}
 
-                        {review.sendTimeRecommendation && (
-                          <div className="border-t border-sand-100 pt-3 text-xs leading-relaxed text-sand-600">
-                            <span className="font-medium text-sand-800">Send-time hint:</span>{" "}
-                            {review.sendTimeRecommendation}
-                          </div>
-                        )}
-                        {review.recipientListNote && (
-                          <div className="text-xs text-clay-700">
-                            <span className="font-medium">List:</span> {review.recipientListNote}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+                          {/* Agent loop trace */}
+                          {agentLoop && agentLoop.iterations.length > 1 && (
+                            <details className="group rounded-md border border-sand-200 bg-sand-50/60 px-3 py-2">
+                              <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.12em] text-sand-600 group-open:text-sand-900">
+                                Agent rounds · {agentLoop.totalRounds} total
+                              </summary>
+                              <ol className="mt-3 space-y-3 text-xs text-sand-700">
+                                {agentLoop.iterations.map((it) => (
+                                  <li key={it.round} className="space-y-1">
+                                    <p className="font-medium text-sand-900">
+                                      Round {it.round}:{" "}
+                                      <span className="font-normal italic">
+                                        {it.verdict.replace(/_/g, " ")},{" "}
+                                        {it.findingsCount} finding{it.findingsCount === 1 ? "" : "s"}
+                                      </span>
+                                    </p>
+                                    {it.droppedImageSlots.length > 0 && (
+                                      <p className="text-clay-700">↳ Dropped: {it.droppedImageSlots.join("; ")}</p>
+                                    )}
+                                    {it.appliedSuggestions.length > 0 && (
+                                      <ul className="ml-4 list-disc space-y-0.5 text-sand-600">
+                                        {it.appliedSuggestions.map((s, idx) => (
+                                          <li key={idx}>{s}</li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </li>
+                                ))}
+                              </ol>
+                            </details>
+                          )}
+
+                          {/* Subject line alternatives from critic */}
+                          {review.subjectLineAlternatives && review.subjectLineAlternatives.length > 0 && (
+                            <details className="rounded-md border border-sand-200 px-3 py-2">
+                              <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-[0.12em] text-sand-600">
+                                Subject line alternatives
+                              </summary>
+                              <ul className="mt-2 space-y-1.5">
+                                {review.subjectLineAlternatives.map((alt, i) => (
+                                  <li key={i}>
+                                    <button
+                                      onClick={() => setRefineInput(`Change the subject line to: "${alt}"`)}
+                                      className="w-full rounded border border-dashed border-sand-300 px-3 py-2 text-left text-xs text-sand-700 hover:border-forest-400 hover:bg-forest-50/40"
+                                    >
+                                      → {alt}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+
+                          {/* Send time / list note */}
+                          {(review.sendTimeRecommendation || review.recipientListNote) && (
+                            <div className="space-y-1 border-t border-sand-100 pt-3 text-xs">
+                              {review.sendTimeRecommendation && (
+                                <p className="text-sand-600">
+                                  <span className="font-medium text-sand-800">Best send time: </span>
+                                  {review.sendTimeRecommendation}
+                                </p>
+                              )}
+                              {review.recipientListNote && (
+                                <p className="text-clay-700">
+                                  <span className="font-medium">List note: </span>
+                                  {review.recipientListNote}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {/* Subject specialist */}
                 {subjectSpecialist && (

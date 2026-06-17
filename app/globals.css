@@ -86,3 +86,12 @@
   to { opacity: 1; transform: translateY(0); }
 }
 .eb-rise { animation: eb-rise 0.25s ease-out both; }
+
+/* Transient save toast: fade/slide in, hold, then fade out over ~3.5s. */
+@keyframes eb-toast {
+  0% { opacity: 0; transform: translateY(8px); }
+  8% { opacity: 1; transform: translateY(0); }
+  85% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(8px); }
+}
+.eb-toast { animation: eb-toast 3.5s ease-in-out both; }

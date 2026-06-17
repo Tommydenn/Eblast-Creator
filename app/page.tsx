@@ -157,7 +157,7 @@ export default function Home() {
     pushResult, error,
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
-    savedDrafts, currentDraftSaved,
+    savedDrafts, currentDraftSaved, saveNotice,
     htmlDirty, syncHtml, swapSubjectLine,
     handleFileChange, clearInputs,
     generateDraft, cancelGeneration,
@@ -742,12 +742,19 @@ export default function Home() {
                   <CardDescription className="truncate">
                     Subject:{" "}
                     <span className="font-medium text-sand-900">{extracted.subject}</span>
-                    {imageCount > 0 && (
-                      <span className="ml-2 text-sand-500">
-                        · {imageCount} image{imageCount === 1 ? "" : "s"} extracted
-                      </span>
-                    )}
                   </CardDescription>
+                  {imageCount > 0 && (
+                    <div className="mt-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-sand-200 bg-white px-2.5 py-0.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-sand-500">
+                        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <rect x="2" y="3" width="12" height="10" rx="1.5" />
+                          <circle cx="5.75" cy="6.25" r="1" />
+                          <path d="M3 12l3.25-3 2.25 1.75 2-1.5 2.5 2.75" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        {imageCount} image{imageCount === 1 ? "" : "s"} extracted
+                      </span>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="p-3">
                   <p className={`mb-2 text-center text-[11px] ${htmlDirty ? "font-medium text-clay-600" : "text-sand-400"}`}>
@@ -854,6 +861,23 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {/* Transient save confirmation — fades in, holds, fades out (~3.5s). */}
+      {saveNotice && (
+        <div
+          key={saveNotice.id}
+          role="status"
+          aria-live="polite"
+          className="eb-toast pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
+        >
+          <div className="flex items-center gap-2 rounded-lg bg-forest-700 px-4 py-2.5 text-sm font-medium text-white shadow-xl">
+            <svg viewBox="0 0 16 16" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 8.5l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {saveNotice.text}
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -160,7 +160,7 @@ export interface SavedDraft {
 
 const PDF_HISTORY_KEY = "eblast-pdf-history";
 const DRAFTS_KEY = "eblast-saved-drafts";
-const MAX_SAVED_DRAFTS = 5;
+const MAX_DRAFTS_PER_COMMUNITY = 8;
 
 type PdfRecord = { hash: string; name: string; generatedAt: string; community: string };
 
@@ -217,6 +217,8 @@ export interface DraftContextValue {
   duplicateWarning: { name: string; generatedAt: string; community: string } | null;
   savedDrafts: SavedDraft[];
   currentDraftSaved: boolean;
+  /** Transient confirmation shown briefly after a draft is saved. */
+  saveNotice: { id: number; text: string } | null;
   /** True when the user has edited text inline and `html` hasn't been re-rendered yet. */
   htmlDirty: boolean;
   handleFileChange: (file: File | null) => Promise<void>;
@@ -257,6 +259,11 @@ const DraftContext = createContext<DraftContextValue | null>(null);
 export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string>("");
+  // The community the ACTIVE draft belongs to — frozen when generated/loaded so
+  // clearing the Generate card (selectedSlug) never orphans the current draft.
+  const [activeCommunitySlug, setActiveCommunitySlug] = useState<string>("");
+  // Transient "saved!" toast; cleared after a few seconds.
+  const [saveNotice, setSaveNotice] = useState<{ id: number; text: string } | null>(null);
   const [pdf, setPdf] = useState<File | null>(null);
   const [stage, setStage] = useState<Stage>("idle");
   const [extracted, setExtracted] = useState<ExtractedFlyer | null>(null);
@@ -294,6 +301,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // capturing a stale closure (the listener is set up once with empty deps).
   const extractedRef = useRef<ExtractedFlyer | null>(null);
   const selectedSlugRef = useRef<string>("");
+  const activeCommunitySlugRef = useRef<string>("");
+  const saveNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heroImageUrlRef = useRef<string | undefined>();
   const secondaryImageUrlRef = useRef<string | undefined>();
   const galleryImageUrlsRef = useRef<string[]>([]);
@@ -301,6 +310,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Keep refs in sync with state
   useEffect(() => { extractedRef.current = extracted; }, [extracted]);
   useEffect(() => { selectedSlugRef.current = selectedSlug; }, [selectedSlug]);
+  useEffect(() => { activeCommunitySlugRef.current = activeCommunitySlug; }, [activeCommunitySlug]);
   useEffect(() => { heroImageUrlRef.current = heroImageUrl; }, [heroImageUrl]);
   useEffect(() => { secondaryImageUrlRef.current = secondaryImageUrl; }, [secondaryImageUrl]);
   useEffect(() => { galleryImageUrlsRef.current = galleryImageUrls; }, [galleryImageUrls]);
@@ -392,6 +402,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Freeze the draft's community so clearing the Generate card later can't orphan it.
+    setActiveCommunitySlug(selectedSlug);
     setStage("drafting");
     setError(null);
     setExtracted(null);
@@ -480,7 +492,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function refineDraft() {
-    if (!extracted || !refineInput.trim() || !selectedSlug) return;
+    if (!extracted || !refineInput.trim() || !activeCommunitySlug) return;
     const instruction = refineInput.trim();
 
     // Snapshot the pre-refine state so this AI edit can be undone.
@@ -510,7 +522,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({
           current: extracted,
           instruction,
-          communitySlug: selectedSlug,
+          communitySlug: activeCommunitySlug,
           heroImageUrl,
           secondaryImageUrl,
           galleryImageUrls,
@@ -609,7 +621,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   async function syncHtml() {
     const current = extractedRef.current;
-    const slug = selectedSlugRef.current;
+    const slug = activeCommunitySlugRef.current;
     if (!current || !slug) return;
     try {
       const res = await fetch("/api/render-email", {
@@ -634,7 +646,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function pushDraft() {
-    if (!extracted || !selectedSlug) return;
+    if (!extracted || !activeCommunitySlug) return;
     // Re-render from extracted so inline edits are captured in the pushed HTML.
     let pushHtml = html;
     if (htmlDirty) {
@@ -650,7 +662,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          communitySlug: selectedSlug,
+          communitySlug: activeCommunitySlug,
           subject: extracted.subject,
           previewText: extracted.previewText,
           html: pushHtml,
@@ -667,11 +679,15 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   function saveDraft() {
     if (!extracted || !html) return;
-    const community = communities.find((c) => c.slug === selectedSlug);
+    // Use the draft's frozen community — NOT the Generate card's current
+    // selection, which the user may have cleared since generating.
+    const slug = activeCommunitySlug;
+    const community = communities.find((c) => c.slug === slug);
+    const communityName = community?.displayName ?? slug;
     const draft: SavedDraft = {
       id: `${Date.now()}`,
-      communitySlug: selectedSlug,
-      communityName: community?.displayName ?? selectedSlug,
+      communitySlug: slug,
+      communityName,
       savedAt: new Date().toISOString(),
       subject: extracted.subject,
       extracted,
@@ -685,10 +701,22 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       pastSendsContext,
       subjectSpecialist,
     };
-    const updated = [draft, ...getSavedDrafts()].slice(0, MAX_SAVED_DRAFTS);
-    persistSavedDrafts(updated);
-    setSavedDrafts(updated);
+    // Newest first, capped at MAX_DRAFTS_PER_COMMUNITY per community (drops the
+    // oldest for that community when exceeded).
+    const withNew = [draft, ...getSavedDrafts().filter((d) => d.id !== draft.id)];
+    const perCommunity: Record<string, number> = {};
+    const capped = withNew.filter((d) => {
+      perCommunity[d.communitySlug] = (perCommunity[d.communitySlug] ?? 0) + 1;
+      return perCommunity[d.communitySlug] <= MAX_DRAFTS_PER_COMMUNITY;
+    });
+    persistSavedDrafts(capped);
+    setSavedDrafts(capped);
     setCurrentDraftSaved(true);
+
+    // Transient confirmation toast.
+    setSaveNotice({ id: Date.now(), text: `Saved to ${communityName} — find it on its Communities page.` });
+    if (saveNoticeTimerRef.current) clearTimeout(saveNoticeTimerRef.current);
+    saveNoticeTimerRef.current = setTimeout(() => setSaveNotice(null), 3500);
   }
 
   function discardDraft() {
@@ -710,11 +738,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setHtmlDirty(false);
     setUndoStack([]);
     setRedoStack([]);
+    setActiveCommunitySlug("");
     setStage("idle");
   }
 
   function loadSavedDraft(draft: SavedDraft) {
     setSelectedSlug(draft.communitySlug);
+    setActiveCommunitySlug(draft.communitySlug);
     setExtracted(draft.extracted);
     setHtml(draft.html);
     setHeroImageUrl(draft.heroImageUrl);
@@ -767,6 +797,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     duplicateWarning,
     savedDrafts,
     currentDraftSaved,
+    saveNotice,
     htmlDirty,
     handleFileChange,
     clearInputs,

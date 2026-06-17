@@ -10,6 +10,7 @@ import { pastSends } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle, SectionLabel, CardDescription } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { CommunityDraftsPanel } from "@/components/CommunityDraftsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -463,6 +464,19 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                   <p className="text-sm leading-relaxed text-sand-700">{c.voiceNotes}</p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Saved drafts for this community — full-width */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Saved drafts</CardTitle>
+                <CardDescription>Drafts you saved for this community (up to 8). Open one to keep editing.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CommunityDraftsPanel communitySlug={c.slug} />
             </CardContent>
           </Card>
 

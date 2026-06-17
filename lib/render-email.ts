@@ -40,12 +40,18 @@ function pickTextColor(bgHex: string): string {
   return lum > 0.4 ? "#1a1a1a" : "#ffffff";
 }
 
-// Text color for a button: keep it consistent with the surrounding section's
-// text color so the button reads as part of that section — but only when that
-// color stays legible on the button's own background. If the section text would
-// be too close to the button fill (low contrast), fall back to a safe choice.
+// Text color for a button. The button label should match the surrounding
+// section's text color so the button reads as part of that section — we use it
+// in every case where it stays legible on the button fill. We only override it
+// when the section text and the fill are so close in tone that the label would
+// be effectively invisible (e.g. white text on a near-white fill); in that one
+// case we flip to a high-contrast color. The threshold is intentionally low so
+// "matches the section text" wins for all normal mid-tone fills (a dark-ish
+// brand color with white text reads fine even at modest contrast for large,
+// bold, uppercase button labels) — it is NOT a strict WCAG gate.
+const BUTTON_TEXT_MIN_CONTRAST = 1.35;
 function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
-  return contrastRatio(sectionTextHex, buttonBgHex) >= 1.8
+  return contrastRatio(sectionTextHex, buttonBgHex) >= BUTTON_TEXT_MIN_CONTRAST
     ? sectionTextHex
     : pickTextColor(buttonBgHex);
 }

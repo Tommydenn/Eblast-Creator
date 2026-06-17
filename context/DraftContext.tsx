@@ -46,8 +46,10 @@ export interface ExtractedFlyer {
 }
 
 export type FindingSeverity = "blocker" | "important" | "nice_to_have";
+// These must match what lib/critic.ts actually emits.
 export type FindingCategory =
-  | "subject" | "preview" | "cta" | "body" | "images" | "voice" | "craft" | "compliance";
+  | "voice" | "brand" | "field_completeness" | "subject_line" | "preview_text"
+  | "cta" | "structure" | "compliance" | "send_strategy" | "image_quality" | "craft";
 
 export interface ReviewFinding {
   severity: FindingSeverity;
@@ -58,7 +60,8 @@ export interface ReviewFinding {
   rationale: string;
 }
 
-export type ReviewVerdict = "ready" | "needs_work" | "major_revision";
+// Must match what lib/critic.ts ReviewVerdict actually emits.
+export type ReviewVerdict = "ready" | "needs_revision" | "blocking_issues";
 
 export interface DraftReview {
   verdict: ReviewVerdict;
@@ -220,6 +223,8 @@ export interface DraftContextValue {
   refineDraft: () => Promise<void>;
   runReview: (targetExtracted?: ExtractedFlyer, targetSlug?: string) => Promise<void>;
   pushDraft: () => Promise<void>;
+  /** Directly swap subject + preview text without any AI call. */
+  swapSubjectLine: (subject: string, previewText: string) => void;
   /** Re-render HTML from current `extracted` without calling any AI. */
   syncHtml: () => Promise<void>;
   saveDraft: () => void;
@@ -487,12 +492,20 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setRefineHistory((h) => [...h, { instruction, ok: true, changedFields: data.changedFields }]);
       setCurrentDraftSaved(false);
       setStage("preview");
-      runReview(data.extracted, selectedSlug);
     } catch (e: any) {
       setError(String(e));
       setRefineHistory((h) => [...h, { instruction, ok: false }]);
       setStage("preview");
     }
+  }
+
+  function swapSubjectLine(subject: string, previewText: string) {
+    const current = extractedRef.current;
+    if (!current) return;
+    const updated = { ...current, subject, previewText };
+    setExtracted(updated);
+    setCurrentDraftSaved(false);
+    // Subject/preview don't affect the visible preview rendering, so no htmlDirty.
   }
 
   async function syncHtml() {
@@ -657,6 +670,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     refineDraft,
     runReview,
     pushDraft,
+    swapSubjectLine,
     syncHtml,
     saveDraft, discardDraft,
     loadSavedDraft, deleteSavedDraft,

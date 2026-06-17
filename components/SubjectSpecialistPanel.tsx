@@ -39,7 +39,13 @@ export function SubjectSpecialistPanel({
   onPickAlternative: (subject: string, previewText: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const total = 1 + specialist.alternatives.length;
+
+  // Flatten all candidates — winner first, then alternatives.
+  // "Recommended" badge follows the specialist's winner regardless of which is in use.
+  // "In use" badge tracks currentSubject.
+  const allCandidates = [specialist.winner, ...specialist.alternatives];
+  const total = allCandidates.length;
+  const inUseSubject = currentSubject;
 
   return (
     <div className="rounded-lg border border-sand-200 bg-white shadow-card">
@@ -63,63 +69,51 @@ export function SubjectSpecialistPanel({
 
       {open && (
         <div className="space-y-4 border-t border-sand-200 px-5 pb-5 pt-4">
-          <p className="text-xs leading-relaxed text-sand-600">{specialist.chosenRationale}</p>
+          {specialist.chosenRationale && (
+            <p className="text-xs leading-relaxed text-sand-600">{specialist.chosenRationale}</p>
+          )}
 
           <div>
-            <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-sand-500">
-              Current subject line
+            <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-sand-500">
+              All candidates — click any to use it
             </p>
-            <div className="rounded-md border border-forest-200 bg-forest-50/40 p-3">
-              <div className="mb-1.5 flex items-center gap-2">
-                <Badge variant="outline">
-                  {APPROACH_LABEL[specialist.winner.approach] ?? specialist.winner.approach}
-                </Badge>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-forest-700">In use</span>
-              </div>
-              <p className="text-sm font-medium text-sand-900">{specialist.winner.subject}</p>
-              <p className="mt-1 text-xs text-sand-600">{specialist.winner.previewText}</p>
-            </div>
+            <ul className="space-y-2">
+              {allCandidates.map((c, i) => {
+                const isInUse = c.subject === inUseSubject;
+                const isRecommended = i === 0; // winner is always first
+                return (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      onClick={() => !isInUse && onPickAlternative(c.subject, c.previewText)}
+                      disabled={isInUse}
+                      className={`block w-full rounded-md border p-3 text-left transition-colors ${
+                        isInUse
+                          ? "cursor-default border-forest-200 bg-forest-50/50"
+                          : "border-sand-200 bg-white hover:border-clay-300 hover:bg-clay-50/30"
+                      }`}
+                    >
+                      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline">
+                          {APPROACH_LABEL[c.approach] ?? c.approach}
+                        </Badge>
+                        {isRecommended && (
+                          <Badge variant="neutral">Specialist pick</Badge>
+                        )}
+                        {isInUse && (
+                          <Badge variant="success">In use</Badge>
+                        )}
+                      </div>
+                      <p className={`text-sm ${isInUse ? "font-semibold text-sand-900" : "text-sand-800"}`}>
+                        {c.subject}
+                      </p>
+                      <p className="mt-0.5 text-xs text-sand-500">{c.previewText}</p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-
-          {specialist.alternatives.length > 0 && (
-            <div>
-              <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-sand-500">
-                Alternatives — click to swap
-              </p>
-              <ul className="space-y-2">
-                {specialist.alternatives.map((alt, i) => {
-                  const isCurrent = alt.subject === currentSubject;
-                  return (
-                    <li key={i}>
-                      <button
-                        type="button"
-                        onClick={() => onPickAlternative(alt.subject, alt.previewText)}
-                        disabled={isCurrent}
-                        className={`block w-full rounded-md border p-3 text-left transition-colors ${
-                          isCurrent
-                            ? "cursor-default border-forest-200 bg-forest-50/40"
-                            : "border-sand-200 bg-white hover:border-clay-300 hover:bg-clay-50/40"
-                        }`}
-                      >
-                        <div className="mb-1 flex items-center gap-1.5">
-                          <Badge variant="outline">
-                            {APPROACH_LABEL[alt.approach] ?? alt.approach}
-                          </Badge>
-                          {isCurrent && (
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-forest-700">
-                              in use
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-sand-900">{alt.subject}</p>
-                        <p className="mt-0.5 text-xs text-sand-500">{alt.previewText}</p>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
         </div>
       )}
     </div>

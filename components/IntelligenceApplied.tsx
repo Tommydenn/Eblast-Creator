@@ -15,9 +15,8 @@ interface PastSend {
 
 interface CriticFinding {
   severity: "blocker" | "important" | "nice_to_have";
-  category:
-    | "voice" | "brand" | "field_completeness" | "subject_line" | "preview_text"
-    | "cta" | "structure" | "compliance" | "send_strategy" | "image_quality" | "craft";
+  // All categories emitted by lib/critic.ts
+  category: string;
   field?: string;
   issue: string;
   suggestion?: string;

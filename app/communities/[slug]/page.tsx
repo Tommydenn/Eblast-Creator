@@ -259,14 +259,28 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                   </ul>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <Field label="HubSpot list ID" highlight={!!c.hubspot.listId}>
-                  {c.hubspot.listId ? (
-                    <code className="rounded bg-sand-100 px-1.5 py-0.5 font-mono text-xs">{c.hubspot.listId}</code>
+              <div className="space-y-4 pt-2">
+                <div>
+                  <SectionLabel className="mb-2">
+                    Recipient segments (HubSpot)
+                    {c.hubspot.acronym ? (
+                      <span className="ml-1.5 font-mono text-[10px] normal-case tracking-normal text-sand-400">
+                        {c.hubspot.acronym}
+                      </span>
+                    ) : null}
+                  </SectionLabel>
+                  {(c.hubspot.includedListIds && c.hubspot.includedListIds.length > 0) ||
+                  (c.hubspot.excludedListIds && c.hubspot.excludedListIds.length > 0) ? (
+                    <div className="space-y-2.5">
+                      <SegmentList label="Included (send to)" tone="include" ids={c.hubspot.includedListIds ?? []} />
+                      <SegmentList label="Excluded (suppress)" tone="exclude" ids={c.hubspot.excludedListIds ?? []} />
+                    </div>
                   ) : (
-                    <span className="text-clay-600">not set</span>
+                    <p className="rounded-md border border-dashed border-clay-300 bg-clay-50/50 px-3 py-2.5 text-xs text-clay-700">
+                      No HubSpot segments configured — eblasts for this community have no recipient list yet.
+                    </p>
                   )}
-                </Field>
+                </div>
                 <Field label="Marketing director">
                   {c.marketingDirector ? (
                     <>
@@ -529,6 +543,41 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
         </div>
       </main>
     </>
+  );
+}
+
+// Great Lakes Management HubSpot account — used to deep-link each segment chip.
+const HUBSPOT_ACCOUNT_ID = "8818180";
+
+function SegmentList({ label, tone, ids }: { label: string; tone: "include" | "exclude"; ids: number[] }) {
+  const toneCls =
+    tone === "include"
+      ? "border-forest-200 bg-forest-50/60 text-forest-700 hover:bg-forest-100"
+      : "border-clay-200 bg-clay-50/60 text-clay-700 hover:bg-clay-100";
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-medium text-sand-600">
+        {label} <span className="text-sand-400">· {ids.length}</span>
+      </p>
+      {ids.length === 0 ? (
+        <p className="text-xs text-sand-400">none</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {ids.map((id) => (
+            <a
+              key={id}
+              href={`https://app.hubspot.com/contacts/${HUBSPOT_ACCOUNT_ID}/objectLists/${id}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Open this segment in HubSpot"
+              className={`rounded border px-1.5 py-0.5 font-mono text-[11px] transition-colors ${toneCls}`}
+            >
+              {id}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -57,7 +57,7 @@ export default async function CommunitiesPage() {
   const withTrackingPhone = communities.filter((c) => c.trackingPhone).length;
   const withBrandGuide = communities.filter((c) => c.brandGuideExtracted).length;
   const withSenders = communities.filter((c) => c.senders.length > 0).length;
-  const withListId = communities.filter((c) => c.hubspot.listId).length;
+  const withSegments = communities.filter((c) => (c.hubspot.includedListIds?.length ?? 0) > 0).length;
   const withRecentSends = communities.filter((c) => statsByCommunity.has(c.id)).length;
 
   return (
@@ -79,7 +79,7 @@ export default async function CommunitiesPage() {
           <HealthStat label="Tracking phone" value={`${withTrackingPhone} / ${totalCommunities}`} pct={withTrackingPhone / totalCommunities} />
           <HealthStat label="Brand guide" value={`${withBrandGuide} / ${totalCommunities}`} pct={withBrandGuide / totalCommunities} />
           <HealthStat label="Senders" value={`${withSenders} / ${totalCommunities}`} pct={withSenders / totalCommunities} />
-          <HealthStat label="HubSpot list ID" value={`${withListId} / ${totalCommunities}`} pct={withListId / totalCommunities} />
+          <HealthStat label="HubSpot segments" value={`${withSegments} / ${totalCommunities}`} pct={withSegments / totalCommunities} />
         </div>
 
         {/* Brand-family-grouped list */}
@@ -190,9 +190,9 @@ export default async function CommunitiesPage() {
                                     Phone
                                   </Badge>
                                 )}
-                                {c.hubspot.listId ? null : (
-                                  <Badge variant="warning" title="No HubSpot list ID">
-                                    List
+                                {(c.hubspot.includedListIds?.length ?? 0) > 0 ? null : (
+                                  <Badge variant="warning" title="No HubSpot segments">
+                                    Segments
                                   </Badge>
                                 )}
                                 {c.senders.length === 0 && (

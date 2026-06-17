@@ -216,7 +216,11 @@ Community context
 - Location: ${community.address.city}, ${community.address.state}
 - Sender (recipients see this): ${community.senders[0]?.name ?? community.displayName} <${community.senders[0]?.email ?? community.email ?? ""}>
 ${community.marketingDirector ? `- Marketing director (builds + schedules in HubSpot): ${community.marketingDirector.name}` : ""}
-${community.hubspot.listId ? `- Recipient list configured: ${community.hubspot.listId}` : "- Recipient list NOT YET CONFIGURED — flag this as a blocker."}
+${
+    (community.hubspot.includedListIds && community.hubspot.includedListIds.length > 0) || community.hubspot.listId
+      ? `- Recipient segments configured: ${community.hubspot.includedListIds?.length ?? (community.hubspot.listId ? 1 : 0)} included${community.hubspot.excludedListIds && community.hubspot.excludedListIds.length > 0 ? `, ${community.hubspot.excludedListIds.length} excluded` : ""}`
+      : "- Recipient segments NOT YET CONFIGURED — flag this as a blocker."
+  }
 
 Voice
 ${community.voiceNotes ?? "Warm, hospitable, dignified. Speak to prospective residents AND adult children making the decision for a parent."}

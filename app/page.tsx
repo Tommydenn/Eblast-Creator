@@ -97,18 +97,19 @@ function SavedDraftsPanel({
 }) {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   if (drafts.length === 0) return null;
+  const pendingDraft = drafts.find((d) => d.id === pendingDelete);
   return (
-    <details className="group mt-6 rounded-md border border-sand-200 bg-sand-50/60">
-      <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
-        <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600 group-open:text-sand-900">
-          Recently saved drafts
-        </span>
-        <Badge variant="outline">{drafts.length}</Badge>
-      </summary>
-      <ul className="divide-y divide-sand-100 border-t border-sand-200">
-        {drafts.map((d) => (
-          <li key={d.id} className="px-4 py-3">
-            <div className="flex items-start justify-between gap-3">
+    <>
+      <details className="group mt-6 rounded-md border border-sand-200 bg-sand-50/60">
+        <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
+          <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600 group-open:text-sand-900">
+            Recently saved drafts
+          </span>
+          <Badge variant="outline">{drafts.length}</Badge>
+        </summary>
+        <ul className="divide-y divide-sand-100 border-t border-sand-200">
+          {drafts.map((d) => (
+            <li key={d.id} className="flex items-start justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-sand-900">{d.subject}</p>
                 <p className="mt-0.5 text-[11px] text-sand-500">
@@ -136,28 +137,51 @@ function SavedDraftsPanel({
                   </svg>
                 </button>
               </div>
+            </li>
+          ))}
+        </ul>
+      </details>
+
+      {pendingDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-sand-900/40 px-4"
+          onClick={() => setPendingDelete(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-sand-200 bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-serif text-lg font-medium text-sand-900">Delete this draft?</h3>
+            <p className="mt-2 text-sm leading-relaxed text-sand-600">
+              {pendingDraft ? (
+                <>
+                  <span className="font-medium">{pendingDraft.subject}</span> will be permanently
+                  removed from &quot;Recently saved drafts&quot; and from the{" "}
+                  <span className="font-medium">{pendingDraft.communityName}</span> community page.
+                </>
+              ) : (
+                "This draft will be permanently removed from \"Recently saved drafts\" and the community page."
+              )}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setPendingDelete(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  onDelete(pendingDelete);
+                  setPendingDelete(null);
+                }}
+              >
+                Delete permanently
+              </Button>
             </div>
-            {pendingDelete === d.id && (
-              <div className="mt-2 flex items-center gap-3 rounded-md border border-clay-200 bg-clay-50/60 px-3 py-2 text-xs text-clay-800">
-                <span className="flex-1">This will also remove it from the community page.</span>
-                <button
-                  onClick={() => { onDelete(d.id); setPendingDelete(null); }}
-                  className="shrink-0 rounded bg-clay-600 px-2.5 py-1 font-medium text-white hover:bg-clay-700"
-                >
-                  Delete permanently
-                </button>
-                <button
-                  onClick={() => setPendingDelete(null)}
-                  className="shrink-0 text-sand-500 underline underline-offset-2 hover:text-sand-800"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </details>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

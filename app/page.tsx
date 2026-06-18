@@ -14,7 +14,6 @@ import { Label, Select, Textarea } from "@/components/ui/Input";
 import {
   useDraft,
   type ReviewVerdict,
-  type SavedDraft,
 } from "@/context/DraftContext";
 
 // ─── Interactive preview script ───────────────────────────────────────────────
@@ -84,154 +83,91 @@ const verdictBadge: Record<ReviewVerdict, { label: string; variant: "success" | 
   blocking_issues: { label: "Blocking issues", variant: "danger" },
 };
 
-// ─── Saved Drafts Panel ───────────────────────────────────────────────────────
-
-function SavedDraftsPanel({
-  drafts,
-  onLoad,
-  onDelete,
-}: {
-  drafts: SavedDraft[];
-  onLoad: (d: SavedDraft) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  if (drafts.length === 0) return null;
-  const pendingDraft = drafts.find((d) => d.id === pendingDelete);
-  return (
-    <>
-      <details className="group mt-6 rounded-md border border-sand-200 bg-sand-50/60">
-        <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
-          <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600 group-open:text-sand-900">
-            Recently saved drafts
-          </span>
-          <Badge variant="outline">{drafts.length}</Badge>
-        </summary>
-        <ul className="divide-y divide-sand-100 border-t border-sand-200">
-          {drafts.map((d) => (
-            <li key={d.id} className="flex items-start justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-sand-900">{d.subject}</p>
-                <p className="mt-0.5 text-[11px] text-sand-500">
-                  {d.communityName} ·{" "}
-                  {new Date(d.savedAt).toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button size="sm" variant="secondary" onClick={() => onLoad(d)}>
-                  Load
-                </Button>
-                <button
-                  onClick={() => setPendingDelete(d.id)}
-                  className="rounded p-1 text-sand-400 hover:bg-sand-100 hover:text-clay-600"
-                  title="Delete draft"
-                >
-                  <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
-                    <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66H14.5a.5.5 0 0 0 0-1h-.996a.59.59 0 0 0-.01 0H11Z" />
-                  </svg>
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </details>
-
-      {pendingDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-sand-900/40 px-4"
-          onClick={() => setPendingDelete(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-lg border border-sand-200 bg-white p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-serif text-lg font-medium text-sand-900">Delete this draft?</h3>
-            <p className="mt-2 text-sm leading-relaxed text-sand-600">
-              {pendingDraft ? (
-                <>
-                  <span className="font-medium">{pendingDraft.subject}</span> will be permanently
-                  removed from &quot;Recently saved drafts&quot; and from the{" "}
-                  <span className="font-medium">{pendingDraft.communityName}</span> community page.
-                </>
-              ) : (
-                "This draft will be permanently removed from \"Recently saved drafts\" and the community page."
-              )}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setPendingDelete(null)}>
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => {
-                  onDelete(pendingDelete);
-                  setPendingDelete(null);
-                }}
-              >
-                Delete permanently
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
 
 // ─── Image Bank Panel ─────────────────────────────────────────────────────────
+
+const FOCUS_OPTIONS = [
+  { value: 'top', label: '↑', title: 'Crop from top' },
+  { value: 'center', label: '▪', title: 'Crop from center' },
+  { value: 'bottom', label: '↓', title: 'Crop from bottom' },
+] as const;
 
 function ImageBankPanel({
   imageUrls,
   onSwap,
 }: {
   imageUrls: string[];
-  onSwap: (slot: 'hero' | 'secondary' | 'gallery', url: string) => void;
+  onSwap: (slot: 'hero' | 'secondary' | 'gallery', url: string, focus: string) => void;
 }) {
+  const [foci, setFoci] = useState<Record<number, string>>({});
+  const [swapping, setSwapping] = useState<number | null>(null);
   if (imageUrls.length === 0) return null;
+
+  function getFocus(i: number) { return foci[i] ?? 'center'; }
+
+  async function handleSwap(slot: 'hero' | 'secondary' | 'gallery', url: string, i: number) {
+    setSwapping(i);
+    await onSwap(slot, url, getFocus(i));
+    setSwapping(null);
+  }
+
   return (
-    <details open className="mt-4 rounded-md border border-sand-200 bg-sand-50/60">
+    <details className="rounded-md border border-sand-200 bg-sand-50/60">
       <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
         <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600">
           Image bank
         </span>
         <span className="text-[11px] text-sand-500">{imageUrls.length} image{imageUrls.length === 1 ? "" : "s"}</span>
       </summary>
-      <div className="flex flex-wrap gap-3 border-t border-sand-200 px-4 py-3">
+      <div className="grid grid-cols-4 gap-2 border-t border-sand-200 p-3">
         {imageUrls.map((url, i) => (
-          <div key={i} className="flex flex-col items-center gap-1.5">
-            <img
-              src={url}
-              alt={`Extracted image ${i + 1}`}
-              style={{ maxWidth: 80, maxHeight: 80, objectFit: "cover", borderRadius: 4 }}
-              className="border border-sand-200"
-            />
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => onSwap('hero', url)}
-                className="rounded border border-sand-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
-              >
-                Hero
-              </button>
-              <button
-                onClick={() => onSwap('secondary', url)}
-                className="rounded border border-sand-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
-              >
-                Sec.
-              </button>
-              <button
-                onClick={() => onSwap('gallery', url)}
-                className="rounded border border-sand-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
-                title="Add to gallery"
-              >
-                +
-              </button>
+          <div key={i} className="flex flex-col gap-1">
+            {/* Uniform thumbnail */}
+            <div
+              className="relative overflow-hidden rounded border border-sand-200 bg-sand-100"
+              style={{ aspectRatio: '4/3' }}
+            >
+              <img
+                src={url}
+                alt={`Extracted image ${i + 1}`}
+                className="h-full w-full object-cover"
+              />
+              {swapping === i && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white/70">
+                  <span className="text-[10px] text-sand-500">Cropping…</span>
+                </div>
+              )}
+            </div>
+            {/* Focus selector */}
+            <div className="flex justify-center gap-0.5">
+              {FOCUS_OPTIONS.map(({ value, label, title }) => (
+                <button
+                  key={value}
+                  onClick={() => setFoci((f) => ({ ...f, [i]: value }))}
+                  title={title}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                    getFocus(i) === value
+                      ? 'bg-clay-500 text-white'
+                      : 'border border-sand-200 bg-white text-sand-400 hover:border-sand-300 hover:text-sand-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Slot buttons */}
+            <div className="flex justify-center gap-0.5">
+              {(['hero', 'secondary', 'gallery'] as const).map((slot) => (
+                <button
+                  key={slot}
+                  onClick={() => handleSwap(slot, url, i)}
+                  disabled={swapping === i}
+                  className="rounded border border-sand-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-sand-600 hover:border-clay-300 hover:bg-clay-50/40 disabled:opacity-40"
+                  title={slot === 'hero' ? 'Use as hero' : slot === 'secondary' ? 'Use as secondary' : 'Add to gallery'}
+                >
+                  {slot === 'hero' ? 'H' : slot === 'secondary' ? 'S' : '+'}
+                </button>
+              ))}
             </div>
           </div>
         ))}
@@ -256,14 +192,14 @@ export default function Home() {
     pushResult, error,
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
-    savedDrafts, communityDrafts, currentDraftSaved, saveNotice,
+    communityDrafts, currentDraftSaved, saveNotice,
     htmlDirty, syncHtml, swapSubjectLine,
     allExtractedImageUrls, swapImage,
     handleFileChange, clearInputs,
     generateDraft, cancelGeneration,
     refineDraft, undoRefine, redoRefine, canUndoRefine, canRedoRefine, lastRefineInstruction, redoRefineInstruction,
     saveDraft, discardDraft,
-    loadSavedDraft, deleteSavedDraft, deleteCommunityDraft,
+    loadSavedDraft, deleteCommunityDraft,
     pushDraft,
     dismissDuplicateWarning,
   } = useDraft();
@@ -455,17 +391,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Saved drafts */}
-        <SavedDraftsPanel drafts={savedDrafts} onLoad={loadSavedDraft} onDelete={deleteSavedDraft} />
-
-        {/* Image bank — shown when images are available and a draft is in view */}
-        {extracted && allExtractedImageUrls.length > 0 && (
-          <ImageBankPanel
-            imageUrls={allExtractedImageUrls}
-            onSwap={(slot, url) => { swapImage(slot, url); }}
-          />
-        )}
-
         {/* Preview + reviewer */}
         {extracted && (
           <>
@@ -587,6 +512,14 @@ export default function Home() {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Image bank — below the refine tool, collapsible */}
+                {allExtractedImageUrls.length > 0 && (
+                  <ImageBankPanel
+                    imageUrls={allExtractedImageUrls}
+                    onSwap={(slot, url, focus) => swapImage(slot, url, undefined, focus)}
+                  />
+                )}
 
                 {/* Reviewer — collapsible, open by default */}
                 <div className="rounded-lg border border-sand-200 bg-white shadow-card">

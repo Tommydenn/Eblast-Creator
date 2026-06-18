@@ -162,10 +162,8 @@ export interface SavedDraft {
 
 const PDF_HISTORY_KEY = "eblast-pdf-history";
 const DRAFTS_KEY = "eblast-saved-drafts";
-const RECENT_DRAFTS_KEY = "eblast-recent-drafts";
 const COMMUNITY_DRAFTS_KEY = "eblast-community-drafts";
 const MAX_DRAFTS_PER_COMMUNITY = 8;
-const MAX_RECENT_DRAFTS = 5;
 
 type PdfRecord = { hash: string; name: string; generatedAt: string; community: string };
 
@@ -179,25 +177,8 @@ function savePdfRecord(hash: string, name: string, community: string) {
   localStorage.setItem(PDF_HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
 }
 
-function getRecentDrafts(): SavedDraft[] {
-  try { return JSON.parse(localStorage.getItem(RECENT_DRAFTS_KEY) ?? "[]"); } catch { return []; }
-}
-
 function getCommunityDrafts(): SavedDraft[] {
   try { return JSON.parse(localStorage.getItem(COMMUNITY_DRAFTS_KEY) ?? "[]"); } catch { return []; }
-}
-
-function persistRecentDrafts(drafts: SavedDraft[]): SavedDraft[] {
-  let toSave = [...drafts];
-  while (toSave.length > 0) {
-    try {
-      localStorage.setItem(RECENT_DRAFTS_KEY, JSON.stringify(toSave));
-      return toSave;
-    } catch {
-      toSave = toSave.slice(0, toSave.length - 1);
-    }
-  }
-  return getRecentDrafts();
 }
 
 function persistCommunityDrafts(drafts: SavedDraft[]): SavedDraft[] {
@@ -239,7 +220,6 @@ export interface DraftContextValue {
   pastSendsContext: PastSendForContext[];
   subjectSpecialist: SubjectSpecialistResult | null;
   duplicateWarning: { name: string; generatedAt: string; community: string } | null;
-  savedDrafts: SavedDraft[];
   communityDrafts: SavedDraft[];
   currentDraftSaved: boolean;
   /** Transient confirmation shown briefly after a draft is saved. */
@@ -274,9 +254,8 @@ export interface DraftContextValue {
   saveDraft: () => void;
   discardDraft: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
-  deleteSavedDraft: (id: string) => void;
   deleteCommunityDraft: (id: string) => void;
-  swapImage: (slot: 'hero' | 'secondary' | 'gallery', imageUrl: string, galleryIdx?: number) => Promise<void>;
+  swapImage: (slot: 'hero' | 'secondary' | 'gallery', imageUrl: string, galleryIdx?: number, focus?: string) => Promise<void>;
   dismissDuplicateWarning: () => void;
 }
 
@@ -320,7 +299,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [pastSendsContext, setPastSendsContext] = useState<PastSendForContext[]>([]);
   const [subjectSpecialist, setSubjectSpecialist] = useState<SubjectSpecialistResult | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<{ name: string; generatedAt: string; community: string } | null>(null);
-  const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
   const [communityDrafts, setCommunityDrafts] = useState<SavedDraft[]>([]);
   const [currentDraftSaved, setCurrentDraftSaved] = useState(false);
   const [htmlDirty, setHtmlDirty] = useState(false);
@@ -356,26 +334,22 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchCommunities(setCommunities);
     try {
+      // Migrate from legacy single-store key to community-keyed store.
       const legacy = localStorage.getItem(DRAFTS_KEY);
       if (legacy) {
         const legacyDrafts: SavedDraft[] = JSON.parse(legacy);
         if (legacyDrafts.length > 0) {
-          const existingRecent = getRecentDrafts();
-          const mergedRecent = [...legacyDrafts, ...existingRecent.filter((d) => !legacyDrafts.some((l) => l.id === d.id))].slice(0, MAX_RECENT_DRAFTS);
-          persistRecentDrafts(mergedRecent);
-
           const existingCommunity = getCommunityDrafts();
-          const mergedCommunity = [...legacyDrafts, ...existingCommunity.filter((d) => !legacyDrafts.some((l) => l.id === d.id))];
+          const merged = [...legacyDrafts, ...existingCommunity.filter((d) => !legacyDrafts.some((l) => l.id === d.id))];
           const perCommunity: Record<string, number> = {};
-          const cappedCommunity = mergedCommunity.filter((d) => {
+          const capped = merged.filter((d) => {
             perCommunity[d.communitySlug] = (perCommunity[d.communitySlug] ?? 0) + 1;
             return perCommunity[d.communitySlug] <= MAX_DRAFTS_PER_COMMUNITY;
           });
-          persistCommunityDrafts(cappedCommunity);
+          persistCommunityDrafts(capped);
           localStorage.removeItem(DRAFTS_KEY);
         }
       }
-      setSavedDrafts(getRecentDrafts());
       setCommunityDrafts(getCommunityDrafts());
     } catch { /* ignore */ }
   }, []);
@@ -756,16 +730,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       pastSendsContext,
       subjectSpecialist,
     };
-    const withNewCommunity = [draft, ...getCommunityDrafts().filter((d) => d.id !== draft.id)];
+    // Prepend to community list, capped at 8 per community (oldest auto-dropped).
+    const withNew = [draft, ...getCommunityDrafts().filter((d) => d.id !== draft.id)];
     const perCommunity: Record<string, number> = {};
-    const cappedCommunity = withNewCommunity.filter((d) => {
+    const capped = withNew.filter((d) => {
       perCommunity[d.communitySlug] = (perCommunity[d.communitySlug] ?? 0) + 1;
       return perCommunity[d.communitySlug] <= MAX_DRAFTS_PER_COMMUNITY;
     });
-    setCommunityDrafts(persistCommunityDrafts(cappedCommunity));
-
-    const recentList = [draft, ...getRecentDrafts().filter((d) => d.id !== draft.id)].slice(0, MAX_RECENT_DRAFTS);
-    setSavedDrafts(persistRecentDrafts(recentList));
+    setCommunityDrafts(persistCommunityDrafts(capped));
     setCurrentDraftSaved(true);
 
     // Transient confirmation toast.
@@ -823,33 +795,49 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setStage("preview");
   }
 
-  function deleteSavedDraft(id: string) {
-    setSavedDrafts(persistRecentDrafts(getRecentDrafts().filter((d) => d.id !== id)));
-    setCommunityDrafts(persistCommunityDrafts(getCommunityDrafts().filter((d) => d.id !== id)));
-  }
-
   function deleteCommunityDraft(id: string) {
     setCommunityDrafts(persistCommunityDrafts(getCommunityDrafts().filter((d) => d.id !== id)));
   }
 
-  async function swapImage(slot: 'hero' | 'secondary' | 'gallery', imageUrl: string, galleryIdx?: number): Promise<void> {
+  async function swapImage(
+    slot: 'hero' | 'secondary' | 'gallery',
+    imageUrl: string,
+    galleryIdx?: number,
+    focus?: string,
+  ): Promise<void> {
     const current = extractedRef.current;
     const slug = activeCommunitySlugRef.current;
     if (!current || !slug) return;
+
+    // Crop the image to the correct aspect ratio for its slot so the email
+    // template always receives a properly proportioned image.
+    const targetRatio = slot === 'gallery' ? 4 / 3 : 16 / 9;
+    let placedUrl = imageUrl;
+    try {
+      const cropRes = await fetch("/api/crop-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl, targetRatio, focus: focus ?? "center" }),
+      });
+      const cropData = await cropRes.json();
+      if (cropData.ok) placedUrl = cropData.croppedUrl;
+    } catch {
+      // Fall back to the original URL — display may be off but doesn't break.
+    }
 
     let newHero = heroImageUrlRef.current;
     let newSecondary = secondaryImageUrlRef.current;
     let newGallery = [...galleryImageUrlsRef.current];
 
     if (slot === 'hero') {
-      newHero = imageUrl;
+      newHero = placedUrl;
     } else if (slot === 'secondary') {
-      newSecondary = imageUrl;
+      newSecondary = placedUrl;
     } else if (slot === 'gallery') {
       if (galleryIdx !== undefined && galleryIdx >= 0 && galleryIdx < newGallery.length) {
-        newGallery[galleryIdx] = imageUrl;
+        newGallery[galleryIdx] = placedUrl;
       } else {
-        newGallery = [...newGallery, imageUrl];
+        newGallery = [...newGallery, placedUrl];
       }
     }
 
@@ -903,7 +891,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     pastSendsContext,
     subjectSpecialist,
     duplicateWarning,
-    savedDrafts,
     communityDrafts,
     currentDraftSaved,
     saveNotice,
@@ -924,7 +911,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     swapSubjectLine,
     syncHtml,
     saveDraft, discardDraft,
-    loadSavedDraft, deleteSavedDraft, deleteCommunityDraft,
+    loadSavedDraft, deleteCommunityDraft,
     swapImage,
     dismissDuplicateWarning,
   };

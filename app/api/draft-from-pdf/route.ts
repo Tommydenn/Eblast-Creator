@@ -159,16 +159,12 @@ export async function POST(req: NextRequest) {
     galleryImageUrls,
   });
 
-  // Build the full image pool for the refine tool: all ranked images, with the
-  // placed (cropped) versions first, then any non-placed originals.
-  const placedOriginals = new Set([rawHero, rawSecondary, ...rawGallery].filter(Boolean));
-  const extraImageUrls = rankedImages
-    .filter((img) => img.dataUri && !placedOriginals.has(img.dataUri))
-    .map((img) => img.dataUri);
-  const allExtractedImageUrls: string[] = [
-    ...([heroImageUrl, secondaryImageUrl, ...galleryImageUrls].filter((u): u is string => !!u)),
-    ...extraImageUrls,
-  ];
+  // All original (pre-crop) ranked images — passed to the refine tool so the
+  // AI can reference them for fresh crops, and shown in the image bank so the
+  // user can swap images with full control over crop focus.
+  const allExtractedImageUrls: string[] = rankedImages
+    .map((img) => img.dataUri)
+    .filter((u): u is string => !!u);
 
   // Append a programmatic finding if no CallRail tracking number is set.
   const finalReview = community.trackingPhone

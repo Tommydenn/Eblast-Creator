@@ -252,13 +252,13 @@ const refineFlyerToolSchema = {
     },
     imageCropInstructions: {
       type: "array",
-      description: "ONLY include if the user explicitly asks to crop or reframe a photo differently. Each entry specifies an image by its pool index and a focus direction.",
+      description: "ONLY include if the user explicitly asks to crop, reframe, or reposition a photo. Reference an 'Original image' entry (full-resolution, labeled '— full-resolution original') — NOT a placed/cropped entry. The imageIndex is the pool index of the original. First use imageLayout to assign the original to the desired slot, then add a crop instruction so the server crops it fresh with the specified focus.",
       items: {
         type: "object",
         required: ["imageIndex", "focus"],
         properties: {
-          imageIndex: { type: "integer", description: "Index of the image to crop (from the Photos in this email list)." },
-          focus: { type: "string", enum: ["top", "center", "bottom", "left", "right"], description: "Which part of the image to keep when cropping to the email aspect ratio." },
+          imageIndex: { type: "integer", description: "Pool index of an 'Original image' (not an already-placed image). The original will be freshly cropped to the slot's correct aspect ratio." },
+          focus: { type: "string", enum: ["top", "center", "bottom", "left", "right"], description: "Which edge of the original to anchor the crop to. 'top' keeps the top of the photo; 'bottom' keeps the bottom; 'center' crops to the middle." },
         },
       },
     },
@@ -290,7 +290,7 @@ ${opts.imageManifestText}
 - ONLY change photos if the user explicitly asks to remove, reorder, swap, or change which photo appears. Match the photo NAME(s) in their instruction to the indices above, then return \`imageLayout\` with the desired final arrangement: \`hero\` = the index to show as the hero (or -1 for none), \`secondary\` = the index for the inline image (or -1 for none), \`gallery\` = the list of indices for the gallery grid, in order (leave an index out to remove that photo).
 - If the user does NOT mention photos/images, OMIT \`imageLayout\` entirely — the photos must stay exactly as they are.
 - You can only rearrange or remove the photos listed above. You cannot add new photos, recolor them, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.
-- If the user asks to crop or reframe a photo, return \`imageCropInstructions\` with the image index and focus direction.`
+- If the user asks to crop, reframe, or shift a photo (e.g. "show more of the top", "crop lower"), use BOTH: (1) \`imageLayout\` to place the corresponding "Original image" in the desired slot, AND (2) \`imageCropInstructions\` with that Original image's index and the focus direction. Only reference "Original image" indices (labeled "full-resolution original" above) in \`imageCropInstructions\` — never already-placed indices.`
     : "";
 
   const response = await c.messages.create({

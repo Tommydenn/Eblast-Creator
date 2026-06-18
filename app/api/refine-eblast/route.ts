@@ -85,23 +85,28 @@ export async function POST(req: NextRequest) {
     // Build a stable photo manifest the model can reference by index. The names
     // here MUST match the hover labels shown on each image in the preview
     // (render-email.ts data-img-label) so a user can call a photo out by name
-    // and the model maps it to the right slot. Order: hero, secondary, gallery.
-    const pool: Array<{ url: string; name: string }> = [];
-    if (body.heroImageUrl) pool.push({ url: body.heroImageUrl, name: "Hero image" });
-    if (body.secondaryImageUrl) pool.push({ url: body.secondaryImageUrl, name: "Secondary image" });
-    (body.galleryImageUrls ?? []).forEach((u, i) => pool.push({ url: u, name: `Gallery image ${i + 1}` }));
-    // Expand pool with any additional images from the PDF not currently placed.
+    // and the model maps it to the right slot. Order: placed (cropped) first,
+    // then full-resolution originals from allExtractedImageUrls.
+    const pool: Array<{ url: string; name: string; isOriginal: boolean }> = [];
+    if (body.heroImageUrl) pool.push({ url: body.heroImageUrl, name: "Hero image", isOriginal: false });
+    if (body.secondaryImageUrl) pool.push({ url: body.secondaryImageUrl, name: "Secondary image", isOriginal: false });
+    (body.galleryImageUrls ?? []).forEach((u, i) => pool.push({ url: u, name: `Gallery image ${i + 1}`, isOriginal: false }));
+    // Expand pool with original (pre-crop) images from the PDF.
     if (body.allExtractedImageUrls?.length) {
       const placed = new Set(pool.map((p) => p.url));
       body.allExtractedImageUrls.forEach((url) => {
         if (!placed.has(url)) {
-          pool.push({ url, name: `Extracted image ${pool.length + 1}` });
+          pool.push({ url, name: `Original image ${pool.length + 1}`, isOriginal: true });
           placed.add(url);
         }
       });
     }
     const imageManifestText = pool.length
-      ? pool.map((p, i) => `  [${i}] "${p.name}" (the photo the user sees labeled "${p.name}")`).join("\n")
+      ? pool.map((p, i) =>
+          p.isOriginal
+            ? `  [${i}] "${p.name}" — full-resolution original, use for imageCropInstructions`
+            : `  [${i}] "${p.name}" — already placed and cropped`
+        ).join("\n")
       : "  (no photos are currently in this email)";
 
     const result = await refineFlyerContent({
@@ -136,15 +141,17 @@ export async function POST(req: NextRequest) {
       nextGallery = newGallery;
     }
     if (result.imageCropInstructions?.length && pool.length) {
-      const TARGET_RATIO = 600 / 338;
+      const validFoci = ["top", "center", "bottom", "left", "right"] as const;
+      type Focus = typeof validFoci[number];
       for (const crop of result.imageCropInstructions) {
         const { imageIndex, focus } = crop;
         if (!Number.isInteger(imageIndex) || imageIndex < 0 || imageIndex >= pool.length) continue;
-        const validFoci = ["top", "center", "bottom", "left", "right"] as const;
-        type Focus = typeof validFoci[number];
         const safeFocus: Focus = (validFoci as readonly string[]).includes(focus) ? focus as Focus : "center";
         const url = pool[imageIndex].url;
-        const cropped = await cropDataUriToFocusAndRatio(url, TARGET_RATIO, safeFocus);
+        // Use the correct aspect ratio for whichever slot the image occupies.
+        const isInGallery = nextGallery.includes(url);
+        const targetRatio = isInGallery ? 4 / 3 : 16 / 9;
+        const cropped = await cropDataUriToFocusAndRatio(url, targetRatio, safeFocus);
         if (nextHero === url) nextHero = cropped;
         if (nextSecondary === url) nextSecondary = cropped;
         nextGallery = nextGallery.map((u) => (u === url ? cropped : u));

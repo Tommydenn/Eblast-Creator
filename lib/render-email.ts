@@ -324,9 +324,9 @@ export function buildEblastHtml(
 <title>${escapeHtml(flyer.subject)}</title>
 </head>
 <body style="margin:0; padding:0; background:#f5f5f5; font-family: ${brand.fontHeadline};">
+<span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(flyer.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f5f5; padding: 32px 0;">
   <tr><td align="center">
-    <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">${escapeHtml(flyer.previewText)}</div>
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px; max-width:100%; margin:0 auto; background:#ffffff;">
       ${header}
       ${hero}

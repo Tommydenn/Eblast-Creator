@@ -1,5 +1,25 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+
+const RELATIVE_IMG_RE = /src="(\/[^"]+\.(?:png|jpg|jpeg|gif|webp|svg))"/gi;
+
+async function inlineRelativeImages(html: string): Promise<string> {
+  const matches = [...html.matchAll(RELATIVE_IMG_RE)];
+  if (matches.length === 0) return html;
+  let result = html;
+  for (const [fullMatch, relPath] of matches) {
+    const filePath = path.join(process.cwd(), "public", relPath);
+    try {
+      const bytes = await readFile(filePath);
+      const ext = relPath.split(".").pop()?.toLowerCase() ?? "png";
+      const mime = ext === "svg" ? "image/svg+xml" : `image/${ext === "jpg" ? "jpeg" : ext}`;
+      result = result.replaceAll(fullMatch, `src="data:${mime};base64,${bytes.toString("base64")}"`);
+    } catch {
+      // file not in public/ — leave src as-is
+    }
+  }
+  return result;
+}
 import { NextRequest, NextResponse } from "next/server";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages } from "@/lib/hubspot";
@@ -73,9 +93,11 @@ export async function POST(req: NextRequest) {
     `[push-eblast] community=${community.slug} subject="${body.subject}" htmlBytes=${html.length}`,
   );
 
-  // 1) Upload any inline data: image URIs to HubSpot's File Manager and
-  //    swap them for hosted URLs. HubSpot rejects coded templates over 1.5 MiB,
-  //    so embedded base64 images must be hosted externally before push.
+  // 1) Convert relative /public image paths (logos, etc.) to data URIs so
+  //    HubSpot can resolve them. swapDataUrisForHostedImages then uploads them
+  //    to HubSpot File Manager and swaps the data URIs for hosted CDN URLs.
+  html = await inlineRelativeImages(html);
+
   const swap = await swapDataUrisForHostedImages({
     html,
     folderPath: `/eblast-drafter/${community.slug}`,
@@ -170,6 +192,7 @@ export async function POST(req: NextRequest) {
           name: create.body?.name,
           state: create.body?.state,
           mode: create.body?.emailTemplateMode,
+          previewText: create.body?.previewText ?? null,
           community: community.displayName,
           // Debug: what HubSpot confirmed for recipient lists
           sentSegments: segmentsPayload,

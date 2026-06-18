@@ -280,19 +280,15 @@ export default function Home() {
               )}
 
               {duplicateWarning && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-                  <p className="font-medium">This looks like a file you&apos;ve already uploaded.</p>
-                  <p className="mt-0.5 text-amber-700">
-                    <span className="font-medium">{duplicateWarning.name}</span> was last generated on{" "}
-                    {new Date(duplicateWarning.generatedAt).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                    {duplicateWarning.community !== selectedSlug ? " (for a different community)" : ""}.
-                  </p>
+                <div className="flex items-center gap-2.5 rounded border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-700">
+                  <span className="shrink-0 text-amber-400">⚠</span>
+                  <span className="leading-snug">
+                    Duplicate — already generated{" "}
+                    {new Date(duplicateWarning.generatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    {duplicateWarning.community !== selectedSlug ? " for another community" : ""}
+                  </span>
                   <button
-                    className="mt-1.5 text-amber-600 underline underline-offset-2 hover:text-amber-800"
+                    className="ml-auto shrink-0 font-medium text-amber-600 hover:text-amber-900"
                     onClick={dismissDuplicateWarning}
                   >
                     Generate anyway

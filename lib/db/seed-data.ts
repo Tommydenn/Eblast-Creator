@@ -651,3 +651,24 @@ for (const sc of seedCommunities) {
     excludedListIds: seg?.excluded ?? [],
   };
 }
+
+// Sender identities recovered from each community's actual HubSpot send history
+// (the people/aliases that have sent eblasts for them). First entry = primary.
+// Only the communities that previously had no senders are listed here; the rest
+// already have inline senders above. (Cottagewood Mankato/Rochester, The Glenn
+// Buffalo AL/MC, and The Glenn W St Paul had no from-identity in the data.)
+const SENDERS_BY_SLUG: Record<string, SeedSender[]> = {
+  "amira-choice-arvada": [{ name: "Michelle Newitt", email: "mnewitt@greatlakesmc.com" }],
+  "amira-choice-bloomington": [{ name: "Amira Choice Bloomington", email: "dmiller@greatlakesmc.com" }],
+  "orchards-of-minnetonka": [{ name: "Lauren Martinovich", email: "lmartinovich@greatlakesmc.com" }],
+  "the-glenn-hopkins": [{ name: "Scott Saffert", email: "ssaffert@greatlakesmc.com" }],
+  "the-glenn-minnetonka": [
+    { name: "Madelyn Macgowan", email: "mmacgowan@greatlakesmc.com" },
+    { name: "Kasey Krieger", email: "kkrieger@greatlakesmc.com" },
+  ],
+  "the-pillars-of-grand-rapids": [{ name: "Sherry Frick", email: "sfrick@greatlakesmc.com" }],
+};
+for (const sc of seedCommunities) {
+  const senders = SENDERS_BY_SLUG[sc.community.slug];
+  if (senders && sc.senders.length === 0) sc.senders = senders;
+}

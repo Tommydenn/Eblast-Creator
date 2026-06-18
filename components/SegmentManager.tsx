@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export interface SegmentInfo {
   id: number;
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function SegmentManager({ slug, initialIncluded, initialExcluded }: Props) {
+  const router = useRouter();
   const [included, setIncluded] = useState(initialIncluded);
   const [excluded, setExcluded] = useState(initialExcluded);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -34,7 +36,12 @@ export function SegmentManager({ slug, initialIncluded, initialExcluded }: Props
           excludedListIds: newExcluded.map((s) => s.id),
         }),
       });
-      setSaveStatus(res.ok ? "saved" : "error");
+      if (res.ok) {
+        setSaveStatus("saved");
+        router.refresh();
+      } else {
+        setSaveStatus("error");
+      }
     } catch {
       setSaveStatus("error");
     }

@@ -197,24 +197,29 @@ export default async function CommunitiesPage() {
                             </td>
                             <td className="px-5 py-3">
                               {(() => {
-                                const missing: { label: string; title: string; variant: "warning" | "danger" }[] = [];
-                                if (c.senders.length === 0)
-                                  missing.push({ label: "No sender", title: "No From: identity configured", variant: "danger" });
-                                if ((c.hubspot.includedListIds?.length ?? 0) === 0)
-                                  missing.push({ label: "No segments", title: "No HubSpot recipient lists assigned", variant: "warning" });
-                                if (!c.trackingPhone)
-                                  missing.push({ label: "No tracking #", title: "No CallRail tracking phone set", variant: "warning" });
-                                if (missing.length === 0) {
-                                  return <Badge variant="success">Ready to send</Badge>;
+                                const gaps: string[] = [];
+                                if (c.senders.length === 0) gaps.push("No sender");
+                                if ((c.hubspot.includedListIds?.length ?? 0) === 0 &&
+                                    (c.hubspot.excludedListIds?.length ?? 0) === 0)
+                                  gaps.push("No HubSpot segments");
+                                if (!c.trackingPhone) gaps.push("No tracking #");
+                                if (gaps.length === 0) {
+                                  return (
+                                    <span className="flex items-center gap-1.5 text-[11px] font-medium text-forest-700">
+                                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-forest-500" />
+                                      Ready
+                                    </span>
+                                  );
                                 }
+                                const tip = gaps.join(" · ");
                                 return (
-                                  <div className="flex flex-wrap gap-1">
-                                    {missing.map((m) => (
-                                      <Badge key={m.label} variant={m.variant} title={m.title}>
-                                        {m.label}
-                                      </Badge>
-                                    ))}
-                                  </div>
+                                  <span
+                                    className="flex cursor-help items-center gap-1.5 text-[11px] font-medium text-clay-700"
+                                    title={tip}
+                                  >
+                                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-clay-500" />
+                                    {gaps.length === 1 ? gaps[0] : `${gaps.length} gaps`}
+                                  </span>
                                 );
                               })()}
                             </td>

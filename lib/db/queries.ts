@@ -1,7 +1,7 @@
 // Async data-access layer. All app code reads communities through this file.
 // Drizzle queries → composed `Community` shape with senders[] attached.
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "./index";
 import {
   communities,
@@ -128,21 +128,17 @@ export async function updateCommunitySegments(
   includedListIds: number[],
   excludedListIds: number[]
 ): Promise<boolean> {
-  const rows = await db
-    .select({ id: communities.id, hubspot: communities.hubspot })
-    .from(communities)
-    .where(eq(communities.slug, slug))
-    .limit(1);
-  if (rows.length === 0) return false;
-  const existing = (rows[0].hubspot ?? {}) as CommunityHubSpot;
-  await db
+  const patch = JSON.stringify({ includedListIds, excludedListIds });
+  const result = await db
     .update(communities)
     .set({
-      hubspot: { ...existing, includedListIds, excludedListIds },
-      updatedAt: new Date(),
+      // Merge only the two segment fields into the existing JSONB, leaving all
+      // other hubspot fields (listId, acronym, etc.) untouched.
+      hubspot: sql`hubspot || ${patch}::jsonb`,
     })
-    .where(eq(communities.slug, slug));
-  return true;
+    .where(eq(communities.slug, slug))
+    .returning({ id: communities.id });
+  return result.length > 0;
 }
 
 export function withLegacySender(c: Community): CommunityWithLegacySender {

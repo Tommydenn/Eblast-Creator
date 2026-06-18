@@ -16,14 +16,17 @@ interface Props {
 export function SegmentManager({ slug, initialIncluded, initialExcluded }: Props) {
   const [included, setIncluded] = useState(initialIncluded);
   const [excluded, setExcluded] = useState(initialExcluded);
-  const [saving, setSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // Detect whether names resolved — if every name is a bare number, the
+  // crm.lists.read scope is missing and we fell back to showing IDs.
+  const allSegments = [...initialIncluded, ...initialExcluded];
+  const namesAreIds = allSegments.length > 0 && allSegments.every((s) => /^\d+$/.test(s.name));
 
   async function persist(newIncluded: SegmentInfo[], newExcluded: SegmentInfo[]) {
-    setSaving(true);
-    setLastSaved(false);
+    setSaveStatus("saving");
     try {
-      await fetch(`/api/communities/${slug}/segments`, {
+      const res = await fetch(`/api/communities/${slug}/segments`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -31,9 +34,9 @@ export function SegmentManager({ slug, initialIncluded, initialExcluded }: Props
           excludedListIds: newExcluded.map((s) => s.id),
         }),
       });
-      setLastSaved(true);
-    } finally {
-      setSaving(false);
+      setSaveStatus(res.ok ? "saved" : "error");
+    } catch {
+      setSaveStatus("error");
     }
   }
 
@@ -55,12 +58,23 @@ export function SegmentManager({ slug, initialIncluded, initialExcluded }: Props
 
   return (
     <div className="space-y-3">
+      {namesAreIds && (
+        <p className="rounded border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-800">
+          Segment names need the{" "}
+          <code className="font-mono font-semibold">crm.lists.read</code> scope on your HubSpot
+          Private App — add it in HubSpot → Settings → Integrations → Private Apps.
+          IDs are shown for now; segments still work correctly for sending.
+        </p>
+      )}
+
       <p className="text-[10.5px] text-sand-400">
-        {saving
+        {saveStatus === "saving"
           ? "Saving…"
-          : lastSaved
-          ? "Saved — changes carry through to the next HubSpot push."
-          : "Click any segment to move it between included and excluded."}
+          : saveStatus === "saved"
+          ? "Saved — will apply on next push."
+          : saveStatus === "error"
+          ? "Save failed — check your connection."
+          : "Click any segment chip to move it between included and excluded."}
       </p>
 
       <SegmentGroup

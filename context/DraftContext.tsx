@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -256,7 +257,15 @@ const DraftContext = createContext<DraftContextValue | null>(null);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
+function fetchCommunities(setter: (c: Community[]) => void) {
+  fetch("/api/communities")
+    .then((r) => r.json())
+    .then((d) => { if (Array.isArray(d.communities)) setter(d.communities); })
+    .catch(() => {});
+}
+
 export function DraftProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [communities, setCommunities] = useState<Community[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string>("");
   // The community the ACTIVE draft belongs to — frozen when generated/loaded so
@@ -316,23 +325,16 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { galleryImageUrlsRef.current = galleryImageUrls; }, [galleryImageUrls]);
 
   useEffect(() => {
-    fetch("/api/communities")
-      .then((r) => r.json())
-      .then((d) => {
-        if (!Array.isArray(d.communities)) return;
-        setCommunities(d.communities);
-        // Intentionally do NOT auto-select a community — the Generate card
-        // loads empty so the user makes an explicit choice.
-      })
-      .catch((err) => {
-        console.error("[DraftProvider] Failed to load communities:", err);
-      });
-    try {
-      setSavedDrafts(getSavedDrafts());
-    } catch (err) {
-      console.error("[DraftProvider] Failed to load saved drafts:", err);
-    }
+    fetchCommunities(setCommunities);
+    try { setSavedDrafts(getSavedDrafts()); } catch { /* ignore */ }
   }, []);
+
+  // Re-fetch communities on every navigation so segment changes made on the
+  // community detail page are reflected in the Generate card without a full reload.
+  useEffect(() => {
+    if (communities.length > 0) fetchCommunities(setCommunities);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   // postMessage listener — receives inline edits from the preview iframe.
   // Uses refs so this effect never needs to re-subscribe.

@@ -233,17 +233,17 @@ export function buildEblastHtml(
 
   // Gallery: 2- or 4-up grid of additional photos extracted from the flyer.
   // Sits between the pull-quote and the final CTA.
+  // Requires at least 2 images — a single orphaned photo looks unfinished.
   const gallery = (() => {
-    if (galleryImgs.length === 0) return "";
+    if (galleryImgs.length < 2) return "";
 
-    // 1 image → single full-width row, 2 images → 2-up, 3 images → 3-up,
-    // 4+ images → 2×2 grid for visual symmetry.
-    const cols = galleryImgs.length === 3 ? 3 : galleryImgs.length === 1 ? 1 : 2;
+    // 2 images → 2-up, 3 images → 3-up, 4+ images → 2×2 grid for visual symmetry.
+    const cols = galleryImgs.length === 3 ? 3 : 2;
     const cellWidth = Math.floor(528 / cols);
     // Tile dimensions: 4:3 for multi-col grids (images are pre-cropped server-side);
     // 16:9 for a single full-width image so it isn't too tall.
-    const tileW = cellWidth - (cols > 1 ? 12 : 0);
-    const tileH = cols === 1 ? Math.round(tileW * 9 / 16) : Math.round(tileW * 3 / 4);
+    const tileW = cellWidth - 12; // always multi-column; subtract gutter
+    const tileH = Math.round(tileW * 3 / 4); // 4:3 to match server-side crop
     // Each tile carries a stable 1-based name ("Gallery image N") that matches
     // the hover label in the preview and the refine manifest, so users can call
     // out a specific gallery photo by name.

@@ -292,17 +292,6 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                     </p>
                   )}
                 </div>
-                <Field label="Marketing director">
-                  {c.marketingDirector ? (
-                    <>
-                      {c.marketingDirector.name}
-                      <br />
-                      <span className="text-xs text-sand-500">{c.marketingDirector.email}</span>
-                    </>
-                  ) : (
-                    <span className="text-sand-400">—</span>
-                  )}
-                </Field>
               </div>
             </CardContent>
           </Card>

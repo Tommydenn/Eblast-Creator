@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/Header";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
 import { IntelligenceApplied } from "@/components/IntelligenceApplied";
@@ -41,9 +41,10 @@ const EBLAST_EDIT_SCRIPT = `(function(){
     if(!labelFor(e.relatedTarget)) lb.style.opacity='0';
   });
   document.querySelectorAll('[data-img-label]').forEach(function(im){
-    im.style.cursor='help';
+    im.style.cursor='pointer';
     im.addEventListener('mouseenter',function(){ im.style.outline='2px solid rgba(59,130,246,0.6)'; im.style.outlineOffset='2px'; });
     im.addEventListener('mouseleave',function(){ im.style.outline=''; });
+    im.addEventListener('click',function(e){ e.stopPropagation(); window.parent.postMessage({type:'eblast-image-select',label:im.getAttribute('data-img-label')},'*'); });
   });
   function finish(el){
     if(el.contentEditable!=='true') return;
@@ -86,28 +87,19 @@ const verdictBadge: Record<ReviewVerdict, { label: string; variant: "success" | 
 
 // ─── Image Bank Panel ─────────────────────────────────────────────────────────
 
-const FOCUS_OPTIONS = [
-  { value: 'top', label: '↑', title: 'Crop from top' },
-  { value: 'center', label: '▪', title: 'Crop from center' },
-  { value: 'bottom', label: '↓', title: 'Crop from bottom' },
-] as const;
-
 function ImageBankPanel({
   imageUrls,
   onSwap,
 }: {
   imageUrls: string[];
-  onSwap: (slot: 'hero' | 'secondary' | 'gallery', url: string, focus: string) => void;
+  onSwap: (slot: 'hero' | 'secondary' | 'gallery', url: string) => void;
 }) {
-  const [foci, setFoci] = useState<Record<number, string>>({});
   const [swapping, setSwapping] = useState<number | null>(null);
   if (imageUrls.length === 0) return null;
 
-  function getFocus(i: number) { return foci[i] ?? 'center'; }
-
   async function handleSwap(slot: 'hero' | 'secondary' | 'gallery', url: string, i: number) {
     setSwapping(i);
-    await onSwap(slot, url, getFocus(i));
+    await onSwap(slot, url);
     setSwapping(null);
   }
 
@@ -122,7 +114,6 @@ function ImageBankPanel({
       <div className="grid grid-cols-4 gap-2 border-t border-sand-200 p-3">
         {imageUrls.map((url, i) => (
           <div key={i} className="flex flex-col gap-1">
-            {/* Uniform thumbnail */}
             <div
               className="relative overflow-hidden rounded border border-sand-200 bg-sand-100"
               style={{ aspectRatio: '4/3' }}
@@ -134,28 +125,10 @@ function ImageBankPanel({
               />
               {swapping === i && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-                  <span className="text-[10px] text-sand-500">Cropping…</span>
+                  <span className="text-[10px] text-sand-500">Placing…</span>
                 </div>
               )}
             </div>
-            {/* Focus selector */}
-            <div className="flex justify-center gap-0.5">
-              {FOCUS_OPTIONS.map(({ value, label, title }) => (
-                <button
-                  key={value}
-                  onClick={() => setFoci((f) => ({ ...f, [i]: value }))}
-                  title={title}
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
-                    getFocus(i) === value
-                      ? 'bg-clay-500 text-white'
-                      : 'border border-sand-200 bg-white text-sand-400 hover:border-sand-300 hover:text-sand-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {/* Slot buttons */}
             <div className="flex justify-center gap-0.5">
               {(['hero', 'secondary', 'gallery'] as const).map((slot) => (
                 <button
@@ -194,7 +167,7 @@ export default function Home() {
     duplicateWarning,
     communityDrafts, currentDraftSaved, saveNotice,
     htmlDirty, syncHtml, swapSubjectLine,
-    allExtractedImageUrls, swapImage,
+    allExtractedImageUrls, swapImage, repositionImage,
     handleFileChange, clearInputs,
     generateDraft, cancelGeneration,
     refineDraft, undoRefine, redoRefine, canUndoRefine, canRedoRefine, lastRefineInstruction, redoRefineInstruction,
@@ -206,6 +179,26 @@ export default function Home() {
 
   const [reviewerOpen, setReviewerOpen] = useState(true);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{ slot: 'hero' | 'secondary' | 'gallery'; galleryIdx?: number; label: string } | null>(null);
+  const [repositioning, setRepositioning] = useState(false);
+
+  // Listen for clicks on images inside the eblast iframe.
+  useEffect(() => {
+    function handler(e: MessageEvent) {
+      if (!e.data || e.data.type !== 'eblast-image-select') return;
+      const label: string = e.data.label ?? '';
+      if (label === 'hero') {
+        setSelectedImage({ slot: 'hero', label });
+      } else if (label === 'secondary') {
+        setSelectedImage({ slot: 'secondary', label });
+      } else if (label.startsWith('gallery-')) {
+        const idx = parseInt(label.replace('gallery-', ''), 10);
+        setSelectedImage({ slot: 'gallery', galleryIdx: isNaN(idx) ? 0 : idx, label });
+      }
+    }
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
   const selected = communities.find((c) => c.slug === selectedSlug);
 
   return (
@@ -517,7 +510,7 @@ export default function Home() {
                 {allExtractedImageUrls.length > 0 && (
                   <ImageBankPanel
                     imageUrls={allExtractedImageUrls}
-                    onSwap={(slot, url, focus) => swapImage(slot, url, undefined, focus)}
+                    onSwap={(slot, url) => swapImage(slot, url, undefined, 'center')}
                   />
                 )}
 
@@ -780,6 +773,45 @@ export default function Home() {
                     Subject:{" "}
                     <span className="font-medium text-sand-900">{extracted.subject}</span>
                   </CardDescription>
+                  {selectedImage && (
+                    <div className="mt-2 flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-blue-600 mr-1">
+                        {selectedImage.label} position
+                      </span>
+                      {[
+                        { focus: 'top-left', label: '↖' },
+                        { focus: 'top', label: '↑' },
+                        { focus: 'top-right', label: '↗' },
+                        { focus: 'left', label: '←' },
+                        { focus: 'center', label: '▪' },
+                        { focus: 'right', label: '→' },
+                        { focus: 'bottom-left', label: '↙' },
+                        { focus: 'bottom', label: '↓' },
+                        { focus: 'bottom-right', label: '↘' },
+                      ].map(({ focus, label }) => (
+                        <button
+                          key={focus}
+                          disabled={repositioning}
+                          onClick={async () => {
+                            setRepositioning(true);
+                            await repositionImage(selectedImage.slot, focus, selectedImage.galleryIdx);
+                            setRepositioning(false);
+                          }}
+                          className="flex h-6 w-6 items-center justify-center rounded text-[13px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-40"
+                          title={focus}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setSelectedImage(null)}
+                        className="ml-1 flex h-6 w-6 items-center justify-center rounded text-[11px] text-blue-400 hover:bg-blue-100 hover:text-blue-700"
+                        title="Dismiss"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
                   {imageCount > 0 && (
                     <div className="mt-2">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-sand-200 bg-white px-2.5 py-0.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-sand-500">

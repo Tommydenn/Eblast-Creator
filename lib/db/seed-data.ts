@@ -659,7 +659,7 @@ for (const sc of seedCommunities) {
 // Buffalo AL/MC, and The Glenn W St Paul had no from-identity in the data.)
 const SENDERS_BY_SLUG: Record<string, SeedSender[]> = {
   "amira-choice-arvada": [{ name: "Michelle Newitt", email: "mnewitt@greatlakesmc.com" }],
-  "amira-choice-bloomington": [{ name: "Amira Choice Bloomington", email: "dmiller@greatlakesmc.com" }],
+  "amira-choice-bloomington": [{ name: "Dean Miller", email: "dmiller@greatlakesmc.com" }],
   "orchards-of-minnetonka": [{ name: "Lauren Martinovich", email: "lmartinovich@greatlakesmc.com" }],
   "the-glenn-hopkins": [{ name: "Scott Saffert", email: "ssaffert@greatlakesmc.com" }],
   "the-glenn-minnetonka": [

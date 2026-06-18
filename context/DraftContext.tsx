@@ -156,6 +156,12 @@ export interface SavedDraft {
   agentLoop?: AgentLoopSummary | null;
   pastSendsContext?: PastSendForContext[];
   subjectSpecialist?: SubjectSpecialistResult | null;
+  /** All original (pre-crop) images from the PDF — powers the image bank. */
+  allExtractedImageUrls?: string[];
+  /** Pre-crop original for each placed slot — powers in-preview repositioning. */
+  heroOriginalUrl?: string;
+  secondaryOriginalUrl?: string;
+  galleryOriginalUrls?: string[];
 }
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
@@ -221,6 +227,10 @@ export interface DraftContextValue {
   subjectSpecialist: SubjectSpecialistResult | null;
   duplicateWarning: { name: string; generatedAt: string; community: string } | null;
   communityDrafts: SavedDraft[];
+  /** Pre-crop originals for each placed slot — power in-preview repositioning. */
+  heroOriginalUrl: string | undefined;
+  secondaryOriginalUrl: string | undefined;
+  galleryOriginalUrls: string[];
   currentDraftSaved: boolean;
   /** Transient confirmation shown briefly after a draft is saved. */
   saveNotice: { id: number; text: string } | null;
@@ -256,6 +266,8 @@ export interface DraftContextValue {
   loadSavedDraft: (draft: SavedDraft) => void;
   deleteCommunityDraft: (id: string) => void;
   swapImage: (slot: 'hero' | 'secondary' | 'gallery', imageUrl: string, galleryIdx?: number, focus?: string) => Promise<void>;
+  /** Re-crop the current image in a slot from its original, using a new focus. */
+  repositionImage: (slot: 'hero' | 'secondary' | 'gallery', focus: string, galleryIdx?: number) => Promise<void>;
   dismissDuplicateWarning: () => void;
 }
 
@@ -288,6 +300,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [galleryImageUrls, setGalleryImageUrls] = useState<string[]>([]);
   const [imageCount, setImageCount] = useState<number>(0);
   const [allExtractedImageUrls, setAllExtractedImageUrls] = useState<string[]>([]);
+  const [heroOriginalUrl, setHeroOriginalUrl] = useState<string | undefined>();
+  const [secondaryOriginalUrl, setSecondaryOriginalUrl] = useState<string | undefined>();
+  const [galleryOriginalUrls, setGalleryOriginalUrls] = useState<string[]>([]);
   const [refineInput, setRefineInput] = useState("");
   const [refineHistory, setRefineHistory] = useState<RefinementEntry[]>([]);
   const [review, setReview] = useState<DraftReview | null>(null);
@@ -322,6 +337,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const heroImageUrlRef = useRef<string | undefined>();
   const secondaryImageUrlRef = useRef<string | undefined>();
   const galleryImageUrlsRef = useRef<string[]>([]);
+  const heroOriginalUrlRef = useRef<string | undefined>();
+  const secondaryOriginalUrlRef = useRef<string | undefined>();
+  const galleryOriginalUrlsRef = useRef<string[]>([]);
 
   // Keep refs in sync with state
   useEffect(() => { extractedRef.current = extracted; }, [extracted]);
@@ -330,6 +348,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { heroImageUrlRef.current = heroImageUrl; }, [heroImageUrl]);
   useEffect(() => { secondaryImageUrlRef.current = secondaryImageUrl; }, [secondaryImageUrl]);
   useEffect(() => { galleryImageUrlsRef.current = galleryImageUrls; }, [galleryImageUrls]);
+  useEffect(() => { heroOriginalUrlRef.current = heroOriginalUrl; }, [heroOriginalUrl]);
+  useEffect(() => { secondaryOriginalUrlRef.current = secondaryOriginalUrl; }, [secondaryOriginalUrl]);
+  useEffect(() => { galleryOriginalUrlsRef.current = galleryOriginalUrls; }, [galleryOriginalUrls]);
 
   useEffect(() => {
     fetchCommunities(setCommunities);
@@ -470,6 +491,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setGalleryImageUrls(data.galleryImageUrls ?? []);
       setImageCount(data.imageCount ?? 0);
       setAllExtractedImageUrls(data.allExtractedImageUrls ?? []);
+      setHeroOriginalUrl(data.heroOriginalUrl ?? undefined);
+      setSecondaryOriginalUrl(data.secondaryOriginalUrl ?? undefined);
+      setGalleryOriginalUrls(data.galleryOriginalUrls ?? []);
       setReview(data.review ?? null);
       setAgentLoop(data.agentLoop ?? null);
       setPastSendsContext(data.pastSendsContext ?? []);
@@ -572,6 +596,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         setHeroImageUrl(data.images.hero ?? undefined);
         setSecondaryImageUrl(data.images.secondary ?? undefined);
         setGalleryImageUrls(data.images.gallery ?? []);
+        // Originals are unknown after a refine-driven image swap — clear them
+        // so repositioning doesn't try to use a stale original.
+        if (data.imagesChanged) {
+          setHeroOriginalUrl(undefined);
+          setSecondaryOriginalUrl(undefined);
+          setGalleryOriginalUrls([]);
+        }
       }
       setHtmlDirty(false);
       setRefineHistory((h) => [
@@ -729,6 +760,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       agentLoop,
       pastSendsContext,
       subjectSpecialist,
+      allExtractedImageUrls,
+      heroOriginalUrl,
+      secondaryOriginalUrl,
+      galleryOriginalUrls,
     };
     // Prepend to community list, capped at 8 per community (oldest auto-dropped).
     const withNew = [draft, ...getCommunityDrafts().filter((d) => d.id !== draft.id)];
@@ -754,6 +789,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setGalleryImageUrls([]);
     setImageCount(0);
     setAllExtractedImageUrls([]);
+    setHeroOriginalUrl(undefined);
+    setSecondaryOriginalUrl(undefined);
+    setGalleryOriginalUrls([]);
     setReview(null);
     setAgentLoop(null);
     setPastSendsContext([]);
@@ -779,7 +817,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setSecondaryImageUrl(draft.secondaryImageUrl);
     setGalleryImageUrls(draft.galleryImageUrls);
     setImageCount(draft.imageCount);
-    setAllExtractedImageUrls([]);
+    setAllExtractedImageUrls(draft.allExtractedImageUrls ?? []);
+    setHeroOriginalUrl(draft.heroOriginalUrl);
+    setSecondaryOriginalUrl(draft.secondaryOriginalUrl);
+    setGalleryOriginalUrls(draft.galleryOriginalUrls ?? []);
     setReview(draft.review ?? null);
     setAgentLoop(draft.agentLoop ?? null);
     setPastSendsContext(draft.pastSendsContext ?? []);
@@ -829,16 +870,24 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     let newSecondary = secondaryImageUrlRef.current;
     let newGallery = [...galleryImageUrlsRef.current];
 
+    // Track the original (pre-crop) URL for each slot so repositionImage can
+    // re-crop from the source with a different focus.
     if (slot === 'hero') {
       newHero = placedUrl;
+      setHeroOriginalUrl(imageUrl);
     } else if (slot === 'secondary') {
       newSecondary = placedUrl;
+      setSecondaryOriginalUrl(imageUrl);
     } else if (slot === 'gallery') {
+      const newGalleryOriginals = [...galleryOriginalUrlsRef.current];
       if (galleryIdx !== undefined && galleryIdx >= 0 && galleryIdx < newGallery.length) {
         newGallery[galleryIdx] = placedUrl;
+        newGalleryOriginals[galleryIdx] = imageUrl;
       } else {
         newGallery = [...newGallery, placedUrl];
+        newGalleryOriginals.push(imageUrl);
       }
+      setGalleryOriginalUrls(newGalleryOriginals);
     }
 
     setHeroImageUrl(newHero);
@@ -864,6 +913,70 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (e) {
       console.error("[DraftProvider] swapImage render failed:", e);
+    }
+    setCurrentDraftSaved(false);
+  }
+
+  async function repositionImage(
+    slot: 'hero' | 'secondary' | 'gallery',
+    focus: string,
+    galleryIdx?: number,
+  ): Promise<void> {
+    const current = extractedRef.current;
+    const slug = activeCommunitySlugRef.current;
+    if (!current || !slug) return;
+
+    // Get the pre-crop original for this slot — without it we can't reposition.
+    let originalUrl: string | undefined;
+    if (slot === 'hero') originalUrl = heroOriginalUrlRef.current;
+    else if (slot === 'secondary') originalUrl = secondaryOriginalUrlRef.current;
+    else if (slot === 'gallery' && galleryIdx !== undefined) originalUrl = galleryOriginalUrlsRef.current[galleryIdx];
+    if (!originalUrl) return;
+
+    const targetRatio = slot === 'gallery' ? 4 / 3 : 16 / 9;
+    let placedUrl = originalUrl;
+    try {
+      const cropRes = await fetch("/api/crop-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: originalUrl, targetRatio, focus }),
+      });
+      const cropData = await cropRes.json();
+      if (cropData.ok) placedUrl = cropData.croppedUrl;
+    } catch {
+      // Fall back to the original without cropping.
+    }
+
+    let newHero = heroImageUrlRef.current;
+    let newSecondary = secondaryImageUrlRef.current;
+    let newGallery = [...galleryImageUrlsRef.current];
+    if (slot === 'hero') newHero = placedUrl;
+    else if (slot === 'secondary') newSecondary = placedUrl;
+    else if (slot === 'gallery' && galleryIdx !== undefined) newGallery[galleryIdx] = placedUrl;
+
+    setHeroImageUrl(newHero);
+    setSecondaryImageUrl(newSecondary);
+    setGalleryImageUrls(newGallery);
+
+    try {
+      const res = await fetch("/api/render-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          extracted: current,
+          communitySlug: slug,
+          heroImageUrl: newHero,
+          secondaryImageUrl: newSecondary,
+          galleryImageUrls: newGallery,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setHtml(data.html);
+        setHtmlDirty(false);
+      }
+    } catch (e) {
+      console.error("[DraftProvider] repositionImage render failed:", e);
     }
     setCurrentDraftSaved(false);
   }
@@ -913,6 +1026,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     saveDraft, discardDraft,
     loadSavedDraft, deleteCommunityDraft,
     swapImage,
+    repositionImage,
+    heroOriginalUrl,
+    secondaryOriginalUrl,
+    galleryOriginalUrls,
     dismissDuplicateWarning,
   };
 

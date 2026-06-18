@@ -62,11 +62,6 @@ async function call(step: string, init: { method: string; url: string; body?: an
 
 function wrapAsHubLEmailTemplate(html: string, label: string): string {
   const stripped = html
-    // Remove the hardcoded preheader span we generate in render-email.ts —
-    // we replace it with the HubL {{ preview_text }} variable below so HubSpot
-    // surfaces the "Preview text" field in its email editor and populates it
-    // from the previewText value we send in the create-email API call.
-    .replace(/<span[^>]*mso-hide:all[^>]*>[\s\S]*?<\/span>/, "")
     // Remove our footer row (replaced with HubSpot's CAN-SPAM module below).
     .replace(/<tr>\s*<td class="px"[^>]*padding: 22px 36px 32px 36px[\s\S]*?<\/td>\s*<\/tr>/, "")
     .replace(/\{\{\s*unsubscribe_link\s*\}\}/g, "{{ unsubscribe_link }}")
@@ -77,9 +72,6 @@ function wrapAsHubLEmailTemplate(html: string, label: string): string {
   isAvailableForNewContent: true
   label: ${label}
 -->
-{# Inbox preview text — HubSpot reads this variable to populate the  #}
-{# "Preview text" field in the email editor and inject it at send time. #}
-<span class="hs-email-preheader" style="display:none !important;mso-hide:all;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;">{{ preview_text }}</span>
 ${stripped}
 
 {# HubSpot-required CAN-SPAM compliance footer (unsubscribe + physical address) #}
@@ -351,9 +343,6 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
     type: "BATCH_EMAIL",
   };
 
-  // previewText at top level (works for drag-and-drop; may be ignored by
-  // HubSpot for Design Manager coded templates — see content block below).
-  if (input.previewText) body.previewText = input.previewText;
   if (input.fromName || input.replyTo) {
     body.from = {
       ...(input.fromName ? { fromName: input.fromName } : {}),
@@ -363,12 +352,7 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
   if (input.templatePath) {
     // "DESIGN_MANAGER" matches what HubSpot returns for coded template emails.
     body.emailTemplateMode = "DESIGN_MANAGER";
-    body.content = {
-      templatePath: input.templatePath,
-      // Also set previewText inside content — required for Design Manager mode
-      // to surface the field in HubSpot's email editor.
-      ...(input.previewText ? { previewText: input.previewText } : {}),
-    };
+    body.content = { templatePath: input.templatePath };
   }
   // Prefer the included/excluded segment arrays; fall back to the single
   // contactListId for backward compatibility.

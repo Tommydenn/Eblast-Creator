@@ -61,12 +61,14 @@ async function call(step: string, init: { method: string; url: string; body?: an
 // `email_footer` module so the unsubscribe links resolve to real values.
 
 function wrapAsHubLEmailTemplate(html: string, label: string): string {
-  // Strip the user-facing footer (we replace it with HubSpot's required module).
-  // Keep everything else as-is.
   const stripped = html
-    // Remove our "A Great Lakes Management Community / Unsubscribe / Manage prefs" row
+    // Remove the hardcoded preheader span we generate in render-email.ts —
+    // we replace it with the HubL {{ preview_text }} variable below so HubSpot
+    // surfaces the "Preview text" field in its email editor and populates it
+    // from the previewText value we send in the create-email API call.
+    .replace(/<span[^>]*mso-hide:all[^>]*>[\s\S]*?<\/span>/, "")
+    // Remove our footer row (replaced with HubSpot's CAN-SPAM module below).
     .replace(/<tr>\s*<td class="px"[^>]*padding: 22px 36px 32px 36px[\s\S]*?<\/td>\s*<\/tr>/, "")
-    // Replace the {{unsubscribe_link}} / {{manage_preferences}} placeholders just in case
     .replace(/\{\{\s*unsubscribe_link\s*\}\}/g, "{{ unsubscribe_link }}")
     .replace(/\{\{\s*manage_preferences\s*\}\}/g, "{{ unsubscribe_section_url }}");
 
@@ -75,6 +77,9 @@ function wrapAsHubLEmailTemplate(html: string, label: string): string {
   isAvailableForNewContent: true
   label: ${label}
 -->
+{# Inbox preview text — HubSpot reads this variable to populate the  #}
+{# "Preview text" field in the email editor and inject it at send time. #}
+<span class="hs-email-preheader" style="display:none !important;mso-hide:all;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;">{{ preview_text }}</span>
 ${stripped}
 
 {# HubSpot-required CAN-SPAM compliance footer (unsubscribe + physical address) #}

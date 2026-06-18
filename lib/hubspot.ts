@@ -367,7 +367,7 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
         : [];
   const exclude = input.excludedListIds ?? [];
   if (include.length > 0 || exclude.length > 0) {
-    body.to = { contactLists: { include, exclude } };
+    body.to = { contactIlsLists: { include, exclude } };
   }
 
   return call("create_email", {

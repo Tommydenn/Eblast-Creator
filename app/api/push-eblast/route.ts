@@ -129,6 +129,15 @@ export async function POST(req: NextRequest) {
   }
 
   // 2) Create the marketing email pointing at it.
+  const segmentsPayload = {
+    contactListId: community.hubspot.listId,
+    includedListIds: community.hubspot.includedListIds ?? [],
+    excludedListIds: community.hubspot.excludedListIds ?? [],
+  };
+  console.log(
+    `[push-eblast] segments being sent to HubSpot:`,
+    JSON.stringify(segmentsPayload),
+  );
   const create = await createEmail({
     name: body.name ?? `${community.displayName} – ${body.subject}`,
     subject: body.subject,
@@ -136,9 +145,7 @@ export async function POST(req: NextRequest) {
     fromName: community.senders[0]?.name ?? community.displayName,
     replyTo: community.senders[0]?.email ?? community.email ?? "",
     templatePath: hubspotPath,
-    contactListId: community.hubspot.listId,
-    includedListIds: community.hubspot.includedListIds,
-    excludedListIds: community.hubspot.excludedListIds,
+    ...segmentsPayload,
   });
 
   if (!create.ok) {
@@ -164,6 +171,9 @@ export async function POST(req: NextRequest) {
           state: create.body?.state,
           mode: create.body?.emailTemplateMode,
           community: community.displayName,
+          // Debug: what HubSpot confirmed for recipient lists
+          sentSegments: segmentsPayload,
+          hubspotTo: create.body?.to ?? null,
         }
       : null,
   });

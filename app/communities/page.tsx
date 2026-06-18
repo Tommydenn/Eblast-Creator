@@ -11,6 +11,20 @@ import { Badge } from "@/components/ui/Badge";
 
 export const dynamic = "force-dynamic";
 
+const FAMILY_COLORS: Record<string, string> = {
+  "Amira Choice":                "#8b9eb5",
+  "Caretta":                     "#7a9e8a",
+  "Cottagewood":                 "#c4a87a",
+  "Global Pointe":               "#9ab5c4",
+  "Hayden Grove":                "#8fa878",
+  "Orchards of Minnetonka":      "#a8c4a0",
+  "Seven Hills":                 "#b59e7a",
+  "The Glenn":                   "#9b8bb5",
+  "The Pillars of Grand Rapids": "#b59b8b",
+  "Talamore":                    "#7a9bb5",
+};
+const DEFAULT_BAR_COLOR = "#a0a89e";
+
 interface CommunityStats {
   sendCount: number;
   avgOpenPct: number | null;
@@ -97,16 +111,16 @@ export default async function CommunitiesPage() {
                   </h2>
                 </div>
                 <Card className="overflow-hidden p-0">
-                  <table className="w-full text-sm">
+                  <table className="w-full table-fixed text-sm">
                     <thead>
                       <tr className="border-b border-sand-200 bg-sand-50/60 text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500">
-                        <th className="px-5 py-3 text-left font-medium">Community</th>
-                        <th className="px-3 py-3 text-left font-medium">Sender</th>
-                        <th className="px-3 py-3 text-left font-medium">Tracking #</th>
-                        <th className="px-3 py-3 text-right font-medium">Sends · 365d</th>
-                        <th className="px-3 py-3 text-right font-medium">Avg open</th>
-                        <th className="px-3 py-3 text-left font-medium">Last sent</th>
-                        <th className="px-5 py-3 text-left font-medium">Status</th>
+                        <th className="w-[28%] px-5 py-3 text-left font-medium">Community</th>
+                        <th className="w-[18%] px-3 py-3 text-left font-medium">Sender</th>
+                        <th className="w-[14%] px-3 py-3 text-left font-medium">Tracking #</th>
+                        <th className="w-[9%] px-3 py-3 text-right font-medium">Sends · 365d</th>
+                        <th className="w-[9%] px-3 py-3 text-right font-medium">Avg open</th>
+                        <th className="w-[11%] px-3 py-3 text-left font-medium">Last sent</th>
+                        <th className="w-[11%] px-5 py-3 text-left font-medium">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-sand-100">
@@ -114,14 +128,15 @@ export default async function CommunitiesPage() {
                         const stats = statsByCommunity.get(c.id);
                         const lastSent = stats?.lastSentAt ? new Date(stats.lastSentAt) : null;
                         const openPct = stats?.avgOpenPct ?? null;
+                        const barColor = FAMILY_COLORS[family] ?? DEFAULT_BAR_COLOR;
                         return (
-                          <tr key={c.slug} className="group hover:bg-sand-50/60">
+                          <tr key={c.slug} className="group align-middle hover:bg-sand-50/60">
                             <td className="px-5 py-3">
                               <Link href={`/communities/${c.slug}`} className="block">
                                 <div className="flex items-center gap-3">
                                   <span
-                                    className="h-7 w-1 rounded-sm"
-                                    style={{ backgroundColor: c.brand.primary }}
+                                    className="h-7 w-1 shrink-0 rounded-sm"
+                                    style={{ backgroundColor: barColor }}
                                     aria-hidden
                                   />
                                   <div className="min-w-0">

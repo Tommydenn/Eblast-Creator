@@ -346,6 +346,8 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
     type: "BATCH_EMAIL",
   };
 
+  // previewText at top level (works for drag-and-drop; may be ignored by
+  // HubSpot for Design Manager coded templates — see content block below).
   if (input.previewText) body.previewText = input.previewText;
   if (input.fromName || input.replyTo) {
     body.from = {
@@ -354,8 +356,14 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
     };
   }
   if (input.templatePath) {
-    body.emailTemplateMode = "HTML";
-    body.content = { templatePath: input.templatePath };
+    // "DESIGN_MANAGER" matches what HubSpot returns for coded template emails.
+    body.emailTemplateMode = "DESIGN_MANAGER";
+    body.content = {
+      templatePath: input.templatePath,
+      // Also set previewText inside content — required for Design Manager mode
+      // to surface the field in HubSpot's email editor.
+      ...(input.previewText ? { previewText: input.previewText } : {}),
+    };
   }
   // Prefer the included/excluded segment arrays; fall back to the single
   // contactListId for backward compatibility.

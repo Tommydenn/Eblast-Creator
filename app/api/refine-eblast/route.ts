@@ -54,6 +54,8 @@ interface Body {
   heroImageUrl?: string;
   secondaryImageUrl?: string;
   galleryImageUrls?: string[];
+  /** All images extracted from the original PDF — extends the pool beyond current placements. */
+  allExtractedImageUrls?: string[];
 }
 
 export async function POST(req: NextRequest) {
@@ -87,6 +89,16 @@ export async function POST(req: NextRequest) {
     if (body.heroImageUrl) pool.push({ url: body.heroImageUrl, name: "Hero image" });
     if (body.secondaryImageUrl) pool.push({ url: body.secondaryImageUrl, name: "Secondary image" });
     (body.galleryImageUrls ?? []).forEach((u, i) => pool.push({ url: u, name: `Gallery image ${i + 1}` }));
+    // Expand pool with any additional images from the PDF not currently placed.
+    if (body.allExtractedImageUrls?.length) {
+      const placed = new Set(pool.map((p) => p.url));
+      body.allExtractedImageUrls.forEach((url) => {
+        if (!placed.has(url)) {
+          pool.push({ url, name: `Extracted image ${pool.length + 1}` });
+          placed.add(url);
+        }
+      });
+    }
     const imageManifestText = pool.length
       ? pool.map((p, i) => `  [${i}] "${p.name}" (the photo the user sees labeled "${p.name}")`).join("\n")
       : "  (no photos are currently in this email)";

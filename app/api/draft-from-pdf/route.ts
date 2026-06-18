@@ -159,6 +159,17 @@ export async function POST(req: NextRequest) {
     galleryImageUrls,
   });
 
+  // Build the full image pool for the refine tool: all ranked images, with the
+  // placed (cropped) versions first, then any non-placed originals.
+  const placedOriginals = new Set([rawHero, rawSecondary, ...rawGallery].filter(Boolean));
+  const extraImageUrls = rankedImages
+    .filter((img) => img.dataUri && !placedOriginals.has(img.dataUri))
+    .map((img) => img.dataUri);
+  const allExtractedImageUrls: string[] = [
+    ...([heroImageUrl, secondaryImageUrl, ...galleryImageUrls].filter((u): u is string => !!u)),
+    ...extraImageUrls,
+  ];
+
   // Append a programmatic finding if no CallRail tracking number is set.
   const finalReview = community.trackingPhone
     ? loop.finalReview
@@ -183,6 +194,7 @@ export async function POST(req: NextRequest) {
     heroImageUrl,
     secondaryImageUrl,
     galleryImageUrls,
+    allExtractedImageUrls,
     imageCount: imageRun.images.length,
     imageDiagnostic: imageRun.diagnostic,
     review: finalReview,

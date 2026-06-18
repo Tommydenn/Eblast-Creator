@@ -181,7 +181,7 @@ export function buildEblastHtml(
                 </td>
               </tr>
             </table>` : ""}
-            <p data-field="heroHook" style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 16px; line-height: 1.55; color: #E8DDC4; max-width: 460px; margin: 0 auto 24px auto;">${escapeHtml(flyer.heroHook)}</p>
+            ${flyer.heroHook?.trim() ? `<p data-field="heroHook" style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 16px; line-height: 1.55; color: #E8DDC4; max-width: 460px; margin: 0 auto 24px auto;">${escapeHtml(flyer.heroHook)}</p>` : ""}
             <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.accent}; color:${buttonTextColor("#FFFFFF", brand.accent)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
           </td>
         </tr>

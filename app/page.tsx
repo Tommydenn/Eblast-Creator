@@ -100,7 +100,7 @@ function SavedDraftsPanel({
     <details className="group mt-6 rounded-md border border-sand-200 bg-sand-50/60">
       <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
         <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600 group-open:text-sand-900">
-          Saved drafts
+          Recently saved drafts
         </span>
         <Badge variant="outline">{drafts.length}</Badge>
       </summary>

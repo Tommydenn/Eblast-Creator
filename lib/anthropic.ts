@@ -21,7 +21,7 @@ function client(): Anthropic {
 const extractFlyerToolSchema = {
   type: "object",
   required: [
-    "subject", "previewText", "eyebrow", "headline", "heroHook",
+    "subject", "previewText", "eyebrow", "headline",
     "storyEyebrow", "bodyParagraphs",
     "ctaEyebrow", "ctaHeadline", "ctaSubline", "ctaButtonLabel", "ctaButtonHref",
     "heroImageAlt", "heroImageDescription",
@@ -34,7 +34,7 @@ const extractFlyerToolSchema = {
     eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
     headline: { type: "string", description: "The single biggest message. 2–5 words. Title-case. The 'what.' Do not use adjectives here — use the most concrete noun+verb the flyer supports." },
     scriptSubheadline: { type: "string", description: "Optional script-styled subhead. 1–3 evocative words. Only include if it adds emotional texture not in the headline (e.g. a season, a feeling). Omit rather than echo the headline." },
-    heroHook: { type: "string", description: "One italic sentence below the date. Adds NEW context not in the headline — sensory detail, a specific person, or the 'why attend.' Must NOT restate the headline. Opens with a moment, not 'Join us for...'." },
+    heroHook: { type: "string", description: "Always emit an empty string. This field is no longer rendered in the email." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
     eventTime: { type: "string", description: "Event time, e.g. '2:00 PM'." },
@@ -45,17 +45,19 @@ const extractFlyerToolSchema = {
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2–4 paragraphs. Each paragraph advances the story — do NOT restate the headline or heroHook in paragraph 1. Para 1: a moment (sensory, specific). Para 2: what is actually happening / why it matters. Para 3 (optional): one piece of grounding detail (a person, an amenity, a credential). Para 4 (optional): clear CTA-ready line. No exclamation marks.",
+      description: "2–4 paragraphs. Each paragraph advances the story — do NOT restate the headline in paragraph 1. Para 1: a moment (sensory, specific). Para 2: what is actually happening / why it matters. Para 3 (optional): one piece of grounding detail (a person, an amenity, a credential). Para 4 (optional): clear CTA-ready line. No exclamation marks.",
     },
 
     pullQuoteEyebrow: { type: "string", description: "Optional eyebrow above the pull-quote block. Omit if it would just echo the ctaEyebrow." },
     pullQuote: { type: "string", description: "A verbatim or near-verbatim line taken DIRECTLY from the flyer — a tagline printed on the flyer, a quote from a named person, or the flyer's most specific value statement word-for-word. Do NOT compose a new sentence. Do NOT paraphrase. If the flyer contains no quotable line, leave this field EMPTY." },
     pullQuoteAttribution: { type: "string", description: "The name or role of the person quoted, exactly as it appears in the flyer (e.g. 'Chef Marco Rossi' or 'Mary B., Resident'). Leave EMPTY if no attribution is in the flyer — never invent one." },
 
+    rsvpRequired: { type: "boolean", description: "True only if the flyer explicitly requires or requests RSVP (phrases like 'RSVP required', 'RSVP requested', 'please RSVP', 'reservations required'). False if attendance is open/walk-in." },
+
     ctaEyebrow: { type: "string", description: "Action label above the final CTA block. Must NOT repeat the hero eyebrow. Verb-led and specific: 'Reserve Your Seat', 'Save Saturday', 'Join the Table'." },
     ctaHeadline: { type: "string", description: "CTA headline — state the date+time OR a final reason to act (not the event name again). E.g. 'Saturday, June 28 · 5:30 PM' or 'Seating Is Limited'." },
-    ctaSubline: { type: "string", description: "One supporting, factual line that lowers friction or adds a useful detail (cost, who's invited, what to bring, whether RSVP is needed). E.g. 'Complimentary for residents and their guests.' No urgency, scarcity, or hype. Omit if nothing fresh to add." },
-    ctaButtonLabel: { type: "string", description: "Button text, e.g. 'Call 920.504.3443'." },
+    ctaSubline: { type: "string", description: "One supporting, factual line that lowers friction or adds a useful detail (cost, who's invited, what to bring). If the flyer requires or requests RSVP, this line MUST say so explicitly (e.g. 'RSVP required — seating is limited'). Never include a person's name. No urgency, scarcity, or hype. Omit if nothing fresh to add." },
+    ctaButtonLabel: { type: "string", description: "Button text using the phone number only, e.g. 'Call 920.504.3443'. Never include a salesperson's name." },
     ctaButtonHref: { type: "string", description: "Button href: tel:, mailto:, or https:// URL. Pull from the flyer." },
 
     heroImageAlt: { type: "string" },

@@ -35,6 +35,7 @@ export interface ExtractedFlyer {
   pullQuoteEyebrow?: string;
   pullQuote?: string;
   pullQuoteAttribution?: string;
+  rsvpRequired?: boolean;
   ctaEyebrow: string;
   ctaHeadline: string;
   ctaSubline: string;
@@ -179,15 +180,19 @@ function getSavedDrafts(): SavedDraft[] {
   try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? "[]"); } catch { return []; }
 }
 
-function persistSavedDrafts(drafts: SavedDraft[]) {
-  try {
-    localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
-  } catch {
-    // QuotaExceededError — drop oldest draft and retry once
-    if (drafts.length > 1) {
-      try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts.slice(0, drafts.length - 1))); } catch {}
+function persistSavedDrafts(drafts: SavedDraft[]): SavedDraft[] {
+  let toSave = [...drafts];
+  while (toSave.length > 0) {
+    try {
+      localStorage.setItem(DRAFTS_KEY, JSON.stringify(toSave));
+      return toSave;
+    } catch {
+      // QuotaExceededError — drop the oldest (last in newest-first array) and retry
+      toSave = toSave.slice(0, toSave.length - 1);
     }
   }
+  // Nothing fits — return what's already persisted so state stays consistent
+  return getSavedDrafts();
 }
 
 // ─── Context interface ────────────────────────────────────────────────────────
@@ -281,6 +286,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [secondaryImageUrl, setSecondaryImageUrl] = useState<string | undefined>();
   const [galleryImageUrls, setGalleryImageUrls] = useState<string[]>([]);
   const [imageCount, setImageCount] = useState<number>(0);
+  const [allExtractedImageUrls, setAllExtractedImageUrls] = useState<string[]>([]);
   const [refineInput, setRefineInput] = useState("");
   const [refineHistory, setRefineHistory] = useState<RefinementEntry[]>([]);
   const [review, setReview] = useState<DraftReview | null>(null);
@@ -444,6 +450,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setSecondaryImageUrl(data.secondaryImageUrl);
       setGalleryImageUrls(data.galleryImageUrls ?? []);
       setImageCount(data.imageCount ?? 0);
+      setAllExtractedImageUrls(data.allExtractedImageUrls ?? []);
       setReview(data.review ?? null);
       setAgentLoop(data.agentLoop ?? null);
       setPastSendsContext(data.pastSendsContext ?? []);
@@ -528,6 +535,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           heroImageUrl,
           secondaryImageUrl,
           galleryImageUrls,
+          allExtractedImageUrls,
         }),
       });
       const data = await res.json();
@@ -711,8 +719,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       perCommunity[d.communitySlug] = (perCommunity[d.communitySlug] ?? 0) + 1;
       return perCommunity[d.communitySlug] <= MAX_DRAFTS_PER_COMMUNITY;
     });
-    persistSavedDrafts(capped);
-    setSavedDrafts(capped);
+    setSavedDrafts(persistSavedDrafts(capped));
     setCurrentDraftSaved(true);
 
     // Transient confirmation toast.
@@ -728,6 +735,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setSecondaryImageUrl(undefined);
     setGalleryImageUrls([]);
     setImageCount(0);
+    setAllExtractedImageUrls([]);
     setReview(null);
     setAgentLoop(null);
     setPastSendsContext([]);
@@ -753,6 +761,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setSecondaryImageUrl(draft.secondaryImageUrl);
     setGalleryImageUrls(draft.galleryImageUrls);
     setImageCount(draft.imageCount);
+    setAllExtractedImageUrls([]);
     setReview(draft.review ?? null);
     setAgentLoop(draft.agentLoop ?? null);
     setPastSendsContext(draft.pastSendsContext ?? []);

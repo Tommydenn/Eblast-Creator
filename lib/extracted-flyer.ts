@@ -14,7 +14,7 @@ export interface ExtractedFlyer {
   headline: string;
   /** Optional script-styled subhead under the headline. */
   scriptSubheadline?: string;
-  /** One-sentence italic hook sitting between date and CTA in the hero. */
+  /** @deprecated No longer rendered. Always empty string on new drafts. */
   heroHook: string;
 
   // Event detail (only present when the flyer is for an event)
@@ -34,6 +34,9 @@ export interface ExtractedFlyer {
   pullQuoteEyebrow?: string;  // "How Unidine is Different"
   pullQuote?: string;         // "Fresh ingredients. Made-from-scratch cooking..."
   pullQuoteAttribution?: string; // "— The Unidine Standard"
+
+  /** True if the flyer explicitly requires or requests RSVP. */
+  rsvpRequired?: boolean;
 
   // CTA
   ctaEyebrow: string;        // "Reserve Your Seat"

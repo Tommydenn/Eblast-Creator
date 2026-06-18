@@ -376,3 +376,34 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
     body,
   });
 }
+
+// ---------- Lists API (requires crm.lists.read scope) ---------------------
+
+/**
+ * Batch-fetch list names by numeric list IDs.
+ * Requires `crm.lists.read` on the Private App.
+ * Returns an empty Map on any failure — callers fall back to showing IDs.
+ */
+export async function fetchListNames(ids: number[]): Promise<Map<number, string>> {
+  if (ids.length === 0) return new Map();
+  try {
+    const res = await fetch(`${HUBSPOT_BASE}/crm/v3/lists/search`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        listIds: ids.map(String),
+        count: ids.length,
+        includeFilters: false,
+      }),
+    });
+    if (!res.ok) return new Map();
+    const data = await res.json();
+    const map = new Map<number, string>();
+    for (const list of data.lists ?? []) {
+      map.set(Number(list.listId), String(list.name ?? list.listId));
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}

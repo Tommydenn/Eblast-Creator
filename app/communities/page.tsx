@@ -69,10 +69,12 @@ export default async function CommunitiesPage() {
   // Health roll-up so the user can see what needs filling at a glance.
   const totalCommunities = communities.length;
   const withTrackingPhone = communities.filter((c) => c.trackingPhone).length;
-  const withBrandGuide = communities.filter((c) => c.brandGuideExtracted).length;
   const withSenders = communities.filter((c) => c.senders.length > 0).length;
   const withSegments = communities.filter((c) => (c.hubspot.includedListIds?.length ?? 0) > 0).length;
   const withRecentSends = communities.filter((c) => statsByCommunity.has(c.id)).length;
+  const pushReady = communities.filter(
+    (c) => c.senders.length > 0 && (c.hubspot.includedListIds?.length ?? 0) > 0 && !!c.trackingPhone
+  ).length;
 
   return (
     <>
@@ -89,11 +91,11 @@ export default async function CommunitiesPage() {
 
         {/* Health summary */}
         <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <HealthStat label="Active sending" value={`${withRecentSends} / ${totalCommunities}`} pct={withRecentSends / totalCommunities} />
-          <HealthStat label="Tracking phone" value={`${withTrackingPhone} / ${totalCommunities}`} pct={withTrackingPhone / totalCommunities} />
-          <HealthStat label="Brand guide" value={`${withBrandGuide} / ${totalCommunities}`} pct={withBrandGuide / totalCommunities} />
-          <HealthStat label="Senders" value={`${withSenders} / ${totalCommunities}`} pct={withSenders / totalCommunities} />
-          <HealthStat label="HubSpot segments" value={`${withSegments} / ${totalCommunities}`} pct={withSegments / totalCommunities} />
+          <HealthStat label="Active sending" description="Sent an eblast in the last 365 days" value={`${withRecentSends} / ${totalCommunities}`} pct={withRecentSends / totalCommunities} />
+          <HealthStat label="Push-ready" description="Has sender, segments, and tracking phone — ready to generate and send" value={`${pushReady} / ${totalCommunities}`} pct={pushReady / totalCommunities} />
+          <HealthStat label="Senders" description="From: identity configured for HubSpot delivery" value={`${withSenders} / ${totalCommunities}`} pct={withSenders / totalCommunities} />
+          <HealthStat label="HubSpot segments" description="Recipient lists wired in HubSpot — controls who receives the email" value={`${withSegments} / ${totalCommunities}`} pct={withSegments / totalCommunities} />
+          <HealthStat label="Tracking phone" description="CallRail number used in CTA links — separate from the public phone" value={`${withTrackingPhone} / ${totalCommunities}`} pct={withTrackingPhone / totalCommunities} />
         </div>
 
         {/* Brand-family-grouped list */}
@@ -194,28 +196,27 @@ export default async function CommunitiesPage() {
                               {lastSent ? lastSent.toISOString().slice(0, 10) : "—"}
                             </td>
                             <td className="px-5 py-3">
-                              <div className="flex flex-wrap gap-1">
-                                {c.brandGuideExtracted ? (
-                                  <Badge variant="success" title="Brand guide extracted">
-                                    Brand
-                                  </Badge>
-                                ) : null}
-                                {c.trackingPhone ? null : (
-                                  <Badge variant="warning" title="No tracking phone">
-                                    Phone
-                                  </Badge>
-                                )}
-                                {(c.hubspot.includedListIds?.length ?? 0) > 0 ? null : (
-                                  <Badge variant="warning" title="No HubSpot segments">
-                                    Segments
-                                  </Badge>
-                                )}
-                                {c.senders.length === 0 && (
-                                  <Badge variant="danger" title="No senders configured">
-                                    Sender
-                                  </Badge>
-                                )}
-                              </div>
+                              {(() => {
+                                const missing: { label: string; title: string; variant: "warning" | "danger" }[] = [];
+                                if (c.senders.length === 0)
+                                  missing.push({ label: "No sender", title: "No From: identity configured", variant: "danger" });
+                                if ((c.hubspot.includedListIds?.length ?? 0) === 0)
+                                  missing.push({ label: "No segments", title: "No HubSpot recipient lists assigned", variant: "warning" });
+                                if (!c.trackingPhone)
+                                  missing.push({ label: "No tracking #", title: "No CallRail tracking phone set", variant: "warning" });
+                                if (missing.length === 0) {
+                                  return <Badge variant="success">Ready to send</Badge>;
+                                }
+                                return (
+                                  <div className="flex flex-wrap gap-1">
+                                    {missing.map((m) => (
+                                      <Badge key={m.label} variant={m.variant} title={m.title}>
+                                        {m.label}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                             </td>
                           </tr>
                         );
@@ -231,12 +232,13 @@ export default async function CommunitiesPage() {
   );
 }
 
-function HealthStat({ label, value, pct }: { label: string; value: string; pct: number }) {
+function HealthStat({ label, description, value, pct }: { label: string; description: string; value: string; pct: number }) {
   const color = pct >= 0.85 ? "bg-forest-500" : pct >= 0.5 ? "bg-amber-500" : "bg-clay-500";
   return (
     <Card className="px-4 py-3">
       <p className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500">{label}</p>
       <p className="mt-1 font-serif text-xl text-sand-900 tabular-nums">{value}</p>
+      <p className="mt-1 text-[10px] leading-snug text-sand-400">{description}</p>
       <div className="mt-2 h-1 overflow-hidden rounded-full bg-sand-100">
         <div className={`h-full ${color}`} style={{ width: `${Math.round(pct * 100)}%` }} />
       </div>

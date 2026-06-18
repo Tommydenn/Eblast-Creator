@@ -123,6 +123,28 @@ export interface CommunityWithLegacySender extends Community {
   sender: { name: string; email: string; title?: string };
 }
 
+export async function updateCommunitySegments(
+  slug: string,
+  includedListIds: number[],
+  excludedListIds: number[]
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: communities.id, hubspot: communities.hubspot })
+    .from(communities)
+    .where(eq(communities.slug, slug))
+    .limit(1);
+  if (rows.length === 0) return false;
+  const existing = (rows[0].hubspot ?? {}) as CommunityHubSpot;
+  await db
+    .update(communities)
+    .set({
+      hubspot: { ...existing, includedListIds, excludedListIds },
+      updatedAt: new Date(),
+    })
+    .where(eq(communities.slug, slug));
+  return true;
+}
+
 export function withLegacySender(c: Community): CommunityWithLegacySender {
   const primary = c.senders[0];
   return {

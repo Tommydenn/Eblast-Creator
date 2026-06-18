@@ -10,7 +10,7 @@
 //
 // To re-seed: `npm run db:seed` (idempotent — uses INSERT...ON CONFLICT).
 
-import type { NewCommunityRow, CommunityLogo } from "./schema";
+import type { NewCommunityRow, CommunityLogo, Address } from "./schema";
 
 // Helpers for the two common logo patterns
 function twoLogos(slug: string): CommunityLogo[] {
@@ -671,4 +671,40 @@ const SENDERS_BY_SLUG: Record<string, SeedSender[]> = {
 for (const sc of seedCommunities) {
   const senders = SENDERS_BY_SLUG[sc.community.slug];
   if (senders && sc.senders.length === 0) sc.senders = senders;
+}
+
+// Public contact details gathered from each community's official site (June 2026).
+// Website URLs are stored WITHOUT the protocol; the render/href code prepends
+// https:// when linking. This block is the source of truth for these fields and
+// overrides any inline values above.
+const CONTACT_BY_SLUG: Record<string, { address?: Address; websiteUrl?: string; email?: string }> = {
+  "caretta-bellevue": { websiteUrl: "carettaseniorliving.com/bellevue" },
+  "caretta-eau-claire": { address: { street: "4688 Keystone Crossing", city: "Eau Claire", state: "WI", zip: "54701" }, websiteUrl: "carettaseniorliving.com/eau-claire-wi", email: "EauClaire@CarettaSeniorLiving.com" },
+  "caretta-holmen": { address: { street: "2120 Staphorst Ln", city: "Holmen", state: "WI", zip: "54636" }, websiteUrl: "carettaseniorliving.com/holmen-wi", email: "Holmen@CarettaSeniorLiving.com" },
+  "caretta-maplewood": { address: { street: "1910 County Road C E", city: "Maplewood", state: "MN", zip: "55109" }, websiteUrl: "carettaseniorliving.com/maplewood-mn", email: "Maplewood@CarettaSeniorLiving.com" },
+  "talamore-st-cloud": { address: { street: "215 37th Ave N", city: "St Cloud", state: "MN", zip: "56303" }, websiteUrl: "talamoreseniorliving.com/st-cloud-mn", email: "stcloud@talamoreseniorliving.com" },
+  "talamore-sun-prairie": { address: { street: "275 N City Station Dr", city: "Sun Prairie", state: "WI", zip: "53590" }, websiteUrl: "talamoreseniorliving.com/sun-prairie-wi", email: "sunprairie@talamoreseniorliving.com" },
+  "talamore-woodbury": { address: { street: "289 Karen Dr", city: "Woodbury", state: "MN", zip: "55129" }, websiteUrl: "talamoreseniorliving.com/woodbury-mn", email: "woodbury@talamoreseniorliving.com" },
+  "hayden-grove-bloomington": { address: { street: "8715 Portland Ave S", city: "Bloomington", state: "MN", zip: "55420" }, websiteUrl: "haydengroveseniorliving.com/bloomington-mn" },
+  "hayden-grove-st-anthony": { address: { street: "2601 NE Stinson Pkwy", city: "St Anthony", state: "MN", zip: "55418" }, websiteUrl: "haydengroveseniorliving.com/st-anthony-mn" },
+  "the-glenn-buffalo-al": { address: { street: "201 1st St NE", city: "Buffalo", state: "MN", zip: "55313" }, websiteUrl: "glennseniorliving.com/buffalo-mn" },
+  "the-glenn-buffalo-mc": { address: { street: "201 1st St NE", city: "Buffalo", state: "MN", zip: "55313" }, websiteUrl: "glennseniorliving.com/buffalo-mn" },
+  "the-glenn-hopkins": { address: { street: "1011 Feltl Ct", city: "Hopkins", state: "MN", zip: "55343" }, websiteUrl: "glennseniorliving.com/hopkins-mn" },
+  "the-glenn-minnetonka": { address: { street: "5300 Woodhill Rd", city: "Minnetonka", state: "MN", zip: "55345" }, websiteUrl: "glennseniorliving.com/minnetonka-mn" },
+  "the-glenn-w-st-paul": { address: { street: "1984 Oakdale Ave", city: "West St Paul", state: "MN", zip: "55118" }, websiteUrl: "glennseniorliving.com/west-st-paul-mn" },
+  "cottagewood-mankato": { address: { street: "300 Bunting Ln", city: "Mankato", state: "MN", zip: "56001" }, websiteUrl: "cottagewoodmankato.com" },
+  "cottagewood-rochester": { address: { street: "4220 55th St NW", city: "Rochester", state: "MN", zip: "55901" }, websiteUrl: "cottagewoodseniorliving.com/rochester-mn" },
+  "amira-choice-arvada": { address: { street: "6260 McIntyre St", city: "Arvada", state: "CO", zip: "80403" }, websiteUrl: "amiraliving.com/location/arvada-choice" },
+  "amira-choice-bloomington": { address: { street: "5501 American Blvd W", city: "Bloomington", state: "MN", zip: "55437" }, websiteUrl: "amiraliving.com/location/bloomington-choice" },
+  "global-pointe": { address: { street: "5200 Wayzata Blvd", city: "Golden Valley", state: "MN", zip: "55416" }, websiteUrl: "globalpointeseniorliving.com" },
+  "seven-hills": { address: { street: "733 Selby Ave", city: "Saint Paul", state: "MN", zip: "55104" }, websiteUrl: "sevenhillsseniorliving.com" },
+  "orchards-of-minnetonka": { address: { street: "10955 Wayzata Blvd", city: "Minnetonka", state: "MN", zip: "55305" }, websiteUrl: "orchardsofminnetonka.com" },
+  "the-pillars-of-grand-rapids": { address: { street: "2060 SW 8th St", city: "Grand Rapids", state: "MN", zip: "55744" }, websiteUrl: "pillarsgrandrapids.com" },
+};
+for (const sc of seedCommunities) {
+  const cc = CONTACT_BY_SLUG[sc.community.slug];
+  if (!cc) continue;
+  if (cc.address) sc.community.address = { ...sc.community.address, ...cc.address };
+  if (cc.websiteUrl !== undefined) sc.community.websiteUrl = cc.websiteUrl;
+  if (cc.email) sc.community.email = cc.email;
 }

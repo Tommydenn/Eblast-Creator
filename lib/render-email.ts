@@ -299,13 +299,17 @@ export function buildEblastHtml(
   </tr>`;
 
   const footerAddressDefault = `${community.address.street ?? ""} · ${community.address.city ?? ""}, ${community.address.state ?? ""} ${community.address.zip ?? ""}`;
+  // websiteUrl is stored without a protocol — add one for the actual link.
+  const websiteHref = community.websiteUrl
+    ? (/^https?:\/\//.test(community.websiteUrl) ? community.websiteUrl : `https://${community.websiteUrl}`)
+    : "";
   const footer = `
   <tr data-section="Footer">
     <td style="padding: 36px 36px 28px 36px;" align="center">
       <p data-field="footerName" style="font-family: ${brand.fontHeadline}; font-size: 18px; color: ${brand.primary}; letter-spacing: 1px; margin: 0 0 4px 0;">${escapeHtml(flyer.footerName ?? community.displayName)}</p>
       <p style="font-family: ${brand.fontBody}; font-size: 13px; color: #6B6B6B; line-height: 1.7; margin: 0;">
         <span data-field="footerAddress">${escapeHtml(flyer.footerAddress ?? footerAddressDefault)}</span><br>
-        ${community.websiteUrl ? `<a href="${community.websiteUrl}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.websiteUrl.replace(/^https?:\/\//, ""))}</a>` : ""}
+        ${community.websiteUrl ? `<a href="${websiteHref}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.websiteUrl.replace(/^https?:\/\//, ""))}</a>` : ""}
         ${community.websiteUrl && community.email ? " · " : ""}
         ${community.email ? `<a href="mailto:${community.email}" style="color: ${brand.accent}; text-decoration: none;">${escapeHtml(community.email)}</a>` : ""}
       </p>

@@ -195,7 +195,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
               <Field label="Website">
                 {c.websiteUrl ? (
                   <a
-                    href={c.websiteUrl}
+                    href={/^https?:\/\//.test(c.websiteUrl) ? c.websiteUrl : `https://${c.websiteUrl}`}
                     target="_blank"
                     rel="noreferrer"
                     className="hover:underline"

@@ -95,6 +95,7 @@ function SavedDraftsPanel({
   onLoad: (d: SavedDraft) => void;
   onDelete: (id: string) => void;
 }) {
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   if (drafts.length === 0) return null;
   return (
     <details className="group mt-6 rounded-md border border-sand-200 bg-sand-50/60">
@@ -106,37 +107,111 @@ function SavedDraftsPanel({
       </summary>
       <ul className="divide-y divide-sand-100 border-t border-sand-200">
         {drafts.map((d) => (
-          <li key={d.id} className="flex items-start justify-between gap-3 px-4 py-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-sand-900">{d.subject}</p>
-              <p className="mt-0.5 text-[11px] text-sand-500">
-                {d.communityName} ·{" "}
-                {new Date(d.savedAt).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </p>
+          <li key={d.id} className="px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-sand-900">{d.subject}</p>
+                <p className="mt-0.5 text-[11px] text-sand-500">
+                  {d.communityName} ·{" "}
+                  {new Date(d.savedAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button size="sm" variant="secondary" onClick={() => onLoad(d)}>
+                  Load
+                </Button>
+                <button
+                  onClick={() => setPendingDelete(d.id)}
+                  className="rounded p-1 text-sand-400 hover:bg-sand-100 hover:text-clay-600"
+                  title="Delete draft"
+                >
+                  <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
+                    <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66H14.5a.5.5 0 0 0 0-1h-.996a.59.59 0 0 0-.01 0H11Z" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button size="sm" variant="secondary" onClick={() => onLoad(d)}>
-                Load
-              </Button>
-              <button
-                onClick={() => onDelete(d.id)}
-                className="rounded p-1 text-sand-400 hover:bg-sand-100 hover:text-clay-600"
-                title="Delete draft"
-              >
-                <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
-                  <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66H14.5a.5.5 0 0 0 0-1h-.996a.59.59 0 0 0-.01 0H11Z" />
-                </svg>
-              </button>
-            </div>
+            {pendingDelete === d.id && (
+              <div className="mt-2 flex items-center gap-3 rounded-md border border-clay-200 bg-clay-50/60 px-3 py-2 text-xs text-clay-800">
+                <span className="flex-1">This will also remove it from the community page.</span>
+                <button
+                  onClick={() => { onDelete(d.id); setPendingDelete(null); }}
+                  className="shrink-0 rounded bg-clay-600 px-2.5 py-1 font-medium text-white hover:bg-clay-700"
+                >
+                  Delete permanently
+                </button>
+                <button
+                  onClick={() => setPendingDelete(null)}
+                  className="shrink-0 text-sand-500 underline underline-offset-2 hover:text-sand-800"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
+    </details>
+  );
+}
+
+// ─── Image Bank Panel ─────────────────────────────────────────────────────────
+
+function ImageBankPanel({
+  imageUrls,
+  onSwap,
+}: {
+  imageUrls: string[];
+  onSwap: (slot: 'hero' | 'secondary' | 'gallery', url: string) => void;
+}) {
+  if (imageUrls.length === 0) return null;
+  return (
+    <details open className="mt-4 rounded-md border border-sand-200 bg-sand-50/60">
+      <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
+        <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600">
+          Image bank
+        </span>
+        <span className="text-[11px] text-sand-500">{imageUrls.length} image{imageUrls.length === 1 ? "" : "s"}</span>
+      </summary>
+      <div className="flex flex-wrap gap-3 border-t border-sand-200 px-4 py-3">
+        {imageUrls.map((url, i) => (
+          <div key={i} className="flex flex-col items-center gap-1.5">
+            <img
+              src={url}
+              alt={`Extracted image ${i + 1}`}
+              style={{ maxWidth: 80, maxHeight: 80, objectFit: "cover", borderRadius: 4 }}
+              className="border border-sand-200"
+            />
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onSwap('hero', url)}
+                className="rounded border border-sand-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
+              >
+                Hero
+              </button>
+              <button
+                onClick={() => onSwap('secondary', url)}
+                className="rounded border border-sand-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
+              >
+                Sec.
+              </button>
+              <button
+                onClick={() => onSwap('gallery', url)}
+                className="rounded border border-sand-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
+                title="Add to gallery"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </details>
   );
 }
@@ -157,13 +232,14 @@ export default function Home() {
     pushResult, error,
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
-    savedDrafts, currentDraftSaved, saveNotice,
+    savedDrafts, communityDrafts, currentDraftSaved, saveNotice,
     htmlDirty, syncHtml, swapSubjectLine,
+    allExtractedImageUrls, swapImage,
     handleFileChange, clearInputs,
     generateDraft, cancelGeneration,
     refineDraft, undoRefine, redoRefine, canUndoRefine, canRedoRefine, lastRefineInstruction, redoRefineInstruction,
     saveDraft, discardDraft,
-    loadSavedDraft, deleteSavedDraft,
+    loadSavedDraft, deleteSavedDraft, deleteCommunityDraft,
     pushDraft,
     dismissDuplicateWarning,
   } = useDraft();
@@ -357,6 +433,14 @@ export default function Home() {
 
         {/* Saved drafts */}
         <SavedDraftsPanel drafts={savedDrafts} onLoad={loadSavedDraft} onDelete={deleteSavedDraft} />
+
+        {/* Image bank — shown when images are available and a draft is in view */}
+        {extracted && allExtractedImageUrls.length > 0 && (
+          <ImageBankPanel
+            imageUrls={allExtractedImageUrls}
+            onSwap={(slot, url) => { swapImage(slot, url); }}
+          />
+        )}
 
         {/* Preview + reviewer */}
         {extracted && (

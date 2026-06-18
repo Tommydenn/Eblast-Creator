@@ -204,6 +204,8 @@ export interface RefineResult {
   imageLayout?: RefineImageLayout;
   /** One-line summary of what changed, or an "I couldn't ..." explanation. */
   refineNote?: string;
+  /** Present only when the user explicitly asked to crop or reframe a photo. */
+  imageCropInstructions?: Array<{ imageIndex: number; focus: string }>;
 }
 
 // Refine schema = the extract schema plus two refine-only, non-required fields:
@@ -248,6 +250,18 @@ const refineFlyerToolSchema = {
       description:
         "One short sentence summarizing what you changed. If part of the request is impossible (e.g. recolor a photo, add a photo that isn't already in the email, change fonts/layout), start with \"I couldn't ...\", explain briefly, and make no change for that part.",
     },
+    imageCropInstructions: {
+      type: "array",
+      description: "ONLY include if the user explicitly asks to crop or reframe a photo differently. Each entry specifies an image by its pool index and a focus direction.",
+      items: {
+        type: "object",
+        required: ["imageIndex", "focus"],
+        properties: {
+          imageIndex: { type: "integer", description: "Index of the image to crop (from the Photos in this email list)." },
+          focus: { type: "string", enum: ["top", "center", "bottom", "left", "right"], description: "Which part of the image to keep when cropping to the email aspect ratio." },
+        },
+      },
+    },
   },
 };
 
@@ -275,7 +289,8 @@ Each photo has a NAME (in quotes) that the user sees when hovering it in the pre
 ${opts.imageManifestText}
 - ONLY change photos if the user explicitly asks to remove, reorder, swap, or change which photo appears. Match the photo NAME(s) in their instruction to the indices above, then return \`imageLayout\` with the desired final arrangement: \`hero\` = the index to show as the hero (or -1 for none), \`secondary\` = the index for the inline image (or -1 for none), \`gallery\` = the list of indices for the gallery grid, in order (leave an index out to remove that photo).
 - If the user does NOT mention photos/images, OMIT \`imageLayout\` entirely — the photos must stay exactly as they are.
-- You can only rearrange or remove the photos listed above. You cannot add new photos, recolor them, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.`
+- You can only rearrange or remove the photos listed above. You cannot add new photos, recolor them, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.
+- If the user asks to crop or reframe a photo, return \`imageCropInstructions\` with the image index and focus direction.`
     : "";
 
   const response = await c.messages.create({
@@ -310,10 +325,11 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
   if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
     throw new Error("Claude did not return tool_use output for refinement.");
   }
-  const { imageLayout, refineNote, ...flyer } = toolUseBlock.input as any;
+  const { imageLayout, refineNote, imageCropInstructions, ...flyer } = toolUseBlock.input as any;
   return {
     flyer: flyer as ExtractedFlyer,
     imageLayout: imageLayout as RefineImageLayout | undefined,
     refineNote: typeof refineNote === "string" ? refineNote : undefined,
+    imageCropInstructions: Array.isArray(imageCropInstructions) ? imageCropInstructions as Array<{ imageIndex: number; focus: string }> : undefined,
   };
 }

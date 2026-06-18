@@ -345,6 +345,69 @@ export async function extractImagesFromPdf(
 }
 
 /**
+ * Crop a data-URI image to a target aspect ratio with a caller-specified focus direction.
+ * Returns the original data URI on error.
+ */
+export async function cropDataUriToFocusAndRatio(
+  dataUri: string,
+  targetRatio: number,
+  focus: 'top' | 'center' | 'bottom' | 'left' | 'right',
+): Promise<string> {
+  try {
+    const commaIdx = dataUri.indexOf(",");
+    if (commaIdx === -1) return dataUri;
+    const buffer = Buffer.from(dataUri.slice(commaIdx + 1), "base64");
+
+    const meta = await sharp(buffer, { failOn: "none" }).metadata();
+    if (!meta.width || !meta.height) return dataUri;
+
+    const srcRatio = meta.width / meta.height;
+
+    let left = 0;
+    let top = 0;
+    let cropWidth: number;
+    let cropHeight: number;
+
+    if (srcRatio > targetRatio) {
+      // Source is wider than target — crop width, keep full height.
+      cropWidth = Math.round(meta.height * targetRatio);
+      cropHeight = meta.height;
+      const excess = meta.width - cropWidth;
+      if (focus === 'left') {
+        left = 0;
+      } else if (focus === 'right') {
+        left = excess;
+      } else {
+        left = Math.round(excess / 2);
+      }
+      top = 0;
+    } else {
+      // Source is taller than target — crop height, keep full width.
+      cropWidth = meta.width;
+      cropHeight = Math.round(meta.width / targetRatio);
+      const excess = meta.height - cropHeight;
+      if (focus === 'top') {
+        top = 0;
+      } else if (focus === 'bottom') {
+        top = excess;
+      } else {
+        top = Math.round(excess / 2);
+      }
+      left = 0;
+    }
+
+    const cropped = await sharp(buffer, { failOn: "none" })
+      .extract({ left, top, width: cropWidth, height: cropHeight })
+      .jpeg({ quality: 88 })
+      .toBuffer();
+
+    return `data:image/jpeg;base64,${cropped.toString("base64")}`;
+  } catch {
+    return dataUri;
+  }
+}
+
+/**
  * Crop a data-URI image to a target aspect ratio (width/height) via Sharp.
  * Uses Sharp's attention-based strategy to keep faces and salient subjects in frame.
  * Returns the original data URI on error.

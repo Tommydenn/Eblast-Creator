@@ -3,6 +3,7 @@ import { getCommunity } from "@/data/communities";
 import { refineFlyerContent } from "@/lib/anthropic";
 import { buildEblastHtml } from "@/lib/render-email";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
+import { cropDataUriToFocusAndRatio } from "@/lib/pdf-images";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 
 // Order-independent deep stringify, so a true no-op is detected even for fields
@@ -134,6 +135,22 @@ export async function POST(req: NextRequest) {
       nextSecondary = newSecondary;
       nextGallery = newGallery;
     }
+    if (result.imageCropInstructions?.length && pool.length) {
+      const TARGET_RATIO = 600 / 338;
+      for (const crop of result.imageCropInstructions) {
+        const { imageIndex, focus } = crop;
+        if (!Number.isInteger(imageIndex) || imageIndex < 0 || imageIndex >= pool.length) continue;
+        const validFoci = ["top", "center", "bottom", "left", "right"] as const;
+        type Focus = typeof validFoci[number];
+        const safeFocus: Focus = (validFoci as readonly string[]).includes(focus) ? focus as Focus : "center";
+        const url = pool[imageIndex].url;
+        const cropped = await cropDataUriToFocusAndRatio(url, TARGET_RATIO, safeFocus);
+        if (nextHero === url) nextHero = cropped;
+        if (nextSecondary === url) nextSecondary = cropped;
+        nextGallery = nextGallery.map((u) => (u === url ? cropped : u));
+      }
+    }
+
     const imagesChanged =
       nextHero !== body.heroImageUrl ||
       nextSecondary !== body.secondaryImageUrl ||

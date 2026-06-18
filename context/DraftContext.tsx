@@ -162,7 +162,10 @@ export interface SavedDraft {
 
 const PDF_HISTORY_KEY = "eblast-pdf-history";
 const DRAFTS_KEY = "eblast-saved-drafts";
+const RECENT_DRAFTS_KEY = "eblast-recent-drafts";
+const COMMUNITY_DRAFTS_KEY = "eblast-community-drafts";
 const MAX_DRAFTS_PER_COMMUNITY = 8;
+const MAX_RECENT_DRAFTS = 5;
 
 type PdfRecord = { hash: string; name: string; generatedAt: string; community: string };
 
@@ -176,23 +179,38 @@ function savePdfRecord(hash: string, name: string, community: string) {
   localStorage.setItem(PDF_HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
 }
 
-function getSavedDrafts(): SavedDraft[] {
-  try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) ?? "[]"); } catch { return []; }
+function getRecentDrafts(): SavedDraft[] {
+  try { return JSON.parse(localStorage.getItem(RECENT_DRAFTS_KEY) ?? "[]"); } catch { return []; }
 }
 
-function persistSavedDrafts(drafts: SavedDraft[]): SavedDraft[] {
+function getCommunityDrafts(): SavedDraft[] {
+  try { return JSON.parse(localStorage.getItem(COMMUNITY_DRAFTS_KEY) ?? "[]"); } catch { return []; }
+}
+
+function persistRecentDrafts(drafts: SavedDraft[]): SavedDraft[] {
   let toSave = [...drafts];
   while (toSave.length > 0) {
     try {
-      localStorage.setItem(DRAFTS_KEY, JSON.stringify(toSave));
+      localStorage.setItem(RECENT_DRAFTS_KEY, JSON.stringify(toSave));
       return toSave;
     } catch {
-      // QuotaExceededError — drop the oldest (last in newest-first array) and retry
       toSave = toSave.slice(0, toSave.length - 1);
     }
   }
-  // Nothing fits — return what's already persisted so state stays consistent
-  return getSavedDrafts();
+  return getRecentDrafts();
+}
+
+function persistCommunityDrafts(drafts: SavedDraft[]): SavedDraft[] {
+  let toSave = [...drafts];
+  while (toSave.length > 0) {
+    try {
+      localStorage.setItem(COMMUNITY_DRAFTS_KEY, JSON.stringify(toSave));
+      return toSave;
+    } catch {
+      toSave = toSave.slice(0, toSave.length - 1);
+    }
+  }
+  return getCommunityDrafts();
 }
 
 // ─── Context interface ────────────────────────────────────────────────────────
@@ -222,11 +240,13 @@ export interface DraftContextValue {
   subjectSpecialist: SubjectSpecialistResult | null;
   duplicateWarning: { name: string; generatedAt: string; community: string } | null;
   savedDrafts: SavedDraft[];
+  communityDrafts: SavedDraft[];
   currentDraftSaved: boolean;
   /** Transient confirmation shown briefly after a draft is saved. */
   saveNotice: { id: number; text: string } | null;
   /** True when the user has edited text inline and `html` hasn't been re-rendered yet. */
   htmlDirty: boolean;
+  allExtractedImageUrls: string[];
   handleFileChange: (file: File | null) => Promise<void>;
   /** Reset the Generate card — clear the selected community and uploaded file. */
   clearInputs: () => void;
@@ -255,6 +275,8 @@ export interface DraftContextValue {
   discardDraft: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
   deleteSavedDraft: (id: string) => void;
+  deleteCommunityDraft: (id: string) => void;
+  swapImage: (slot: 'hero' | 'secondary' | 'gallery', imageUrl: string, galleryIdx?: number) => Promise<void>;
   dismissDuplicateWarning: () => void;
 }
 
@@ -299,6 +321,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [subjectSpecialist, setSubjectSpecialist] = useState<SubjectSpecialistResult | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<{ name: string; generatedAt: string; community: string } | null>(null);
   const [savedDrafts, setSavedDrafts] = useState<SavedDraft[]>([]);
+  const [communityDrafts, setCommunityDrafts] = useState<SavedDraft[]>([]);
   const [currentDraftSaved, setCurrentDraftSaved] = useState(false);
   const [htmlDirty, setHtmlDirty] = useState(false);
   // Single-level undo/redo for the last successful refine. Each snapshot
@@ -332,7 +355,29 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     fetchCommunities(setCommunities);
-    try { setSavedDrafts(getSavedDrafts()); } catch { /* ignore */ }
+    try {
+      const legacy = localStorage.getItem(DRAFTS_KEY);
+      if (legacy) {
+        const legacyDrafts: SavedDraft[] = JSON.parse(legacy);
+        if (legacyDrafts.length > 0) {
+          const existingRecent = getRecentDrafts();
+          const mergedRecent = [...legacyDrafts, ...existingRecent.filter((d) => !legacyDrafts.some((l) => l.id === d.id))].slice(0, MAX_RECENT_DRAFTS);
+          persistRecentDrafts(mergedRecent);
+
+          const existingCommunity = getCommunityDrafts();
+          const mergedCommunity = [...legacyDrafts, ...existingCommunity.filter((d) => !legacyDrafts.some((l) => l.id === d.id))];
+          const perCommunity: Record<string, number> = {};
+          const cappedCommunity = mergedCommunity.filter((d) => {
+            perCommunity[d.communitySlug] = (perCommunity[d.communitySlug] ?? 0) + 1;
+            return perCommunity[d.communitySlug] <= MAX_DRAFTS_PER_COMMUNITY;
+          });
+          persistCommunityDrafts(cappedCommunity);
+          localStorage.removeItem(DRAFTS_KEY);
+        }
+      }
+      setSavedDrafts(getRecentDrafts());
+      setCommunityDrafts(getCommunityDrafts());
+    } catch { /* ignore */ }
   }, []);
 
   // Re-fetch communities on every navigation so segment changes made on the
@@ -711,15 +756,16 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       pastSendsContext,
       subjectSpecialist,
     };
-    // Newest first, capped at MAX_DRAFTS_PER_COMMUNITY per community (drops the
-    // oldest for that community when exceeded).
-    const withNew = [draft, ...getSavedDrafts().filter((d) => d.id !== draft.id)];
+    const withNewCommunity = [draft, ...getCommunityDrafts().filter((d) => d.id !== draft.id)];
     const perCommunity: Record<string, number> = {};
-    const capped = withNew.filter((d) => {
+    const cappedCommunity = withNewCommunity.filter((d) => {
       perCommunity[d.communitySlug] = (perCommunity[d.communitySlug] ?? 0) + 1;
       return perCommunity[d.communitySlug] <= MAX_DRAFTS_PER_COMMUNITY;
     });
-    setSavedDrafts(persistSavedDrafts(capped));
+    setCommunityDrafts(persistCommunityDrafts(cappedCommunity));
+
+    const recentList = [draft, ...getRecentDrafts().filter((d) => d.id !== draft.id)].slice(0, MAX_RECENT_DRAFTS);
+    setSavedDrafts(persistRecentDrafts(recentList));
     setCurrentDraftSaved(true);
 
     // Transient confirmation toast.
@@ -778,9 +824,60 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }
 
   function deleteSavedDraft(id: string) {
-    const updated = getSavedDrafts().filter((d) => d.id !== id);
-    persistSavedDrafts(updated);
-    setSavedDrafts(updated);
+    setSavedDrafts(persistRecentDrafts(getRecentDrafts().filter((d) => d.id !== id)));
+    setCommunityDrafts(persistCommunityDrafts(getCommunityDrafts().filter((d) => d.id !== id)));
+  }
+
+  function deleteCommunityDraft(id: string) {
+    setCommunityDrafts(persistCommunityDrafts(getCommunityDrafts().filter((d) => d.id !== id)));
+  }
+
+  async function swapImage(slot: 'hero' | 'secondary' | 'gallery', imageUrl: string, galleryIdx?: number): Promise<void> {
+    const current = extractedRef.current;
+    const slug = activeCommunitySlugRef.current;
+    if (!current || !slug) return;
+
+    let newHero = heroImageUrlRef.current;
+    let newSecondary = secondaryImageUrlRef.current;
+    let newGallery = [...galleryImageUrlsRef.current];
+
+    if (slot === 'hero') {
+      newHero = imageUrl;
+    } else if (slot === 'secondary') {
+      newSecondary = imageUrl;
+    } else if (slot === 'gallery') {
+      if (galleryIdx !== undefined && galleryIdx >= 0 && galleryIdx < newGallery.length) {
+        newGallery[galleryIdx] = imageUrl;
+      } else {
+        newGallery = [...newGallery, imageUrl];
+      }
+    }
+
+    setHeroImageUrl(newHero);
+    setSecondaryImageUrl(newSecondary);
+    setGalleryImageUrls(newGallery);
+
+    try {
+      const res = await fetch("/api/render-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          extracted: current,
+          communitySlug: slug,
+          heroImageUrl: newHero,
+          secondaryImageUrl: newSecondary,
+          galleryImageUrls: newGallery,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setHtml(data.html);
+        setHtmlDirty(false);
+      }
+    } catch (e) {
+      console.error("[DraftProvider] swapImage render failed:", e);
+    }
+    setCurrentDraftSaved(false);
   }
 
   function dismissDuplicateWarning() {
@@ -807,9 +904,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     subjectSpecialist,
     duplicateWarning,
     savedDrafts,
+    communityDrafts,
     currentDraftSaved,
     saveNotice,
     htmlDirty,
+    allExtractedImageUrls,
     handleFileChange,
     clearInputs,
     generateDraft, cancelGeneration,
@@ -825,7 +924,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     swapSubjectLine,
     syncHtml,
     saveDraft, discardDraft,
-    loadSavedDraft, deleteSavedDraft,
+    loadSavedDraft, deleteSavedDraft, deleteCommunityDraft,
+    swapImage,
     dismissDuplicateWarning,
   };
 

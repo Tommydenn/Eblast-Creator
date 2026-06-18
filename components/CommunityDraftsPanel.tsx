@@ -9,8 +9,8 @@ import { useDraft } from "@/context/DraftContext";
 // community by the save logic in DraftContext.
 export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string }) {
   const router = useRouter();
-  const { savedDrafts, loadSavedDraft, deleteSavedDraft } = useDraft();
-  const drafts = savedDrafts.filter((d) => d.communitySlug === communitySlug);
+  const { communityDrafts, loadSavedDraft, deleteCommunityDraft } = useDraft();
+  const drafts = communityDrafts.filter((d) => d.communitySlug === communitySlug);
 
   if (drafts.length === 0) {
     return (
@@ -49,7 +49,7 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
               Open in Drafter
             </button>
             <button
-              onClick={() => deleteSavedDraft(d.id)}
+              onClick={() => deleteCommunityDraft(d.id)}
               title="Delete draft"
               aria-label="Delete draft"
               className="rounded p-1 text-sand-400 hover:bg-sand-100 hover:text-clay-600"

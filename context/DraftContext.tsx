@@ -702,8 +702,19 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const slug = activeCommunitySlug;
     const community = communities.find((c) => c.slug === slug);
     const communityName = community?.displayName ?? slug;
+    const draftId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    // The image bank (allExtractedImageUrls) can be several MB of base64 — too
+    // large to send to Postgres reliably. Cache it locally so it survives
+    // page refreshes on the same device; it's not included in the server payload.
+    if (allExtractedImageUrls.length > 0) {
+      try {
+        localStorage.setItem(`eblast-bank-${draftId}`, JSON.stringify(allExtractedImageUrls));
+      } catch { /* ignore — bank just won't restore on reload */ }
+    }
+
     const draft: SavedDraft = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: draftId,
       communitySlug: slug,
       communityName,
       savedAt: new Date().toISOString(),
@@ -718,24 +729,38 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       agentLoop,
       pastSendsContext,
       subjectSpecialist,
-      allExtractedImageUrls,
+      // allExtractedImageUrls intentionally omitted — stored locally by draft ID
       heroOriginalUrl,
       secondaryOriginalUrl,
       galleryOriginalUrls,
     };
 
-    // Optimistic UI — show success immediately while the API saves in the background.
-    setCurrentDraftSaved(true);
-    setSaveNotice({ id: Date.now(), text: `Saved to ${communityName} — find it on its Communities page.` });
+    // Show "Saving…" immediately, then update to success or failure.
+    setSaveNotice({ id: Date.now(), text: `Saving to ${communityName}…` });
     if (saveNoticeTimerRef.current) clearTimeout(saveNoticeTimerRef.current);
-    saveNoticeTimerRef.current = setTimeout(() => setSaveNotice(null), 3500);
 
-    // Persist to Postgres — fire and forget; errors logged to console.
     fetch("/api/saved-drafts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ draft }),
-    }).catch((err) => console.error("[DraftProvider] saveDraft API failed:", err));
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
+        if (data.ok) {
+          setCurrentDraftSaved(true);
+          setSaveNotice({ id: Date.now(), text: `Saved — find it on the ${communityName} community page.` });
+        } else {
+          setCurrentDraftSaved(false);
+          setSaveNotice({ id: Date.now(), text: `Save failed: ${data.error ?? "unknown error"}` });
+        }
+        saveNoticeTimerRef.current = setTimeout(() => setSaveNotice(null), 4500);
+      })
+      .catch((err) => {
+        setCurrentDraftSaved(false);
+        setSaveNotice({ id: Date.now(), text: "Save failed — check your connection and try again." });
+        saveNoticeTimerRef.current = setTimeout(() => setSaveNotice(null), 4500);
+        console.error("[DraftProvider] saveDraft failed:", err);
+      });
   }
 
   function discardDraft() {
@@ -774,7 +799,15 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setSecondaryImageUrl(draft.secondaryImageUrl);
     setGalleryImageUrls(draft.galleryImageUrls);
     setImageCount(draft.imageCount);
-    setAllExtractedImageUrls(draft.allExtractedImageUrls ?? []);
+    // Prefer image bank from the server draft; fall back to the local cache.
+    let bank = draft.allExtractedImageUrls ?? [];
+    if (bank.length === 0) {
+      try {
+        const cached = localStorage.getItem(`eblast-bank-${draft.id}`);
+        if (cached) bank = JSON.parse(cached);
+      } catch { /* ignore */ }
+    }
+    setAllExtractedImageUrls(bank);
     setHeroOriginalUrl(draft.heroOriginalUrl);
     setSecondaryOriginalUrl(draft.secondaryOriginalUrl);
     setGalleryOriginalUrls(draft.galleryOriginalUrls ?? []);

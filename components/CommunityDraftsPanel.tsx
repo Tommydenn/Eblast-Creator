@@ -18,16 +18,23 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
   const { loadSavedDraft } = useDraft();
   const [drafts, setDrafts] = useState<DraftMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setFetchError(null);
     fetch(`/api/saved-drafts?communitySlug=${encodeURIComponent(communitySlug)}`)
-      .then((r) => r.json())
-      .then((d) => { if (!cancelled && d.ok) setDrafts(d.drafts); })
-      .catch(() => {})
+      .then(async (r) => {
+        const d = await r.json();
+        if (!cancelled) {
+          if (d.ok) setDrafts(d.drafts);
+          else setFetchError(d.error ?? `HTTP ${r.status}`);
+        }
+      })
+      .catch((err) => { if (!cancelled) setFetchError(String(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [communitySlug]);
@@ -64,6 +71,14 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
     return (
       <p className="rounded-md border border-dashed border-sand-300 bg-sand-50/40 px-4 py-6 text-center text-sm text-sand-500">
         Loading drafts…
+      </p>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <p className="rounded-md border border-clay-200 bg-clay-50 px-4 py-4 text-center text-sm text-clay-700">
+        Could not load drafts: {fetchError}
       </p>
     );
   }

@@ -704,16 +704,26 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const communityName = community?.displayName ?? slug;
     const draftId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-    // The image bank (allExtractedImageUrls) can be several MB of base64 — too
-    // large to send to Postgres reliably. Cache it locally so it survives
-    // page refreshes on the same device; it's not included in the server payload.
-    if (allExtractedImageUrls.length > 0) {
-      try {
+    // All base64 image data is stored in localStorage keyed by draft ID.
+    // Vercel's ~4.5 MB HTTP body limit means we cannot include any data URIs
+    // in the Postgres payload. The rendered HTML already embeds placed images
+    // inline, so they're recovered from there at load time; originals (pre-crop)
+    // are stored separately for repositioning on the same device.
+    try {
+      if (allExtractedImageUrls.length > 0) {
         localStorage.setItem(`eblast-bank-${draftId}`, JSON.stringify(allExtractedImageUrls));
-      } catch { /* ignore — bank just won't restore on reload */ }
-    }
+      }
+      const hasOriginals = heroOriginalUrl || secondaryOriginalUrl || (galleryOriginalUrls?.length ?? 0) > 0;
+      if (hasOriginals) {
+        localStorage.setItem(
+          `eblast-originals-${draftId}`,
+          JSON.stringify({ heroOriginalUrl, secondaryOriginalUrl, galleryOriginalUrls }),
+        );
+      }
+    } catch { /* ignore — originals and bank just won't restore after clearing cache */ }
 
-    const draft: SavedDraft = {
+    // Compact draft for Postgres: text + metadata only, no base64 images.
+    const draft = {
       id: draftId,
       communitySlug: slug,
       communityName,
@@ -721,18 +731,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       subject: extracted.subject,
       extracted,
       html,
-      heroImageUrl,
-      secondaryImageUrl,
-      galleryImageUrls,
       imageCount,
       review,
       agentLoop,
       pastSendsContext,
       subjectSpecialist,
-      // allExtractedImageUrls intentionally omitted — stored locally by draft ID
-      heroOriginalUrl,
-      secondaryOriginalUrl,
-      galleryOriginalUrls,
     };
 
     // Show "Saving…" immediately, then update to success or failure.
@@ -795,11 +798,28 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setActiveCommunitySlug(draft.communitySlug);
     setExtracted(draft.extracted);
     setHtml(draft.html);
-    setHeroImageUrl(draft.heroImageUrl);
-    setSecondaryImageUrl(draft.secondaryImageUrl);
-    setGalleryImageUrls(draft.galleryImageUrls);
+
+    // Placed image URLs: prefer explicitly stored values (legacy drafts that still
+    // have them), otherwise extract from the inline HTML (current format).
+    let hero = draft.heroImageUrl;
+    let secondary = draft.secondaryImageUrl;
+    let gallery = draft.galleryImageUrls ?? [];
+    if (!hero && !secondary && gallery.length === 0 && draft.html && typeof window !== 'undefined') {
+      try {
+        const doc = new DOMParser().parseFromString(draft.html, 'text/html');
+        hero = doc.querySelector<HTMLImageElement>('img[data-img-label="Hero image"]')?.getAttribute('src') ?? undefined;
+        secondary = doc.querySelector<HTMLImageElement>('img[data-img-label="Secondary image"]')?.getAttribute('src') ?? undefined;
+        gallery = Array.from(doc.querySelectorAll<HTMLImageElement>('img[data-img-label^="Gallery image"]'))
+          .map(el => el.getAttribute('src') ?? '').filter(Boolean);
+      } catch { /* ignore */ }
+    }
+    setHeroImageUrl(hero);
+    setSecondaryImageUrl(secondary);
+    setGalleryImageUrls(gallery);
+
     setImageCount(draft.imageCount);
-    // Prefer image bank from the server draft; fall back to the local cache.
+
+    // Image bank: prefer server-stored (legacy); fall back to local cache.
     let bank = draft.allExtractedImageUrls ?? [];
     if (bank.length === 0) {
       try {
@@ -808,9 +828,27 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       } catch { /* ignore */ }
     }
     setAllExtractedImageUrls(bank);
-    setHeroOriginalUrl(draft.heroOriginalUrl);
-    setSecondaryOriginalUrl(draft.secondaryOriginalUrl);
-    setGalleryOriginalUrls(draft.galleryOriginalUrls ?? []);
+
+    // Originals (pre-crop, needed for repositioning): prefer server-stored (legacy);
+    // fall back to local cache written at save time.
+    let heroOrig = draft.heroOriginalUrl;
+    let secondaryOrig = draft.secondaryOriginalUrl;
+    let galleryOrigs = draft.galleryOriginalUrls ?? [];
+    if (!heroOrig && !secondaryOrig && galleryOrigs.length === 0) {
+      try {
+        const cached = localStorage.getItem(`eblast-originals-${draft.id}`);
+        if (cached) {
+          const stored = JSON.parse(cached);
+          heroOrig = stored.heroOriginalUrl;
+          secondaryOrig = stored.secondaryOriginalUrl;
+          galleryOrigs = stored.galleryOriginalUrls ?? [];
+        }
+      } catch { /* ignore */ }
+    }
+    setHeroOriginalUrl(heroOrig);
+    setSecondaryOriginalUrl(secondaryOrig);
+    setGalleryOriginalUrls(galleryOrigs);
+
     setReview(draft.review ?? null);
     setAgentLoop(draft.agentLoop ?? null);
     setPastSendsContext(draft.pastSendsContext ?? []);

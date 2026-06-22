@@ -11,7 +11,8 @@ function resend(): Resend {
 }
 
 const FROM = process.env.RESEND_FROM ?? "Eblast Drafter <onboarding@resend.dev>";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL
+  ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
 /** Extract the HTML between <body> tags, or return full html if not found. */
 function extractBody(html: string): string {

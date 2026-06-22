@@ -130,8 +130,11 @@ export function buildEblastHtml(
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();
   const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "rgba(255,255,255,0.7)" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
-  const logoContent = chosenLogo
-    ? `<img src="${chosenLogo.url}" alt="${escapeHtml(community.displayName)}" height="88" style="display:block; height:88px; width:auto; max-width:300px; border:0; margin:0 auto;">`
+  const logoSrc = chosenLogo
+    ? (chosenLogo.url.startsWith("http") ? chosenLogo.url : `${process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")}${chosenLogo.url}`)
+    : null;
+  const logoContent = logoSrc
+    ? `<img src="${logoSrc}" alt="${escapeHtml(community.displayName)}" height="88" style="display:block; height:88px; width:auto; max-width:300px; border:0; margin:0 auto;">`
     : textFallback;
 
   // Always use the community's CallRail tracking number for the CTA phone.

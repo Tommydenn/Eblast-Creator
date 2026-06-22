@@ -244,8 +244,8 @@ export interface DraftContextValue {
   discardDraft: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
   swapImage: (slot: 'hero' | 'secondary' | 'gallery', imageUrl: string, galleryIdx?: number, focus?: string) => Promise<void>;
-  /** Re-crop the current image in a slot from its original, using a new focus. */
-  repositionImage: (slot: 'hero' | 'secondary' | 'gallery', focus: string, galleryIdx?: number) => Promise<void>;
+  /** Re-crop the current image in a slot from its original using XY offset (0-100). */
+  repositionImage: (slot: 'hero' | 'secondary' | 'gallery', x: number, y: number, galleryIdx?: number) => Promise<void>;
   /** Remove the image from a specific slot (hero/secondary/gallery). */
   removeImage: (slot: 'hero' | 'secondary' | 'gallery', galleryIdx?: number) => Promise<void>;
   dismissDuplicateWarning: () => void;
@@ -1014,14 +1014,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   async function repositionImage(
     slot: 'hero' | 'secondary' | 'gallery',
-    focus: string,
+    x: number,
+    y: number,
     galleryIdx?: number,
   ): Promise<void> {
     const current = extractedRef.current;
     const slug = activeCommunitySlugRef.current;
     if (!current || !slug) return;
 
-    // Get the pre-crop original for this slot — without it we can't reposition.
     let originalUrl: string | undefined;
     if (slot === 'hero') originalUrl = heroOriginalUrlRef.current;
     else if (slot === 'secondary') originalUrl = secondaryOriginalUrlRef.current;
@@ -1034,7 +1034,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       const cropRes = await fetch("/api/crop-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: originalUrl, targetRatio, focus }),
+        body: JSON.stringify({ imageUrl: originalUrl, targetRatio, x, y }),
       });
       const cropData = await cropRes.json();
       if (cropData.ok) placedUrl = cropData.croppedUrl;

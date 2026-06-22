@@ -73,6 +73,24 @@ const EBLAST_EDIT_SCRIPT = `(function(){
     });
   });
   document.addEventListener('click',function(){ stopAll(null); });
+  // Receive position-control messages from the parent frame.
+  window.addEventListener('message',function(e){
+    if(!e.data) return;
+    if(e.data.type==='eblast-show-original'){
+      var img=document.querySelector('[data-img-label="'+e.data.label+'"]');
+      if(!img) return;
+      var w=img.getAttribute('width')||img.offsetWidth;
+      var h=img.getAttribute('height')||img.offsetHeight;
+      img.style.width=w+'px'; img.style.height=h+'px';
+      img.style.objectFit='cover';
+      img.style.objectPosition=e.data.x+'% '+e.data.y+'%';
+      img.src=e.data.src;
+    }
+    if(e.data.type==='eblast-reposition'){
+      var img=document.querySelector('[data-img-label="'+e.data.label+'"]');
+      if(img) img.style.objectPosition=e.data.x+'% '+e.data.y+'%';
+    }
+  });
 })();`;
 
 // ─── Display maps ─────────────────────────────────────────────────────────────
@@ -208,12 +226,6 @@ function ImageBankPanel({
     setSwapping(null);
   }
 
-  const SLOT_LABELS: Record<'hero' | 'secondary' | 'gallery', string> = {
-    hero: 'Set as Hero',
-    secondary: 'Set as Secondary',
-    gallery: 'Add to Gallery',
-  };
-
   return (
     <details className="rounded-md border border-sand-200 bg-sand-50/60">
       <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
@@ -234,18 +246,22 @@ function ImageBankPanel({
                 </div>
               )}
             </div>
-            <div className="flex flex-col gap-0.5">
-              {(['hero', 'secondary', 'gallery'] as const).map((slot) => (
-                <button
-                  key={slot}
-                  onClick={() => handleSwap(slot, url, i)}
-                  disabled={swapping === i}
-                  className="w-full rounded border border-sand-200 bg-white px-1.5 py-[3px] text-left text-[9.5px] font-medium text-sand-600 transition-colors hover:border-clay-300 hover:bg-clay-50/40 disabled:opacity-40"
-                >
-                  {SLOT_LABELS[slot]}
-                </button>
-              ))}
-            </div>
+            <select
+              value=""
+              disabled={swapping === i}
+              onChange={(e) => {
+                const slot = e.target.value as 'hero' | 'secondary' | 'gallery';
+                if (!slot) return;
+                handleSwap(slot, url, i);
+                e.currentTarget.value = '';
+              }}
+              className="w-full rounded border border-sand-200 bg-white px-1 py-[3px] text-[9px] text-sand-600 transition-colors hover:border-clay-300 focus:outline-none disabled:opacity-40 cursor-pointer"
+            >
+              <option value="">Place image…</option>
+              <option value="hero">Set as Hero</option>
+              <option value="secondary">Set as Secondary</option>
+              <option value="gallery">Add to Gallery</option>
+            </select>
           </div>
         ))}
       </div>
@@ -272,6 +288,7 @@ export default function Home() {
     currentDraftSaved, saveNotice,
     htmlDirty, syncHtml, swapSubjectLine,
     allExtractedImageUrls, swapImage, repositionImage, removeImage,
+    heroOriginalUrl, secondaryOriginalUrl, galleryOriginalUrls,
     handleFileChange, clearInputs,
     generateDraft, cancelGeneration,
     refineDraft, undoRefine, redoRefine, canUndoRefine, canRedoRefine, lastRefineInstruction, redoRefineInstruction,
@@ -280,28 +297,97 @@ export default function Home() {
     dismissDuplicateWarning,
   } = useDraft();
 
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [reviewerOpen, setReviewerOpen] = useState(true);
   const [confirmExit, setConfirmExit] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ slot: 'hero' | 'secondary' | 'gallery'; galleryIdx?: number; label: string } | null>(null);
+  const selectedImageRef = useRef<typeof selectedImage>(null);
+  const [imageOffset, setImageOffset] = useState({ x: 50, y: 50 });
+  const imageOffsetRef = useRef({ x: 50, y: 50 });
+  const imageOffsetChangedRef = useRef(false);
   const [repositioning, setRepositioning] = useState(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Listen for clicks on images inside the eblast iframe.
+  // Keep refs in sync with state so async/closure callbacks see fresh values.
+  useEffect(() => { selectedImageRef.current = selectedImage; }, [selectedImage]);
+  useEffect(() => { imageOffsetRef.current = imageOffset; }, [imageOffset]);
+
+  function getOriginalForSlot(slot: 'hero' | 'secondary' | 'gallery', galleryIdx?: number): string | undefined {
+    if (slot === 'hero') return heroOriginalUrl;
+    if (slot === 'secondary') return secondaryOriginalUrl;
+    if (slot === 'gallery' && galleryIdx !== undefined) return galleryOriginalUrls[galleryIdx];
+    return undefined;
+  }
+
+  function applyMove(dx: number, dy: number) {
+    const newX = Math.max(0, Math.min(100, imageOffsetRef.current.x + dx));
+    const newY = Math.max(0, Math.min(100, imageOffsetRef.current.y + dy));
+    imageOffsetRef.current = { x: newX, y: newY };
+    setImageOffset({ x: newX, y: newY });
+    imageOffsetChangedRef.current = true;
+    const si = selectedImageRef.current;
+    if (si && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        { type: 'eblast-reposition', label: si.label, x: newX, y: newY },
+        '*',
+      );
+    }
+  }
+
+  function startHold(dx: number, dy: number) {
+    applyMove(dx, dy);
+    holdTimerRef.current = setTimeout(() => {
+      holdIntervalRef.current = setInterval(() => applyMove(dx, dy), 80);
+    }, 350);
+  }
+
+  function stopHold() {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
+  }
+
+  async function commitReposition() {
+    const si = selectedImageRef.current;
+    if (!si || !imageOffsetChangedRef.current) return;
+    setRepositioning(true);
+    await repositionImage(si.slot, imageOffsetRef.current.x, imageOffsetRef.current.y, si.galleryIdx);
+    setRepositioning(false);
+  }
+
+  // Listen for image clicks from the iframe and initialize repositioning.
   useEffect(() => {
     function handler(e: MessageEvent) {
       if (!e.data || e.data.type !== 'eblast-image-select') return;
       const label: string = e.data.label ?? '';
+      let next: typeof selectedImage = null;
       if (label === 'Hero image') {
-        setSelectedImage({ slot: 'hero', label });
+        next = { slot: 'hero', label };
       } else if (label === 'Secondary image') {
-        setSelectedImage({ slot: 'secondary', label });
+        next = { slot: 'secondary', label };
       } else if (label.startsWith('Gallery image ')) {
         const idx = parseInt(label.replace('Gallery image ', ''), 10) - 1;
-        setSelectedImage({ slot: 'gallery', galleryIdx: isNaN(idx) ? 0 : idx, label });
+        next = { slot: 'gallery', galleryIdx: isNaN(idx) ? 0 : idx, label };
+      }
+      if (!next) return;
+      // Reset offset for the new selection.
+      imageOffsetRef.current = { x: 50, y: 50 };
+      imageOffsetChangedRef.current = false;
+      setImageOffset({ x: 50, y: 50 });
+      setSelectedImage(next);
+      // Show the original in the iframe for live CSS positioning.
+      const original = getOriginalForSlot(next.slot, next.galleryIdx);
+      if (original && iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          { type: 'eblast-show-original', label, src: original, x: 50, y: 50 },
+          '*',
+        );
       }
     }
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroOriginalUrl, secondaryOriginalUrl, galleryOriginalUrls]);
   const selected = communities.find((c) => c.slug === selectedSlug);
 
   return (
@@ -885,41 +971,69 @@ export default function Home() {
                     <span className="font-medium text-sand-900">{extracted.subject}</span>
                   </CardDescription>
                   {selectedImage && (
-                    <div className="mt-2 flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-blue-600 mr-1">
-                        {selectedImage.label} position
+                    <div className="mt-2 flex items-center gap-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.1em] text-blue-600 shrink-0">
+                        {selectedImage.label}
                       </span>
-                      {[
-                        { focus: 'top-left', label: '↖' },
-                        { focus: 'top', label: '↑' },
-                        { focus: 'top-right', label: '↗' },
-                        { focus: 'left', label: '←' },
-                        { focus: 'center', label: '▪' },
-                        { focus: 'right', label: '→' },
-                        { focus: 'bottom-left', label: '↙' },
-                        { focus: 'bottom', label: '↓' },
-                        { focus: 'bottom-right', label: '↘' },
-                      ].map(({ focus, label }) => (
-                        <button
-                          key={focus}
-                          disabled={repositioning}
-                          onClick={async () => {
-                            setRepositioning(true);
-                            await repositionImage(selectedImage.slot, focus, selectedImage.galleryIdx);
-                            setRepositioning(false);
-                          }}
-                          className="flex h-6 w-6 items-center justify-center rounded text-[13px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-40"
-                          title={focus}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                      {/* D-pad: 3×3 grid, arrows at NSEW, reset in center */}
+                      <div className="grid grid-cols-3 gap-px">
+                        {[
+                          { dx: 0, dy: 0, icon: null },
+                          { dx: 0, dy: -3, icon: '↑' },
+                          { dx: 0, dy: 0, icon: null },
+                          { dx: -3, dy: 0, icon: '←' },
+                          { dx: null, dy: null, icon: '·', reset: true },
+                          { dx: 3, dy: 0, icon: '→' },
+                          { dx: 0, dy: 0, icon: null },
+                          { dx: 0, dy: 3, icon: '↓' },
+                          { dx: 0, dy: 0, icon: null },
+                        ].map((btn, i) => {
+                          if (!btn.icon) return <div key={i} />;
+                          if (btn.reset) {
+                            return (
+                              <button
+                                key="reset"
+                                disabled={repositioning}
+                                onMouseDown={() => {
+                                  imageOffsetRef.current = { x: 50, y: 50 };
+                                  setImageOffset({ x: 50, y: 50 });
+                                  imageOffsetChangedRef.current = true;
+                                  if (iframeRef.current?.contentWindow) {
+                                    iframeRef.current.contentWindow.postMessage(
+                                      { type: 'eblast-reposition', label: selectedImage.label, x: 50, y: 50 }, '*',
+                                    );
+                                  }
+                                }}
+                                className="flex h-6 w-6 items-center justify-center rounded text-[16px] leading-none text-blue-400 hover:bg-blue-100 hover:text-blue-600 disabled:opacity-40 select-none"
+                                title="Reset to center"
+                              >·</button>
+                            );
+                          }
+                          return (
+                            <button
+                              key={i}
+                              disabled={repositioning}
+                              onMouseDown={(e) => { e.preventDefault(); startHold(btn.dx!, btn.dy!); }}
+                              onMouseUp={stopHold}
+                              onMouseLeave={stopHold}
+                              className="flex h-6 w-6 items-center justify-center rounded text-[13px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-40 select-none"
+                              title={btn.icon}
+                            >
+                              {btn.icon}
+                            </button>
+                          );
+                        })}
+                      </div>
                       <button
-                        onClick={() => setSelectedImage(null)}
-                        className="ml-1 flex h-6 w-6 items-center justify-center rounded text-[11px] text-blue-400 hover:bg-blue-100 hover:text-blue-700"
-                        title="Dismiss"
+                        disabled={repositioning}
+                        onClick={async () => {
+                          stopHold();
+                          await commitReposition();
+                          setSelectedImage(null);
+                        }}
+                        className="ml-auto rounded-md border border-blue-300 bg-white px-2.5 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40"
                       >
-                        ×
+                        {repositioning ? 'Applying…' : 'Done'}
                       </button>
                     </div>
                   )}
@@ -943,13 +1057,28 @@ export default function Home() {
                       : "Hover to identify sections · Click any text to edit it inline"}
                   </p>
                   <iframe
+                    ref={iframeRef}
                     srcDoc={html}
-                    onLoad={(e) => {
-                      const doc = (e.currentTarget as HTMLIFrameElement).contentDocument;
+                    onLoad={() => {
+                      const doc = iframeRef.current?.contentDocument;
                       if (!doc?.body) return;
                       const s = doc.createElement("script");
                       s.textContent = EBLAST_EDIT_SCRIPT;
                       doc.body.appendChild(s);
+                      // If a reposition overlay is open, re-activate the original view.
+                      const si = selectedImageRef.current;
+                      if (si) {
+                        const original = getOriginalForSlot(si.slot, si.galleryIdx);
+                        if (original && iframeRef.current?.contentWindow) {
+                          setTimeout(() => {
+                            iframeRef.current?.contentWindow?.postMessage(
+                              { type: 'eblast-show-original', label: si.label, src: original,
+                                x: imageOffsetRef.current.x, y: imageOffsetRef.current.y },
+                              '*',
+                            );
+                          }, 30);
+                        }
+                      }
                     }}
                     className="block h-[820px] min-h-[480px] w-full resize-y overflow-auto rounded-sm border-0 bg-white transition-opacity duration-200"
                     style={{ opacity: stage === "refining" ? 0.55 : 1 }}

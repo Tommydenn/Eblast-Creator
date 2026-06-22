@@ -345,13 +345,15 @@ export async function extractImagesFromPdf(
 }
 
 /**
- * Crop a data-URI image to a target aspect ratio with a caller-specified focus direction.
+ * Crop a data-URI image to a target aspect ratio using continuous X/Y offset percentages
+ * (0 = left/top, 100 = right/bottom, 50 = center).
  * Returns the original data URI on error.
  */
-export async function cropDataUriToFocusAndRatio(
+export async function cropDataUriToXY(
   dataUri: string,
   targetRatio: number,
-  focus: 'top' | 'center' | 'bottom' | 'left' | 'right',
+  x: number, // 0-100
+  y: number, // 0-100
 ): Promise<string> {
   try {
     const commaIdx = dataUri.indexOf(",");
@@ -362,38 +364,18 @@ export async function cropDataUriToFocusAndRatio(
     if (!meta.width || !meta.height) return dataUri;
 
     const srcRatio = meta.width / meta.height;
-
-    let left = 0;
-    let top = 0;
-    let cropWidth: number;
-    let cropHeight: number;
+    let left = 0, top = 0, cropWidth: number, cropHeight: number;
 
     if (srcRatio > targetRatio) {
-      // Source is wider than target — crop width, keep full height.
       cropWidth = Math.round(meta.height * targetRatio);
       cropHeight = meta.height;
-      const excess = meta.width - cropWidth;
-      if (focus === 'left') {
-        left = 0;
-      } else if (focus === 'right') {
-        left = excess;
-      } else {
-        left = Math.round(excess / 2);
-      }
+      left = Math.round((meta.width - cropWidth) * (x / 100));
       top = 0;
     } else {
-      // Source is taller than target — crop height, keep full width.
       cropWidth = meta.width;
       cropHeight = Math.round(meta.width / targetRatio);
-      const excess = meta.height - cropHeight;
-      if (focus === 'top') {
-        top = 0;
-      } else if (focus === 'bottom') {
-        top = excess;
-      } else {
-        top = Math.round(excess / 2);
-      }
       left = 0;
+      top = Math.round((meta.height - cropHeight) * (y / 100));
     }
 
     const cropped = await sharp(buffer, { failOn: "none" })
@@ -405,6 +387,26 @@ export async function cropDataUriToFocusAndRatio(
   } catch {
     return dataUri;
   }
+}
+
+/**
+ * Crop a data-URI image to a target aspect ratio with a named focus direction.
+ * Kept for the AI refine pipeline which specifies focus by name.
+ */
+export async function cropDataUriToFocusAndRatio(
+  dataUri: string,
+  targetRatio: number,
+  focus: 'top' | 'center' | 'bottom' | 'left' | 'right',
+): Promise<string> {
+  const map: Record<string, { x: number; y: number }> = {
+    top: { x: 50, y: 0 },
+    bottom: { x: 50, y: 100 },
+    left: { x: 0, y: 50 },
+    right: { x: 100, y: 50 },
+    center: { x: 50, y: 50 },
+  };
+  const { x, y } = map[focus] ?? { x: 50, y: 50 };
+  return cropDataUriToXY(dataUri, targetRatio, x, y);
 }
 
 /**

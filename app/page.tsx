@@ -87,6 +87,111 @@ const verdictBadge: Record<ReviewVerdict, { label: string; variant: "success" | 
 
 // ─── Image Bank Panel ─────────────────────────────────────────────────────────
 
+// ─── Placed Images Panel ──────────────────────────────────────────────────────
+
+function PlacedImagesPanel({
+  heroImageUrl,
+  secondaryImageUrl,
+  galleryImageUrls,
+  onRemove,
+}: {
+  heroImageUrl?: string;
+  secondaryImageUrl?: string;
+  galleryImageUrls: string[];
+  onRemove: (slot: 'hero' | 'secondary' | 'gallery', galleryIdx?: number) => Promise<void>;
+}) {
+  const [removing, setRemoving] = useState<string | null>(null);
+  const hasAny = heroImageUrl || secondaryImageUrl || galleryImageUrls.length > 0;
+  if (!hasAny) return null;
+
+  async function handleRemove(slot: 'hero' | 'secondary' | 'gallery', galleryIdx?: number) {
+    const key = slot === 'gallery' ? `gallery-${galleryIdx}` : slot;
+    setRemoving(key);
+    await onRemove(slot, galleryIdx);
+    setRemoving(null);
+  }
+
+  const TRASH = (
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+
+  return (
+    <div className="rounded-md border border-sand-200 bg-white">
+      <div className="border-b border-sand-100 px-3.5 py-2.5">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sand-500">Placed images</span>
+      </div>
+      <div className="divide-y divide-sand-100">
+        {heroImageUrl && (
+          <div className="flex items-center gap-3 px-3.5 py-2.5">
+            <div className="h-9 w-14 shrink-0 overflow-hidden rounded border border-sand-200 bg-sand-100">
+              <img src={heroImageUrl} alt="Hero" className="h-full w-full object-cover" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-sand-800">Hero</p>
+              <p className="text-[10px] text-sand-400">Top banner image</p>
+            </div>
+            <button
+              onClick={() => handleRemove('hero')}
+              disabled={removing === 'hero'}
+              title="Remove hero image"
+              className="shrink-0 rounded p-1.5 text-sand-400 transition-colors hover:bg-clay-50 hover:text-clay-600 disabled:opacity-40"
+            >
+              {TRASH}
+            </button>
+          </div>
+        )}
+        {secondaryImageUrl && (
+          <div className="flex items-center gap-3 px-3.5 py-2.5">
+            <div className="h-9 w-14 shrink-0 overflow-hidden rounded border border-sand-200 bg-sand-100">
+              <img src={secondaryImageUrl} alt="Secondary" className="h-full w-full object-cover" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-sand-800">Secondary</p>
+              <p className="text-[10px] text-sand-400">Inline story image</p>
+            </div>
+            <button
+              onClick={() => handleRemove('secondary')}
+              disabled={removing === 'secondary'}
+              title="Remove secondary image"
+              className="shrink-0 rounded p-1.5 text-sand-400 transition-colors hover:bg-clay-50 hover:text-clay-600 disabled:opacity-40"
+            >
+              {TRASH}
+            </button>
+          </div>
+        )}
+        {galleryImageUrls.length > 0 && (
+          <div className="px-3.5 py-2.5">
+            <p className="mb-2 text-xs font-medium text-sand-800">
+              Gallery <span className="font-normal text-sand-400">({galleryImageUrls.length} image{galleryImageUrls.length === 1 ? "" : "s"})</span>
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {galleryImageUrls.map((url, idx) => (
+                <div key={idx} className="group relative h-14 w-[72px] overflow-hidden rounded border border-sand-200 bg-sand-100">
+                  <img src={url} alt={`Gallery ${idx + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    onClick={() => handleRemove('gallery', idx)}
+                    disabled={removing === `gallery-${idx}`}
+                    title={`Remove gallery image ${idx + 1}`}
+                    className="absolute inset-0 flex items-center justify-center bg-white/0 transition-all group-hover:bg-white/60 disabled:opacity-40"
+                  >
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/90 text-[11px] text-clay-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                      ×
+                    </span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Image Bank Panel ─────────────────────────────────────────────────────────
+
 function ImageBankPanel({
   imageUrls,
   onSwap,
@@ -103,42 +208,41 @@ function ImageBankPanel({
     setSwapping(null);
   }
 
+  const SLOT_LABELS: Record<'hero' | 'secondary' | 'gallery', string> = {
+    hero: 'Set as Hero',
+    secondary: 'Set as Secondary',
+    gallery: 'Add to Gallery',
+  };
+
   return (
     <details className="rounded-md border border-sand-200 bg-sand-50/60">
       <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
-        <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600">
-          Image bank
-        </span>
+        <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600">Image bank</span>
         <span className="text-[11px] text-sand-500">{imageUrls.length} image{imageUrls.length === 1 ? "" : "s"}</span>
       </summary>
       <div className="grid grid-cols-4 gap-2 border-t border-sand-200 p-3">
         {imageUrls.map((url, i) => (
-          <div key={i} className="flex flex-col gap-1">
+          <div key={i} className="flex flex-col gap-1.5">
             <div
               className="relative overflow-hidden rounded border border-sand-200 bg-sand-100"
               style={{ aspectRatio: '4/3' }}
             >
-              <img
-                src={url}
-                alt={`Extracted image ${i + 1}`}
-                className="h-full w-full object-cover"
-              />
+              <img src={url} alt={`Extracted image ${i + 1}`} className="h-full w-full object-cover" />
               {swapping === i && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white/70">
                   <span className="text-[10px] text-sand-500">Placing…</span>
                 </div>
               )}
             </div>
-            <div className="flex justify-center gap-0.5">
+            <div className="flex flex-col gap-0.5">
               {(['hero', 'secondary', 'gallery'] as const).map((slot) => (
                 <button
                   key={slot}
                   onClick={() => handleSwap(slot, url, i)}
                   disabled={swapping === i}
-                  className="rounded border border-sand-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-sand-600 hover:border-clay-300 hover:bg-clay-50/40 disabled:opacity-40"
-                  title={slot === 'hero' ? 'Use as hero' : slot === 'secondary' ? 'Use as secondary' : 'Add to gallery'}
+                  className="w-full rounded border border-sand-200 bg-white px-1.5 py-[3px] text-left text-[9.5px] font-medium text-sand-600 transition-colors hover:border-clay-300 hover:bg-clay-50/40 disabled:opacity-40"
                 >
-                  {slot === 'hero' ? 'H' : slot === 'secondary' ? 'S' : '+'}
+                  {SLOT_LABELS[slot]}
                 </button>
               ))}
             </div>
@@ -165,14 +269,13 @@ export default function Home() {
     pushResult, error,
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
-    communityDrafts, currentDraftSaved, saveNotice,
+    currentDraftSaved, saveNotice,
     htmlDirty, syncHtml, swapSubjectLine,
-    allExtractedImageUrls, swapImage, repositionImage,
+    allExtractedImageUrls, swapImage, repositionImage, removeImage,
     handleFileChange, clearInputs,
     generateDraft, cancelGeneration,
     refineDraft, undoRefine, redoRefine, canUndoRefine, canRedoRefine, lastRefineInstruction, redoRefineInstruction,
     saveDraft, discardDraft,
-    loadSavedDraft, deleteCommunityDraft,
     pushDraft,
     dismissDuplicateWarning,
   } = useDraft();
@@ -187,12 +290,12 @@ export default function Home() {
     function handler(e: MessageEvent) {
       if (!e.data || e.data.type !== 'eblast-image-select') return;
       const label: string = e.data.label ?? '';
-      if (label === 'hero') {
+      if (label === 'Hero image') {
         setSelectedImage({ slot: 'hero', label });
-      } else if (label === 'secondary') {
+      } else if (label === 'Secondary image') {
         setSelectedImage({ slot: 'secondary', label });
-      } else if (label.startsWith('gallery-')) {
-        const idx = parseInt(label.replace('gallery-', ''), 10);
+      } else if (label.startsWith('Gallery image ')) {
+        const idx = parseInt(label.replace('Gallery image ', ''), 10) - 1;
         setSelectedImage({ slot: 'gallery', galleryIdx: isNaN(idx) ? 0 : idx, label });
       }
     }
@@ -506,7 +609,15 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                {/* Image bank — below the refine tool, collapsible */}
+                {/* Placed images — shows current slots with remove controls */}
+                <PlacedImagesPanel
+                  heroImageUrl={heroImageUrl}
+                  secondaryImageUrl={secondaryImageUrl}
+                  galleryImageUrls={galleryImageUrls}
+                  onRemove={removeImage}
+                />
+
+                {/* Image bank — all extracted images, collapsible */}
                 {allExtractedImageUrls.length > 0 && (
                   <ImageBankPanel
                     imageUrls={allExtractedImageUrls}

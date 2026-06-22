@@ -272,6 +272,24 @@ export const drafts = pgTable("drafts", {
 export type DraftRow = InferSelectModel<typeof drafts>;
 export type NewDraftRow = InferInsertModel<typeof drafts>;
 
+// ---------- saved drafts (Drafter work-in-progress snapshots) -------------
+// Stores full draft payloads including base64 image data so any user can
+// access them across devices. Capped at 8 per community by the API route.
+
+export const savedDrafts = pgTable("saved_drafts", {
+  id: text("id").primaryKey(),
+  communitySlug: varchar("community_slug", { length: 64 }).notNull(),
+  communityName: text("community_name").notNull(),
+  savedAt: timestamp("saved_at", { withTimezone: true }).notNull(),
+  subject: text("subject").notNull(),
+  imageCount: integer("image_count").notNull().default(0),
+  /** Full draft JSON — includes rendered HTML, extracted text, and base64 image data. */
+  data: jsonb("data").notNull(),
+});
+
+export type SavedDraftRow = InferSelectModel<typeof savedDrafts>;
+export type NewSavedDraftRow = InferInsertModel<typeof savedDrafts>;
+
 // ---------- approval threads (magic-link salesperson approvals) -----------
 
 export const approvalThreads = pgTable("approval_threads", {

@@ -235,15 +235,12 @@ export function buildEblastHtml(
   // Sits between the pull-quote and the final CTA.
   // Requires at least 2 images — a single orphaned photo looks unfinished.
   const gallery = (() => {
-    if (galleryImgs.length < 2) return "";
+    if (galleryImgs.length === 0) return "";
 
-    // 2 images → 2-up, 3 images → 3-up, 4+ images → 2×2 grid for visual symmetry.
-    const cols = galleryImgs.length === 3 ? 3 : 2;
-    const cellWidth = Math.floor(528 / cols);
-    // Tile dimensions: 4:3 for multi-col grids (images are pre-cropped server-side);
-    // 16:9 for a single full-width image so it isn't too tall.
-    const tileW = cellWidth - 12; // always multi-column; subtract gutter
-    const tileH = Math.round(tileW * 3 / 4); // 4:3 to match server-side crop
+    // 1 image → full-width; 2 images → 2-up; 3 → 3-up; 4+ → 2×2 grid.
+    const cols = galleryImgs.length === 1 ? 1 : galleryImgs.length === 3 ? 3 : 2;
+    const tileW = cols === 1 ? 528 : Math.floor(528 / cols) - 12;
+    const tileH = Math.round(tileW * 3 / 4); // 4:3 aspect ratio throughout
     // Each tile carries a stable 1-based name ("Gallery image N") that matches
     // the hover label in the preview and the refine manifest, so users can call
     // out a specific gallery photo by name.

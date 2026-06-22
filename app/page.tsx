@@ -77,18 +77,50 @@ const EBLAST_EDIT_SCRIPT = `(function(){
   window.addEventListener('message',function(e){
     if(!e.data) return;
     if(e.data.type==='eblast-show-original'){
-      var img=document.querySelector('[data-img-label="'+e.data.label+'"]');
-      if(!img) return;
-      var w=img.getAttribute('width')||img.offsetWidth;
-      var h=img.getAttribute('height')||img.offsetHeight;
-      img.style.width=w+'px'; img.style.height=h+'px';
-      img.style.objectFit='cover';
-      img.style.objectPosition=e.data.x+'% '+e.data.y+'%';
-      img.src=e.data.src;
+      var imgEl=document.querySelector('[data-img-label="'+e.data.label+'"]');
+      if(!imgEl) return;
+      var cw=parseInt(imgEl.getAttribute('width'))||imgEl.offsetWidth;
+      var ch=parseInt(imgEl.getAttribute('height'))||imgEl.offsetHeight;
+      var lbl=e.data.label, xPos=e.data.x, yPos=e.data.y, src=e.data.src;
+      // Load original into a temp image to get natural size and normalize colors
+      // via Canvas (Canvas compositor converts any color profile to sRGB).
+      var tmp=new Image();
+      tmp.onload=function(){
+        var nw=tmp.naturalWidth, nh=tmp.naturalHeight;
+        // Ensure BOTH axes have at least 12% panning room, regardless of aspect ratio.
+        var MARGIN=0.12;
+        var scaleX=(cw/nw)*(1+MARGIN), scaleY=(ch/nh)*(1+MARGIN);
+        var scale=Math.max(scaleX,scaleY);
+        var bgW=Math.round(nw*scale), bgH=Math.round(nh*scale);
+        // Normalize colors: draw through Canvas → export as sRGB JPEG.
+        var maxSide=1600;
+        var nrmW=nw>maxSide?maxSide:nw, nrmH=Math.round(nh*(nrmW/nw));
+        var canvas=document.createElement('canvas');
+        canvas.width=nrmW; canvas.height=nrmH;
+        canvas.getContext('2d').drawImage(tmp,0,0,nrmW,nrmH);
+        var normSrc=canvas.toDataURL('image/jpeg',0.92);
+        // Recalculate bg dimensions against the normalized (possibly resampled) size
+        var bgWn=Math.round(nrmW*scale), bgHn=Math.round(nrmH*scale);
+        var div=document.createElement('div');
+        div.setAttribute('data-img-label',lbl);
+        div.setAttribute('data-repo-div','1');
+        div.style.cssText='display:inline-block;width:'+cw+'px;height:'+ch+'px;'+
+          'background-image:url("'+normSrc+'");'+
+          'background-size:'+bgWn+'px '+bgHn+'px;'+
+          'background-repeat:no-repeat;'+
+          'background-position:'+xPos+'% '+yPos+'%;'+
+          'cursor:pointer;vertical-align:top;';
+        imgEl.parentNode.replaceChild(div,imgEl);
+        div.addEventListener('click',function(ev){
+          ev.stopPropagation();
+          window.parent.postMessage({type:'eblast-image-select',label:lbl},'*');
+        });
+      };
+      tmp.src=src;
     }
     if(e.data.type==='eblast-reposition'){
-      var img=document.querySelector('[data-img-label="'+e.data.label+'"]');
-      if(img) img.style.objectPosition=e.data.x+'% '+e.data.y+'%';
+      var el=document.querySelector('[data-img-label="'+e.data.label+'"][data-repo-div]');
+      if(el) el.style.backgroundPosition=e.data.x+'% '+e.data.y+'%';
     }
   });
 })();`;

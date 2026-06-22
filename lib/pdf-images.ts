@@ -364,19 +364,24 @@ export async function cropDataUriToXY(
     if (!meta.width || !meta.height) return dataUri;
 
     const srcRatio = meta.width / meta.height;
-    let left = 0, top = 0, cropWidth: number, cropHeight: number;
+    let cropWidth: number, cropHeight: number;
 
+    // Apply a 12% margin so BOTH axes always have panning room regardless of
+    // the source aspect ratio. A portrait original in a 16:9 slot would have
+    // zero horizontal excess without this — left/right would do nothing.
+    const MARGIN = 0.12;
     if (srcRatio > targetRatio) {
-      cropWidth = Math.round(meta.height * targetRatio);
-      cropHeight = meta.height;
-      left = Math.round((meta.width - cropWidth) * (x / 100));
-      top = 0;
+      // Source wider than target: height is the constraining dimension.
+      cropHeight = Math.round(meta.height * (1 - MARGIN));
+      cropWidth = Math.round(cropHeight * targetRatio);
     } else {
-      cropWidth = meta.width;
-      cropHeight = Math.round(meta.width / targetRatio);
-      left = 0;
-      top = Math.round((meta.height - cropHeight) * (y / 100));
+      // Source taller than (or equal to) target: width is the constraining dimension.
+      cropWidth = Math.round(meta.width * (1 - MARGIN));
+      cropHeight = Math.round(cropWidth / targetRatio);
     }
+
+    const left = Math.round((meta.width - cropWidth) * (x / 100));
+    const top = Math.round((meta.height - cropHeight) * (y / 100));
 
     const cropped = await sharp(buffer, { failOn: "none" })
       .extract({ left, top, width: cropWidth, height: cropHeight })

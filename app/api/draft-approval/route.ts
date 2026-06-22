@@ -62,17 +62,19 @@ export async function POST(req: NextRequest) {
     decision: "pending",
   });
 
-  // Fire email in background — don't block the response on Resend's API.
-  sendApprovalEmail({
-    to: recipientEmail,
-    recipientName: recipientName ?? null,
-    communityName: community.displayName,
-    draftSubject,
-    draftHtml,
-    token,
-  }).catch((e) => {
-    console.error("[draft-approval] Email send failed for token", token, e);
-  });
+  try {
+    await sendApprovalEmail({
+      to: recipientEmail,
+      recipientName: recipientName ?? null,
+      communityName: community.displayName,
+      draftSubject,
+      draftHtml,
+      token,
+    });
+  } catch (e: any) {
+    await db.delete(savedDraftApprovals).where(eq(savedDraftApprovals.token, token));
+    return NextResponse.json({ ok: false, error: `Email send failed: ${e.message ?? String(e)}` }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, token });
 }

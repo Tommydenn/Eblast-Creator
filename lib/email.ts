@@ -1,24 +1,16 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
-// Lazy transporter — created once, reused across requests.
-let _transporter: nodemailer.Transporter | null = null;
-function transporter(): nodemailer.Transporter {
-  if (!_transporter) {
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    if (!user || !pass) throw new Error("SMTP_USER and SMTP_PASS must be set");
-    _transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST ?? "smtp.office365.com",
-      port: Number(process.env.SMTP_PORT ?? 587),
-      secure: false, // STARTTLS on port 587
-      auth: { user, pass },
-      tls: { ciphers: "SSLv3" }, // required by some Office 365 tenants
-    });
+let _resend: Resend | null = null;
+function resend(): Resend {
+  if (!_resend) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error("RESEND_API_KEY must be set");
+    _resend = new Resend(key);
   }
-  return _transporter;
+  return _resend;
 }
 
-const FROM = process.env.SMTP_FROM ?? process.env.SMTP_USER ?? "Eblast Drafter";
+const FROM = process.env.RESEND_FROM ?? "Eblast Drafter <onboarding@resend.dev>";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 /** Extract the HTML between <body> tags, or return full html if not found. */
@@ -192,7 +184,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 </body>
 </html>`;
 
-  return transporter().sendMail({
+  return resend().emails.send({
     from: FROM,
     to,
     subject: `Draft review: ${draftSubject} — ${communityName}`,
@@ -246,7 +238,7 @@ export async function sendEditNotificationEmail(params: SendEditNotificationPara
 </body>
 </html>`;
 
-  return transporter().sendMail({
+  return resend().emails.send({
     from: FROM,
     to,
     subject: `Edit request from ${senderFirst}: ${draftSubject} — ${communityName}`,

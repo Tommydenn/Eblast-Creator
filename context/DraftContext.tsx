@@ -211,6 +211,8 @@ export interface DraftContextValue {
   secondaryOriginalUrl: string | undefined;
   galleryOriginalUrls: string[];
   currentDraftSaved: boolean;
+  /** The saved_drafts.id of the most recently saved or loaded draft. Null until first save. */
+  currentDraftId: string | null;
   /** Transient confirmation shown briefly after a draft is saved. */
   saveNotice: { id: number; text: string } | null;
   /** True when the user has edited text inline and `html` hasn't been re-rendered yet. */
@@ -295,6 +297,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [subjectSpecialist, setSubjectSpecialist] = useState<SubjectSpecialistResult | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<{ name: string; generatedAt: string; community: string } | null>(null);
   const [currentDraftSaved, setCurrentDraftSaved] = useState(false);
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [htmlDirty, setHtmlDirty] = useState(false);
   // Single-level undo/redo for the last successful refine. Each snapshot
   // captures everything a refine mutates so an AI edit can be reverted and
@@ -703,6 +706,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const community = communities.find((c) => c.slug === slug);
     const communityName = community?.displayName ?? slug;
     const draftId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setCurrentDraftId(draftId);
 
     // Cache originals in localStorage for repositioning on the same device.
     // (Originals are not uploaded to Postgres — they're only needed locally.)
@@ -880,6 +884,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setPushResult(null);
     setError(null);
     setCurrentDraftSaved(true);
+    setCurrentDraftId(draft.id);
     setHtmlDirty(false);
     setUndoStack([]);
     setRedoStack([]);
@@ -1100,6 +1105,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     subjectSpecialist,
     duplicateWarning,
     currentDraftSaved,
+    currentDraftId,
     saveNotice,
     htmlDirty,
     allExtractedImageUrls,

@@ -291,6 +291,36 @@ export const savedDrafts = pgTable("saved_drafts", {
 export type SavedDraftRow = InferSelectModel<typeof savedDrafts>;
 export type NewSavedDraftRow = InferInsertModel<typeof savedDrafts>;
 
+// ---------- saved draft approvals (magic-link salesperson approval flow) -----
+// Each row represents one "Send for Approval" action. The token is a random
+// opaque string used in magic links — no signing needed since it's just a
+// test/internal approval flow.
+
+export const savedDraftApprovals = pgTable("saved_draft_approvals", {
+  /** Random token used in magic-link URLs — /approve/[token]. */
+  token: text("token").primaryKey(),
+  savedDraftId: text("saved_draft_id")
+    .notNull()
+    .references(() => savedDrafts.id, { onDelete: "cascade" }),
+  communitySlug: text("community_slug").notNull(),
+  /** Sender name — used for the greeting ("Hi Sarah,"). */
+  recipientName: text("recipient_name"),
+  /** Actual email address the approval was sent to (may be overridden in test mode). */
+  recipientEmail: text("recipient_email").notNull(),
+  /** Who receives the edit-request notification email. */
+  notifyEmail: text("notify_email"),
+  /** Subject line of the draft — for context in notification emails. */
+  draftSubject: text("draft_subject"),
+  /** "pending" | "approved" | "edits_requested" */
+  decision: text("decision").notNull().default("pending"),
+  editNotes: text("edit_notes"),
+  sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+});
+
+export type SavedDraftApprovalRow = InferSelectModel<typeof savedDraftApprovals>;
+export type NewSavedDraftApprovalRow = InferInsertModel<typeof savedDraftApprovals>;
+
 // ---------- draft image bank (one row per extracted image per draft) --------
 // Stored separately so each row is ~50–200 KB — well under Vercel's 4.5 MB
 // HTTP body limit. ON DELETE CASCADE removes images when the draft is deleted.

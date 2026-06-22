@@ -317,7 +317,7 @@ export default function Home() {
     pushResult, error,
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
-    currentDraftSaved, saveNotice,
+    currentDraftSaved, currentDraftId, saveNotice,
     htmlDirty, syncHtml, swapSubjectLine,
     allExtractedImageUrls, swapImage, repositionImage, removeImage,
     heroOriginalUrl, secondaryOriginalUrl, galleryOriginalUrls,
@@ -340,6 +340,78 @@ export default function Home() {
   const [repositioning, setRepositioning] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Send for Approval state ──────────────────────────────────────────────
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false);
+  const [approvalRecipientEmail, setApprovalRecipientEmail] = useState("");
+  const [approvalNotifyEmail, setApprovalNotifyEmail] = useState("");
+  const [approvalSending, setApprovalSending] = useState(false);
+  const [approvalSent, setApprovalSent] = useState<{ token: string; to: string } | null>(null);
+  const [approvalSendError, setApprovalSendError] = useState<string | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<{ decision: string; editNotes: string | null; recipientName: string | null } | null>(null);
+
+  // Load persisted emails from localStorage on mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const re = localStorage.getItem("approvalRecipientEmail");
+    const ne = localStorage.getItem("approvalNotifyEmail");
+    if (re) setApprovalRecipientEmail(re);
+    if (ne) setApprovalNotifyEmail(ne);
+  }, []);
+
+  // When a saved draft is loaded/saved, check its approval status.
+  useEffect(() => {
+    if (!currentDraftId) { setApprovalStatus(null); return; }
+    fetch(`/api/draft-approval?savedDraftId=${encodeURIComponent(currentDraftId)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok || !Array.isArray(d.approvals) || d.approvals.length === 0) {
+          setApprovalStatus(null);
+          return;
+        }
+        // Most recent approval
+        const latest = d.approvals[d.approvals.length - 1];
+        setApprovalStatus({
+          decision: latest.decision,
+          editNotes: latest.editNotes ?? null,
+          recipientName: latest.recipientName ?? null,
+        });
+      })
+      .catch(() => setApprovalStatus(null));
+  }, [currentDraftId]);
+
+  async function sendForApproval() {
+    if (!currentDraftId || !selected || !approvalRecipientEmail) return;
+    localStorage.setItem("approvalRecipientEmail", approvalRecipientEmail);
+    localStorage.setItem("approvalNotifyEmail", approvalNotifyEmail);
+    setApprovalSending(true);
+    setApprovalSendError(null);
+    try {
+      const sender = selected.senders[0];
+      const res = await fetch("/api/draft-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          savedDraftId: currentDraftId,
+          communitySlug: selected.slug,
+          recipientEmail: approvalRecipientEmail,
+          recipientName: sender?.name ?? null,
+          notifyEmail: approvalNotifyEmail || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setApprovalSent({ token: data.token, to: approvalRecipientEmail });
+        setApprovalStatus({ decision: "pending", editNotes: null, recipientName: sender?.name ?? null });
+      } else {
+        setApprovalSendError(data.error ?? "Unknown error");
+      }
+    } catch (e: any) {
+      setApprovalSendError(String(e));
+    } finally {
+      setApprovalSending(false);
+    }
+  }
 
   // Keep refs in sync with state so async/closure callbacks see fresh values.
   useEffect(() => { selectedImageRef.current = selectedImage; }, [selectedImage]);
@@ -950,7 +1022,132 @@ export default function Home() {
                 >
                   {stage === "pushing" ? "Pushing to HubSpot…" : "Push draft to HubSpot"}
                 </Button>
+
+                {/* Send for Approval */}
+                <Button
+                  onClick={() => { setApprovalSent(null); setApprovalSendError(null); setApprovalModalOpen(true); }}
+                  disabled={!currentDraftId || stage === "pushing"}
+                  size="lg"
+                  variant="secondary"
+                  className="border-sand-300 text-sand-700 hover:border-clay-300 hover:bg-clay-50/40"
+                >
+                  Send for Approval
+                </Button>
+
+                {/* In-app approval status notification */}
+                {approvalStatus && approvalStatus.decision === "edits_requested" && approvalStatus.editNotes && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+                    <p className="font-medium text-amber-800">
+                      {approvalStatus.recipientName
+                        ? `${approvalStatus.recipientName.split(" ")[0]} requested edits`
+                        : "Edits requested"}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-amber-700">{approvalStatus.editNotes}</p>
+                  </div>
+                )}
+                {approvalStatus && approvalStatus.decision === "approved" && (
+                  <div className="rounded-md border border-forest-200 bg-forest-50 p-3 text-sm">
+                    <p className="font-medium text-forest-800">
+                      ✓ {approvalStatus.recipientName
+                        ? `Approved by ${approvalStatus.recipientName.split(" ")[0]}`
+                        : "Approved"} — ready to push to HubSpot
+                    </p>
+                  </div>
+                )}
               </div>
+
+              {/* Send for Approval modal */}
+              {approvalModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-sand-950/40 backdrop-blur-sm">
+                  <div className="w-full max-w-md rounded-xl border border-sand-200 bg-white p-6 shadow-xl">
+                    <h2 className="mb-1 font-serif text-xl text-sand-900">Send for Approval</h2>
+                    <p className="mb-4 text-sm text-sand-500">
+                      An email with the full draft will be sent. The recipient can approve (which pushes to HubSpot)
+                      or submit edit notes.
+                    </p>
+
+                    {approvalSent ? (
+                      <div className="rounded-md border border-forest-200 bg-forest-50 p-4 text-sm text-forest-800">
+                        <p className="font-medium">Approval email sent!</p>
+                        <p className="mt-1 text-forest-700">Sent to {approvalSent.to}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-sand-600">
+                              Send approval email to
+                            </label>
+                            <input
+                              type="email"
+                              value={approvalRecipientEmail}
+                              onChange={(e) => setApprovalRecipientEmail(e.target.value)}
+                              placeholder="salesperson@example.com"
+                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-clay-400 focus:ring-1 focus:ring-clay-200"
+                            />
+                            <p className="mt-1 text-[11px] text-sand-400">
+                              {selected?.senders[0]?.name
+                                ? `Greeting will address ${selected.senders[0].name.split(" ")[0]} by name.`
+                                : ""}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-sand-600">
+                              Notify me at (for edit requests)
+                            </label>
+                            <input
+                              type="email"
+                              value={approvalNotifyEmail}
+                              onChange={(e) => setApprovalNotifyEmail(e.target.value)}
+                              placeholder="you@example.com"
+                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-clay-400 focus:ring-1 focus:ring-clay-200"
+                            />
+                            <p className="mt-1 text-[11px] text-sand-400">Saved automatically for next time.</p>
+                          </div>
+                        </div>
+
+                        {approvalSendError && (
+                          <p className="mt-3 text-xs text-clay-600">{approvalSendError}</p>
+                        )}
+
+                        <div className="mt-5 flex gap-3">
+                          <Button
+                            onClick={sendForApproval}
+                            disabled={approvalSending || !approvalRecipientEmail}
+                            loading={approvalSending}
+                            size="sm"
+                            variant="primary"
+                            className="bg-clay-500 hover:bg-clay-600"
+                          >
+                            {approvalSending ? "Sending…" : "Send Approval Email"}
+                          </Button>
+                          <Button
+                            onClick={() => setApprovalModalOpen(false)}
+                            size="sm"
+                            variant="secondary"
+                            className="border-sand-300 text-sand-600"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    )}
+
+                    {approvalSent && (
+                      <div className="mt-4">
+                        <Button
+                          onClick={() => setApprovalModalOpen(false)}
+                          size="sm"
+                          variant="secondary"
+                          className="border-sand-300 text-sand-600"
+                        >
+                          Close
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Preview pane */}
               <Card className="eb-rise overflow-hidden p-0">

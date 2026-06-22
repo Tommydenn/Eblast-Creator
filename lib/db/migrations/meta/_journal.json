@@ -8,6 +8,27 @@
       "when": 1777479923025,
       "tag": "0000_confused_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782140631949,
+      "tag": "0001_far_phantom_reporter",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782143957088,
+      "tag": "0002_dashing_vin_gonzales",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782148640433,
+      "tag": "0003_perfect_absorbing_man",
+      "breakpoints": true
     }
   ]
 }

@@ -20,12 +20,6 @@ function extractBody(html: string): string {
   return m ? m[1].trim() : html;
 }
 
-/** Replace base64 data URI image src values with a small transparent placeholder.
- *  Keeps layout intact while cutting payload size from megabytes to kilobytes. */
-function stripDataUriImages(html: string): string {
-  return html.replace(/src="data:[^"]+"/g, 'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"');
-}
-
 /** First name from a full name string. */
 function firstName(name: string | null | undefined): string {
   if (!name) return "there";
@@ -46,7 +40,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
   const approveUrl = `${APP_URL}/approve/${token}`;
   const editsUrl = `${APP_URL}/approve/${token}/edits`;
   const greeting = firstName(recipientName);
-  const eblastBody = stripDataUriImages(extractBody(draftHtml));
+  const eblastBody = extractBody(draftHtml);
 
   const html = `<!DOCTYPE html>
 <html lang="en">

@@ -704,15 +704,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const communityName = community?.displayName ?? slug;
     const draftId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-    // All base64 image data is stored in localStorage keyed by draft ID.
-    // Vercel's ~4.5 MB HTTP body limit means we cannot include any data URIs
-    // in the Postgres payload. The rendered HTML already embeds placed images
-    // inline, so they're recovered from there at load time; originals (pre-crop)
-    // are stored separately for repositioning on the same device.
+    // Cache originals in localStorage for repositioning on the same device.
+    // (Originals are not uploaded to Postgres — they're only needed locally.)
     try {
-      if (allExtractedImageUrls.length > 0) {
-        localStorage.setItem(`eblast-bank-${draftId}`, JSON.stringify(allExtractedImageUrls));
-      }
       const hasOriginals = heroOriginalUrl || secondaryOriginalUrl || (galleryOriginalUrls?.length ?? 0) > 0;
       if (hasOriginals) {
         localStorage.setItem(
@@ -720,9 +714,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           JSON.stringify({ heroOriginalUrl, secondaryOriginalUrl, galleryOriginalUrls }),
         );
       }
-    } catch { /* ignore — originals and bank just won't restore after clearing cache */ }
+    } catch { /* ignore */ }
 
     // Compact draft for Postgres: text + metadata only, no base64 images.
+    // Placed images are recoverable from the inline HTML; the bank is uploaded
+    // separately in small chunks to stay under the 4.5 MB body limit.
     const draft = {
       id: draftId,
       communitySlug: slug,
@@ -738,10 +734,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       subjectSpecialist,
     };
 
-    // Show "Saving…" immediately, then update to success or failure.
+    // Snapshot the image bank now (before any async gaps).
+    const bankSnapshot = [...allExtractedImageUrls];
+
     setSaveNotice({ id: Date.now(), text: `Saving to ${communityName}…` });
     if (saveNoticeTimerRef.current) clearTimeout(saveNoticeTimerRef.current);
 
+    // Step 1: save the text draft.
     fetch("/api/saved-drafts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -749,13 +748,36 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     })
       .then(async (res) => {
         const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
-        if (data.ok) {
-          setCurrentDraftSaved(true);
-          setSaveNotice({ id: Date.now(), text: `Saved — find it on the ${communityName} community page.` });
-        } else {
+        if (!data.ok) {
           setCurrentDraftSaved(false);
           setSaveNotice({ id: Date.now(), text: `Save failed: ${data.error ?? "unknown error"}` });
+          saveNoticeTimerRef.current = setTimeout(() => setSaveNotice(null), 4500);
+          return;
         }
+
+        // Step 2: upload the image bank in chunks of 8 (~1.6 MB each max).
+        // Each chunk is a separate request so no single payload hits the limit.
+        if (bankSnapshot.length > 0) {
+          setSaveNotice({ id: Date.now(), text: `Saving images…` });
+          const CHUNK = 8;
+          const chunks: Array<Array<{ idx: number; url: string }>> = [];
+          for (let i = 0; i < bankSnapshot.length; i += CHUNK) {
+            chunks.push(
+              bankSnapshot.slice(i, i + CHUNK).map((url, j) => ({ idx: i + j, url })),
+            );
+          }
+          // Upload chunks sequentially to avoid overwhelming the connection.
+          for (const chunk of chunks) {
+            await fetch(`/api/saved-drafts/${draftId}/images`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ images: chunk }),
+            });
+          }
+        }
+
+        setCurrentDraftSaved(true);
+        setSaveNotice({ id: Date.now(), text: `Saved — find it on the ${communityName} community page.` });
         saveNoticeTimerRef.current = setTimeout(() => setSaveNotice(null), 4500);
       })
       .catch((err) => {

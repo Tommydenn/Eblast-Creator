@@ -42,10 +42,20 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
   async function openDraft(id: string) {
     setOpeningId(id);
     try {
-      const res = await fetch(`/api/saved-drafts/${encodeURIComponent(id)}`);
-      const data = await res.json();
-      if (data.ok && data.draft) {
-        loadSavedDraft(data.draft as SavedDraft);
+      const [draftRes, imagesRes] = await Promise.all([
+        fetch(`/api/saved-drafts/${encodeURIComponent(id)}`),
+        fetch(`/api/saved-drafts/${encodeURIComponent(id)}/images`),
+      ]);
+      const [draftData, imagesData] = await Promise.all([
+        draftRes.json(),
+        imagesRes.json(),
+      ]);
+      if (draftData.ok && draftData.draft) {
+        const draft = {
+          ...draftData.draft,
+          allExtractedImageUrls: imagesData.ok ? (imagesData.images as string[]) : [],
+        };
+        loadSavedDraft(draft as SavedDraft);
         router.push("/");
       }
     } catch {

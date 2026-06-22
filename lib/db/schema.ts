@@ -18,6 +18,7 @@ import {
   integer,
   boolean,
   jsonb,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm";
 
@@ -289,6 +290,25 @@ export const savedDrafts = pgTable("saved_drafts", {
 
 export type SavedDraftRow = InferSelectModel<typeof savedDrafts>;
 export type NewSavedDraftRow = InferInsertModel<typeof savedDrafts>;
+
+// ---------- draft image bank (one row per extracted image per draft) --------
+// Stored separately so each row is ~50–200 KB — well under Vercel's 4.5 MB
+// HTTP body limit. ON DELETE CASCADE removes images when the draft is deleted.
+
+export const draftImageBank = pgTable(
+  "draft_image_bank",
+  {
+    draftId: text("draft_id")
+      .notNull()
+      .references(() => savedDrafts.id, { onDelete: "cascade" }),
+    idx: integer("idx").notNull(),
+    url: text("url").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.draftId, t.idx] })],
+);
+
+export type DraftImageBankRow = InferSelectModel<typeof draftImageBank>;
+export type NewDraftImageBankRow = InferInsertModel<typeof draftImageBank>;
 
 // ---------- approval threads (magic-link salesperson approvals) -----------
 

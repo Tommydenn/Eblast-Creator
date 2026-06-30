@@ -30,11 +30,16 @@ type ActionResult =
       galleryOriginalUrls: string[];
       allExtractedImageUrls: string[];
       imageCount: number;
-      imageDiagnostic: unknown;
-      review: unknown;
-      agentLoop: unknown;
-      pastSendsContext: unknown;
-      subjectSpecialist: unknown;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      imageDiagnostic: any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      review: any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      agentLoop: any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      pastSendsContext: any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      subjectSpecialist: any;
     }
   | {
       ok: false;

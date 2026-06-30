@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { eq, asc } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { agenticDraftLoop } from "@/lib/agentic-draft";
 import { extractFlyerContent } from "@/lib/anthropic";
@@ -8,6 +9,8 @@ import { buildEblastHtml } from "@/lib/render-email";
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
+import { db } from "@/lib/db";
+import { pdfChunks } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
 // The agentic loop can take 3 rounds × (refine + review). Bumped from 60 →
@@ -40,11 +43,9 @@ export async function POST(req: NextRequest) {
   }
 
   const file = formData.get("file");
+  const uploadId = formData.get("uploadId");
   const communitySlug = formData.get("communitySlug");
 
-  if (!(file instanceof File)) {
-    return NextResponse.json({ ok: false, error: "No PDF file uploaded under field 'file'" }, { status: 400 });
-  }
   if (typeof communitySlug !== "string") {
     return NextResponse.json({ ok: false, error: "Missing communitySlug" }, { status: 400 });
   }
@@ -54,11 +55,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `Unknown community: ${communitySlug}` }, { status: 404 });
   }
 
-  if (file.type !== "application/pdf") {
-    return NextResponse.json({ ok: false, error: `Expected application/pdf, got ${file.type}` }, { status: 415 });
-  }
+  let buffer: Buffer;
 
-  const buffer = Buffer.from(await file.arrayBuffer());
+  if (typeof uploadId === "string") {
+    // Large PDF was uploaded in chunks — reassemble from DB.
+    const chunks = await db
+      .select()
+      .from(pdfChunks)
+      .where(eq(pdfChunks.uploadId, uploadId))
+      .orderBy(asc(pdfChunks.chunkIndex));
+
+    if (chunks.length === 0) {
+      return NextResponse.json({ ok: false, error: "Upload not found or expired — please try again." }, { status: 404 });
+    }
+    if (chunks.length !== chunks[0].totalChunks) {
+      return NextResponse.json(
+        { ok: false, error: `Incomplete upload: received ${chunks.length} of ${chunks[0].totalChunks} chunks.` },
+        { status: 400 },
+      );
+    }
+    buffer = Buffer.concat(chunks.map((c) => Buffer.from(c.data, "base64")));
+    // Clean up chunks — no need to await.
+    db.delete(pdfChunks).where(eq(pdfChunks.uploadId, uploadId)).catch(() => null);
+  } else if (file instanceof File) {
+    if (file.type !== "application/pdf") {
+      return NextResponse.json({ ok: false, error: `Expected application/pdf, got ${file.type}` }, { status: 415 });
+    }
+    buffer = Buffer.from(await file.arrayBuffer());
+  } else {
+    return NextResponse.json({ ok: false, error: "Provide either a 'file' or an 'uploadId'." }, { status: 400 });
+  }
 
   // Pull recent sends for this community first — feeds both the initial
   // draft and the critic so the agents have memory.

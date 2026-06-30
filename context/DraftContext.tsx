@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
-import { draftFromPdfAction } from "@/app/actions/draft-from-pdf";
 
 // ─── Image injection helpers ─────────────────────────────────────────────────
 
@@ -32,6 +31,47 @@ function updateImageSrc(html: string, label: string, newSrc: string): string {
     new RegExp(`<img(?=[^>]*\\bdata-img-label="${escapedLabel}"[^>]*>)[^>]*>`, "gi"),
     (tag) => tag.replace(/\bsrc="[^"]*"/, `src="${newSrc}"`),
   );
+}
+
+// ─── Chunked PDF upload helpers ───────────────────────────────────────────────
+// PDFs larger than ~4 MB are split into 3 MB chunks and staged in the DB via
+// /api/pdf-chunk. The draft route reassembles them using the uploadId.
+
+const CHUNK_BYTES = 3 * 1024 * 1024; // 3 MB raw bytes per chunk
+
+function bytesToBase64(bytes: Uint8Array): string {
+  const step = 0x8000; // 32 KB at a time — avoids stack overflow from spread
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += step) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, Math.min(i + step, bytes.length))));
+  }
+  return btoa(parts.join(""));
+}
+
+async function uploadPdfChunked(
+  file: File,
+  communitySlug: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const uploadId = crypto.randomUUID();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const totalChunks = Math.ceil(bytes.length / CHUNK_BYTES);
+
+  for (let i = 0; i < totalChunks; i++) {
+    const slice = bytes.subarray(i * CHUNK_BYTES, Math.min((i + 1) * CHUNK_BYTES, bytes.length));
+    const res = await fetch("/api/pdf-chunk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uploadId, chunkIndex: i, totalChunks, data: bytesToBase64(slice) }),
+      signal,
+    });
+    if (!res.ok) throw new Error("PDF upload failed — please try again.");
+  }
+
+  const fd = new FormData();
+  fd.append("uploadId", uploadId);
+  fd.append("communitySlug", communitySlug);
+  return fetch("/api/draft-from-pdf", { method: "POST", body: fd, signal });
 }
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -462,20 +502,31 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setUndoStack([]);
     setRedoStack([]);
 
-    const fd = new FormData();
-    fd.append("file", pdf);
-    fd.append("communitySlug", selectedSlug);
-
     try {
-      const data = await draftFromPdfAction(fd);
-      if (!data) throw new Error("Draft generation failed — please try again.");
+      // PDFs over 4 MB are split into 3 MB chunks, staged in the DB, then
+      // reassembled server-side — bypassing Vercel's 4.5 MB body limit.
+      let res: Response;
+      if (pdf.size > 4 * 1024 * 1024) {
+        res = await uploadPdfChunked(pdf, selectedSlug, controller.signal);
+      } else {
+        const fd = new FormData();
+        fd.append("file", pdf);
+        fd.append("communitySlug", selectedSlug);
+        res = await fetch("/api/draft-from-pdf", { method: "POST", body: fd, signal: controller.signal });
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Server error ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}`);
+      }
+      const data = await res.json();
       if (!data.ok) {
         setError(data.error ?? "Draft failed");
         setStage("idle");
         return;
       }
 
-      // Action returns sentinel HTML — inject image data URIs client-side.
+      // Route returns sentinel HTML — inject image data URIs client-side.
       const injectedHtml = injectImages(data.html, {
         hero: data.heroImageUrl,
         secondary: data.secondaryImageUrl,
@@ -503,6 +554,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
       setDuplicateWarning(null);
     } catch (e: any) {
+      if (e?.name === "AbortError") {
+        setStage("idle");
+        return;
+      }
       setError(e?.message ?? String(e));
       setStage("idle");
     }

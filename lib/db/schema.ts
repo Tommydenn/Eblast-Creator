@@ -340,6 +340,25 @@ export const draftImageBank = pgTable(
 export type DraftImageBankRow = InferSelectModel<typeof draftImageBank>;
 export type NewDraftImageBankRow = InferInsertModel<typeof draftImageBank>;
 
+// ---------- pdf chunk staging (temporary storage for large PDF uploads) ---
+// Each row holds one base64-encoded chunk of a PDF being uploaded in pieces
+// to work around Vercel's 4.5 MB Route Handler body limit. Rows are deleted
+// automatically after the draft-from-pdf route reassembles them.
+
+export const pdfChunks = pgTable(
+  "pdf_chunks",
+  {
+    uploadId: text("upload_id").notNull(),
+    chunkIndex: integer("chunk_index").notNull(),
+    totalChunks: integer("total_chunks").notNull(),
+    data: text("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.uploadId, t.chunkIndex] })],
+);
+
+export type PdfChunkRow = InferSelectModel<typeof pdfChunks>;
+
 // ---------- approval threads (magic-link salesperson approvals) -----------
 
 export const approvalThreads = pgTable("approval_threads", {

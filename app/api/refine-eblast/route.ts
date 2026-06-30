@@ -3,6 +3,7 @@ import { getCommunity } from "@/data/communities";
 import { refineFlyerContent } from "@/lib/anthropic";
 import { buildEblastHtml } from "@/lib/render-email";
 import { inlineRelativeImages } from "@/lib/inline-images";
+import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import { cropDataUriToFocusAndRatio } from "@/lib/pdf-images";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
@@ -56,8 +57,9 @@ interface Body {
   heroImageUrl?: string;
   secondaryImageUrl?: string;
   galleryImageUrls?: string[];
-  /** All images extracted from the original PDF — extends the pool beyond current placements. */
-  allExtractedImageUrls?: string[];
+  // allExtractedImageUrls intentionally omitted — too large for request body.
+  // The model can rearrange/crop currently placed images; new images are swapped
+  // via the client-side image bank UI.
 }
 
 export async function POST(req: NextRequest) {
@@ -86,22 +88,12 @@ export async function POST(req: NextRequest) {
     // Build a stable photo manifest the model can reference by index. The names
     // here MUST match the hover labels shown on each image in the preview
     // (render-email.ts data-img-label) so a user can call a photo out by name
-    // and the model maps it to the right slot. Order: placed (cropped) first,
-    // then full-resolution originals from allExtractedImageUrls.
+    // and the model maps it to the right slot. Only currently-placed images are
+    // included — the full image bank is too large to transmit in the request body.
     const pool: Array<{ url: string; name: string; isOriginal: boolean }> = [];
     if (body.heroImageUrl) pool.push({ url: body.heroImageUrl, name: "Hero image", isOriginal: false });
     if (body.secondaryImageUrl) pool.push({ url: body.secondaryImageUrl, name: "Secondary image", isOriginal: false });
     (body.galleryImageUrls ?? []).forEach((u, i) => pool.push({ url: u, name: `Gallery image ${i + 1}`, isOriginal: false }));
-    // Expand pool with original (pre-crop) images from the PDF.
-    if (body.allExtractedImageUrls?.length) {
-      const placed = new Set(pool.map((p) => p.url));
-      body.allExtractedImageUrls.forEach((url) => {
-        if (!placed.has(url)) {
-          pool.push({ url, name: `Original image ${pool.length + 1}`, isOriginal: true });
-          placed.add(url);
-        }
-      });
-    }
     const imageManifestText = pool.length
       ? pool.map((p, i) =>
           p.isOriginal
@@ -164,10 +156,15 @@ export async function POST(req: NextRequest) {
       nextSecondary !== body.secondaryImageUrl ||
       JSON.stringify(nextGallery) !== JSON.stringify(body.galleryImageUrls ?? []);
 
+    // Return sentinel HTML — no image data URIs embedded. The client injects
+    // images from the `images` field (or its own current state) after receiving.
+    const galleryCount = nextGallery.length;
     const html = await inlineRelativeImages(buildEblastHtml(mergedExtracted, community, {
-      heroImageUrl: nextHero,
-      secondaryImageUrl: nextSecondary,
-      galleryImageUrls: nextGallery,
+      heroImageUrl: nextHero ? SENTINEL_HERO : undefined,
+      secondaryImageUrl: nextSecondary ? SENTINEL_SECONDARY : undefined,
+      galleryImageUrls: galleryCount > 0
+        ? Array.from({ length: galleryCount }, (_, i) => sentinelGallery(i))
+        : undefined,
     }));
     // Human-readable labels for the history pill (a tracked subset)…
     const changedFields = getChangedFields(body.current, mergedExtracted);
@@ -177,12 +174,18 @@ export async function POST(req: NextRequest) {
     const textChanged = stableStringify(mergedExtracted) !== stableStringify(body.current);
     const noChange = !textChanged && !imagesChanged;
 
+    // Only return image data when the layout actually changed — avoids echoing
+    // large base64 data URIs back to the client when images are unchanged.
+    const images = imagesChanged
+      ? { hero: nextHero, secondary: nextSecondary, gallery: nextGallery }
+      : null;
+
     return NextResponse.json({
       ok: true,
       extracted: mergedExtracted,
       html,
       changedFields,
-      images: { hero: nextHero, secondary: nextSecondary, gallery: nextGallery },
+      images,
       imagesChanged,
       refineNote: result.refineNote ?? null,
       noChange,

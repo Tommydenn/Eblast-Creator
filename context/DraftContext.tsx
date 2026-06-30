@@ -2,6 +2,36 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
+
+// ─── Image injection helpers ─────────────────────────────────────────────────
+
+// Injects base64 image data URIs into a server-rendered HTML template that
+// uses sentinel placeholder values instead of actual data URIs. Avoids sending
+// megabytes of image data in API request/response bodies.
+function injectImages(
+  html: string,
+  images: { hero?: string; secondary?: string; gallery?: string[] },
+): string {
+  let result = html;
+  if (images.hero) result = result.replaceAll(`"${SENTINEL_HERO}"`, `"${images.hero}"`);
+  if (images.secondary) result = result.replaceAll(`"${SENTINEL_SECONDARY}"`, `"${images.secondary}"`);
+  (images.gallery ?? []).forEach((src, i) => {
+    result = result.replaceAll(`"${sentinelGallery(i)}"`, `"${src}"`);
+  });
+  return result;
+}
+
+// Replaces the src attribute of a specific img element (identified by its
+// data-img-label) in the HTML. Used for client-side image swap/reposition
+// that doesn't change the structural layout.
+function updateImageSrc(html: string, label: string, newSrc: string): string {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return html.replace(
+    new RegExp(`<img(?=[^>]*\\bdata-img-label="${escapedLabel}"[^>]*>)[^>]*>`, "gi"),
+    (tag) => tag.replace(/\bsrc="[^"]*"/, `src="${newSrc}"`),
+  );
+}
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -441,6 +471,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         body: fd,
         signal: controller.signal,
       });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        if (res.status === 413) throw new Error("The PDF file is too large. Please use a smaller PDF (under 4 MB).");
+        throw new Error(`Server error ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}`);
+      }
       const data = await res.json();
       if (!data.ok) {
         setError(data.error ?? "Draft failed");
@@ -541,7 +576,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           heroImageUrl,
           secondaryImageUrl,
           galleryImageUrls,
-          allExtractedImageUrls,
+          // allExtractedImageUrls omitted — too large for request body
         }),
       });
       const data = await res.json();
@@ -551,21 +586,24 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         setStage("preview");
         return;
       }
+      // The server returns sentinel HTML (no embedded images). Resolve the final
+      // image arrangement, then inject actual data URIs into the HTML client-side.
+      const finalImages = data.imagesChanged && data.images
+        ? { hero: data.images.hero as string | undefined, secondary: data.images.secondary as string | undefined, gallery: (data.images.gallery ?? []) as string[] }
+        : { hero: heroImageUrl, secondary: secondaryImageUrl, gallery: galleryImageUrls ?? [] };
+
       setExtracted(data.extracted);
-      setHtml(data.html);
-      // Apply the server-resolved image arrangement (unchanged unless the user
-      // explicitly asked to change photos).
-      if (data.images) {
-        setHeroImageUrl(data.images.hero ?? undefined);
-        setSecondaryImageUrl(data.images.secondary ?? undefined);
-        setGalleryImageUrls(data.images.gallery ?? []);
+      setHtml(injectImages(data.html, finalImages));
+
+      if (data.imagesChanged && data.images) {
+        setHeroImageUrl(finalImages.hero);
+        setSecondaryImageUrl(finalImages.secondary);
+        setGalleryImageUrls(finalImages.gallery);
         // Originals are unknown after a refine-driven image swap — clear them
         // so repositioning doesn't try to use a stale original.
-        if (data.imagesChanged) {
-          setHeroOriginalUrl(undefined);
-          setSecondaryOriginalUrl(undefined);
-          setGalleryOriginalUrls([]);
-        }
+        setHeroOriginalUrl(undefined);
+        setSecondaryOriginalUrl(undefined);
+        setGalleryOriginalUrls([]);
       }
       setHtmlDirty(false);
       setRefineHistory((h) => [
@@ -653,14 +691,18 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({
           extracted: current,
           communitySlug: slug,
-          heroImageUrl: heroImageUrlRef.current,
-          secondaryImageUrl: secondaryImageUrlRef.current,
-          galleryImageUrls: galleryImageUrlsRef.current,
+          hasHero: !!heroImageUrlRef.current,
+          hasSecondary: !!secondaryImageUrlRef.current,
+          galleryCount: galleryImageUrlsRef.current.length,
         }),
       });
       const data = await res.json();
       if (data.ok) {
-        setHtml(data.html);
+        setHtml(injectImages(data.html, {
+          hero: heroImageUrlRef.current,
+          secondary: secondaryImageUrlRef.current,
+          gallery: galleryImageUrlsRef.current,
+        }));
         setHtmlDirty(false);
       }
     } catch (e) {
@@ -925,14 +967,18 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({
           extracted: current,
           communitySlug: slug,
-          heroImageUrl: newHero,
-          secondaryImageUrl: newSecondary,
-          galleryImageUrls: newGallery,
+          hasHero: !!newHero,
+          hasSecondary: !!newSecondary,
+          galleryCount: newGallery.length,
         }),
       });
       const data = await res.json();
       if (data.ok) {
-        setHtml(data.html);
+        setHtml(injectImages(data.html, {
+          hero: newHero,
+          secondary: newSecondary,
+          gallery: newGallery,
+        }));
         setHtmlDirty(false);
       }
     } catch (e) {
@@ -991,29 +1037,59 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setGalleryOriginalUrls(newGalleryOriginals);
     }
 
+    // Capture which slots had images BEFORE the swap so we know if a structural
+    // re-render is needed (slot going from empty → populated changes layout).
+    const hadHero = !!heroImageUrlRef.current;
+    const hadSecondary = !!secondaryImageUrlRef.current;
+    const hadGallery = galleryImageUrlsRef.current.length;
+
     setHeroImageUrl(newHero);
     setSecondaryImageUrl(newSecondary);
     setGalleryImageUrls(newGallery);
 
-    try {
-      const res = await fetch("/api/render-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          extracted: current,
-          communitySlug: slug,
-          heroImageUrl: newHero,
-          secondaryImageUrl: newSecondary,
-          galleryImageUrls: newGallery,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setHtml(data.html);
-        setHtmlDirty(false);
+    const needsRerender =
+      (!!newHero !== hadHero) ||
+      (!!newSecondary !== hadSecondary) ||
+      (newGallery.length !== hadGallery);
+
+    if (needsRerender) {
+      // Structural change (slot added) — re-render the full template via server.
+      try {
+        const res = await fetch("/api/render-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            extracted: current,
+            communitySlug: slug,
+            hasHero: !!newHero,
+            hasSecondary: !!newSecondary,
+            galleryCount: newGallery.length,
+          }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setHtml(injectImages(data.html, {
+            hero: newHero,
+            secondary: newSecondary,
+            gallery: newGallery,
+          }));
+          setHtmlDirty(false);
+        }
+      } catch (e) {
+        console.error("[DraftProvider] swapImage render failed:", e);
       }
-    } catch (e) {
-      console.error("[DraftProvider] swapImage render failed:", e);
+    } else {
+      // Same slots, just different images — update src attributes client-side.
+      setHtml((prev) => {
+        let next = prev;
+        if (newHero && slot === "hero") next = updateImageSrc(next, "Hero image", newHero);
+        if (newSecondary && slot === "secondary") next = updateImageSrc(next, "Secondary image", newSecondary);
+        if (slot === "gallery" && galleryIdx !== undefined && newGallery[galleryIdx]) {
+          next = updateImageSrc(next, `Gallery image ${galleryIdx + 1}`, newGallery[galleryIdx]);
+        }
+        return next;
+      });
+      setHtmlDirty(false);
     }
     setCurrentDraftSaved(false);
   }
@@ -1059,26 +1135,17 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setSecondaryImageUrl(newSecondary);
     setGalleryImageUrls(newGallery);
 
-    try {
-      const res = await fetch("/api/render-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          extracted: current,
-          communitySlug: slug,
-          heroImageUrl: newHero,
-          secondaryImageUrl: newSecondary,
-          galleryImageUrls: newGallery,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setHtml(data.html);
-        setHtmlDirty(false);
+    // Repositioning only changes the crop of an existing slot — update src client-side.
+    setHtml((prev) => {
+      let next = prev;
+      if (slot === "hero" && newHero) next = updateImageSrc(next, "Hero image", newHero);
+      if (slot === "secondary" && newSecondary) next = updateImageSrc(next, "Secondary image", newSecondary);
+      if (slot === "gallery" && galleryIdx !== undefined && newGallery[galleryIdx]) {
+        next = updateImageSrc(next, `Gallery image ${galleryIdx + 1}`, newGallery[galleryIdx]);
       }
-    } catch (e) {
-      console.error("[DraftProvider] repositionImage render failed:", e);
-    }
+      return next;
+    });
+    setHtmlDirty(false);
     setCurrentDraftSaved(false);
   }
 

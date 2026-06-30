@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
+import { savedDraftApprovals } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages } from "@/lib/hubspot";
@@ -134,14 +134,8 @@ export default async function ApprovePage({ params, searchParams }: Props) {
   }
 
   // ── Default: show confirmation page with eblast preview ──────────────────
-  const [draftRow] = await db
-    .select()
-    .from(savedDrafts)
-    .where(eq(savedDrafts.id, approval.savedDraftId))
-    .limit(1);
-
-  const draftData = (draftRow?.data as Record<string, any>) ?? {};
-  const previewHtml: string = draftData?.html ?? "";
+  // The preview is loaded in an iframe via /api/draft-preview/[token] so
+  // images render correctly without embedding large base64 data URIs server-side.
 
   return (
     <div style={{ margin: 0, padding: 0, background: "#f5f4f1", minHeight: "100vh", fontFamily: "Georgia, serif" }}>
@@ -173,7 +167,7 @@ export default async function ApprovePage({ params, searchParams }: Props) {
           </a>
         </div>
 
-        {/* Eblast preview */}
+        {/* Eblast preview — loaded in an iframe so images render correctly */}
         <div style={{ background: "#f0ece4", borderRadius: "6px 6px 0 0", padding: "8px 24px",
                       border: "1px solid #e0ddd7", borderBottom: "none" }}>
           <p style={{ margin: 0, fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase",
@@ -182,8 +176,13 @@ export default async function ApprovePage({ params, searchParams }: Props) {
           </p>
         </div>
         <div style={{ background: "#fff", border: "1px solid #e0ddd7", borderTop: "none",
-                      borderRadius: "0 0 6px 6px", marginBottom: 40 }}>
-          <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                      borderRadius: "0 0 6px 6px", marginBottom: 40, overflow: "hidden" }}>
+          <iframe
+            src={`/api/draft-preview/${token}`}
+            style={{ display: "block", width: "100%", minHeight: 900, border: "none" }}
+            title="Eblast draft preview"
+            scrolling="yes"
+          />
         </div>
 
         {/* Bottom CTA repeat */}
@@ -234,10 +233,12 @@ function StatusPage({ status, communityName, subject }: { status: string; commun
     <Shell>
       <Icon color={isApproved ? "#2d6a4f" : "#b45309"}>{isApproved ? "✓" : "✎"}</Icon>
       <h1 style={{ margin: "0 0 12px", fontSize: 22, color: "#2d2926", fontWeight: "normal" }}>
-        {isApproved ? "Already approved" : "Edits already requested"}
+        {isApproved ? "Already approved" : "Your edits are on the way"}
       </h1>
       <p style={{ margin: "0 0 8px", fontSize: 15, lineHeight: 1.6, color: "#5c4a3a" }}>
-        This draft has already been {isApproved ? "approved and pushed to HubSpot" : "sent back for edits"}.
+        {isApproved
+          ? "This draft has already been approved and pushed to HubSpot."
+          : "You've already submitted edit notes for this draft. The team is working on the updates — once the revised version is ready, you'll receive a new review email with a fresh link to approve it."}
       </p>
       {subject && (
         <p style={{ margin: 0, fontSize: 13, color: "#9e9484", fontFamily: "Arial, sans-serif" }}>

@@ -4,6 +4,7 @@ import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { sendApprovalEmail } from "@/lib/email";
+import { swapDataUrisForHostedImages } from "@/lib/hubspot";
 import { randomBytes } from "node:crypto";
 
 export const runtime = "nodejs";
@@ -62,13 +63,28 @@ export async function POST(req: NextRequest) {
     decision: "pending",
   });
 
+  // Upload embedded base64 images to HubSpot so they render in email clients.
+  // Base64 data URIs are stripped by Gmail/Outlook — hosted CDN URLs work everywhere.
+  let emailHtml = draftHtml;
+  try {
+    const swap = await swapDataUrisForHostedImages({
+      html: draftHtml,
+      folderPath: `/eblast-drafter/${communitySlug}/approval-previews`,
+    });
+    if (swap.failures.length === 0) {
+      emailHtml = swap.html;
+    }
+  } catch {
+    // Fall back to raw HTML if HubSpot upload fails — email sends but images may be missing.
+  }
+
   try {
     await sendApprovalEmail({
       to: recipientEmail,
       recipientName: recipientName ?? null,
       communityName: community.displayName,
       draftSubject,
-      draftHtml,
+      draftHtml: emailHtml,
       token,
     });
   } catch (e: any) {

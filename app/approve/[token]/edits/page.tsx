@@ -8,6 +8,7 @@ export default function RequestEditsPage() {
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [autoRefined, setAutoRefined] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,6 +22,7 @@ export default function RequestEditsPage() {
       });
       const data = await res.json();
       if (data.ok) {
+        setAutoRefined(!!data.autoRefined);
         setStatus("done");
       } else {
         setErrorMsg(data.error ?? "Something went wrong.");
@@ -60,10 +62,12 @@ export default function RequestEditsPage() {
             ✓
           </div>
           <h1 style={{ margin: "0 0 12px", fontSize: 22, color: "#2d2926", fontWeight: "normal" }}>
-            Edit request received
+            {autoRefined ? "Updates applied!" : "Edit request received"}
           </h1>
           <p style={{ margin: 0, fontSize: 15, lineHeight: 1.7, color: "#5c4a3a" }}>
-            Thank you! We&rsquo;ve received your notes and will have an updated version to you shortly.
+            {autoRefined
+              ? "Your notes were applied automatically. Check your email — a fresh draft is on its way for your review."
+              : "Thank you! Your notes have been passed to the marketing team. They’ll send you a new draft to review once the updates are made."}
           </p>
         </div>
       </div>
@@ -124,7 +128,7 @@ export default function RequestEditsPage() {
                 opacity: notes.trim() ? 1 : 0.5,
               }}
             >
-              {status === "submitting" ? "Sending…" : "Submit Edit Request"}
+              {status === "submitting" ? "Reviewing your notes…" : "Submit Edit Request"}
             </button>
             <a href={`/approve/${token}`}
                style={{ fontSize: 14, color: "#9e9484", fontFamily: "Arial, sans-serif",

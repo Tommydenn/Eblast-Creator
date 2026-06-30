@@ -141,6 +141,14 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
         imageManifestText,
       });
 
+      // If the model flagged this as out of scope (e.g. "use a different image",
+      // "add a new photo"), skip the apply path entirely and fall through to the
+      // human notification so no half-baked edit gets saved or emailed.
+      if (result.isOutOfScope) {
+        refineNote = result.refineNote ?? null;
+        throw new Error("out-of-scope");
+      }
+
       const mergedExtracted: ExtractedFlyer = { ...currentExtracted, ...result.flyer };
       const textChanged = stableStringify(mergedExtracted) !== stableStringify(currentExtracted);
 
@@ -229,8 +237,10 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       }
 
       // Refinement produced no changes → treat as out-of-scope, fall through to notification.
-    } catch (e) {
-      console.error("[draft-approval/edits] auto-refine failed:", e);
+    } catch (e: any) {
+      if (e?.message !== "out-of-scope") {
+        console.error("[draft-approval/edits] auto-refine failed:", e);
+      }
       // Fall through to manual notification.
     }
   }

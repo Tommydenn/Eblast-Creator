@@ -206,6 +206,13 @@ export interface RefineResult {
   refineNote?: string;
   /** Present only when the user explicitly asked to crop or reframe a photo. */
   imageCropInstructions?: Array<{ imageIndex: number; focus: string }>;
+  /**
+   * True when the request cannot be fulfilled at all through text/copy edits —
+   * e.g. "use a different image", "add a new photo", "change the layout".
+   * The approval edits route uses this to skip applying the refinement and
+   * route the request to a human instead.
+   */
+  isOutOfScope?: boolean;
 }
 
 // Refine schema = the extract schema plus two refine-only, non-required fields:
@@ -262,6 +269,11 @@ const refineFlyerToolSchema = {
         },
       },
     },
+    isOutOfScope: {
+      type: "boolean",
+      description:
+        "Set to true ONLY when the salesperson's request CANNOT be fulfilled at all through text/copy editing alone — for example: requests to use a different photo that isn't already in the email, add a brand-new image, change the layout or design, update branding, or any task that requires sourcing new assets or human design work. When true, return ALL content fields with their current values completely unchanged — do NOT make any content edits. Leave this field undefined (do not include it) for requests that can be handled through text changes, even partially.",
+    },
   },
 };
 
@@ -304,7 +316,8 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
 - To REMOVE the text in a field (e.g. "remove the pull quote"), set that field to an empty string "" — do not invent a replacement.
 - If the user's instruction implies a small cascading change (e.g. shortening a headline that a script subhead quotes), make the minimum cascading change and explain nothing.
 - Always return the FULL updated object via the extract_flyer tool (every text field), so nothing is accidentally dropped.
-- Set \`refineNote\` to one short sentence describing what you changed (or an "I couldn't ..." explanation if part of the request is out of scope).${imageBlock}`,
+- Set \`refineNote\` to one short sentence describing what you changed (or an "I couldn't ..." explanation if part of the request is out of scope).
+- If the request CANNOT be handled through text/copy editing at all (e.g. "use a different photo", "add a new image", "change the layout", "update the branding"), set \`isOutOfScope=true\` AND return every content field with its current value completely unchanged. Do not attempt any edits when isOutOfScope is true.${imageBlock}`,
     tools: [
       {
         name: "extract_flyer",
@@ -325,11 +338,12 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
   if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
     throw new Error("Claude did not return tool_use output for refinement.");
   }
-  const { imageLayout, refineNote, imageCropInstructions, ...flyer } = toolUseBlock.input as any;
+  const { imageLayout, refineNote, imageCropInstructions, isOutOfScope, ...flyer } = toolUseBlock.input as any;
   return {
     flyer: flyer as ExtractedFlyer,
     imageLayout: imageLayout as RefineImageLayout | undefined,
     refineNote: typeof refineNote === "string" ? refineNote : undefined,
     imageCropInstructions: Array.isArray(imageCropInstructions) ? imageCropInstructions as Array<{ imageIndex: number; focus: string }> : undefined,
+    isOutOfScope: isOutOfScope === true ? true : undefined,
   };
 }

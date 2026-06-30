@@ -7,6 +7,7 @@ import { rankImagesByRelevance } from "@/lib/image-selector";
 import { buildEblastHtml } from "@/lib/render-email";
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
+import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
 
 export const runtime = "nodejs";
 // The agentic loop can take 3 rounds × (refine + review). Bumped from 60 →
@@ -154,10 +155,15 @@ export async function POST(req: NextRequest) {
     ...rawGallery.map((uri) => cropDataUriToAspectRatio(uri, 4 / 3)),
   ]);
 
+  // Use sentinel placeholders — images are returned as separate fields and
+  // injected client-side, so they aren't duplicated inside the HTML blob.
+  const galleryCount = (galleryImageUrls as (string | undefined)[]).filter(Boolean).length;
   const html = await inlineRelativeImages(buildEblastHtml(extracted, community, {
-    heroImageUrl,
-    secondaryImageUrl,
-    galleryImageUrls,
+    heroImageUrl: heroImageUrl ? SENTINEL_HERO : undefined,
+    secondaryImageUrl: secondaryImageUrl ? SENTINEL_SECONDARY : undefined,
+    galleryImageUrls: galleryCount > 0
+      ? Array.from({ length: galleryCount }, (_, i) => sentinelGallery(i))
+      : undefined,
   }));
 
   // All original (pre-crop) ranked images — passed to the refine tool so the

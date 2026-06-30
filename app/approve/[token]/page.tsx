@@ -69,13 +69,15 @@ export default async function ApprovePage({ params, searchParams }: Props) {
         path: hubspotPath,
         html: swap.html,
         label: `${community.displayName} — ${templateFileName}`,
+        communityName: community.displayName,
+        communityAddress: community.address,
       });
       if (!upload.ok) throw new Error(`Template upload failed: ${upload.status}`);
 
       const create = await createEmail({
         name: generateHubspotEmailName({
           acronym: community.hubspot.acronym,
-          eyebrow: (draftData.extracted as any)?.eyebrow,
+          eventCategory: (draftData.extracted as any)?.eventCategory,
         }),
         subject,
         fromName: community.senders[0]?.name ?? community.displayName,

@@ -60,23 +60,41 @@ async function call(step: string, init: { method: string; url: string; body?: an
 // the design intact. Our footer's hardcoded copy is replaced with HubSpot's
 // `email_footer` module so the unsubscribe links resolve to real values.
 
-function wrapAsHubLEmailTemplate(html: string, label: string): string {
+function formatCommunityAddress(addr?: { street?: string; city?: string; state?: string; zip?: string }): string {
+  if (!addr) return "";
+  const line1 = addr.street ?? "";
+  const cityState = addr.city ?? "";
+  const stateZip = [addr.state, addr.zip].filter(Boolean).join(" ");
+  const line2 = [cityState, stateZip].filter(Boolean).join(", ");
+  return [line1, line2].filter(Boolean).join("<br>");
+}
+
+function wrapAsHubLEmailTemplate(
+  html: string,
+  label: string,
+  communityName?: string,
+  communityAddress?: { street?: string; city?: string; state?: string; zip?: string },
+): string {
   const stripped = html
-    // Remove our designed footer row — HubSpot's CAN-SPAM module (below) replaces it.
+    // Remove our designed footer row — replaced below with community-specific CAN-SPAM footer.
     .replace(/<tr[^>]*data-section="Footer"[^>]*>[\s\S]*?<\/tr>/, "")
     .replace(/\{\{\s*unsubscribe_link\s*\}\}/g, "{{ unsubscribe_link }}")
     .replace(/\{\{\s*manage_preferences\s*\}\}/g, "{{ unsubscribe_section_url }}");
 
+  const nameHtml = communityName ? `${communityName}<br>` : "A Great Lakes Management Community<br>";
+  const addrHtml = formatCommunityAddress(communityAddress);
+
   // HubSpot's compliance footer must live inside <body>, not after </html>.
+  // We build a community-specific physical address block instead of relying on
+  // HubSpot's portal-global registered address — each community has its own address.
   const complianceBlock = `
 {# HubSpot-required CAN-SPAM compliance footer (unsubscribe + physical address) #}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#FBF7EE;">
   <tr><td align="center" style="padding: 16px 36px 32px 36px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #888; line-height: 1.7;">
-    A Great Lakes Management Community<br>
-    {% module_block module "compliance_footer" path="@hubspot/email_footer", label="Email footer" %}
-      {% module_attribute "show_address" %}true{% end_module_attribute %}
-      {% module_attribute "show_can_spam_message" %}false{% end_module_attribute %}
-    {% end_module_block %}
+    ${nameHtml}${addrHtml ? `${addrHtml}<br>` : ""}
+    <a href="{{ unsubscribe_link }}" style="color:#888; text-decoration:underline;">Unsubscribe</a>
+    &nbsp;&middot;&nbsp;
+    <a href="{{ unsubscribe_section_url }}" style="color:#888; text-decoration:underline;">Manage Preferences</a>
   </td></tr>
 </table>`;
 
@@ -95,19 +113,19 @@ ${withCompliance}
 
 /**
  * Generate the HubSpot email "name" (list view label) in the format:
- * "{Acronym} - {Title Case eyebrow} - {Month} {Year}"
+ * "{Acronym} - {Event Category} - {Month} {Year}"
  * e.g. "CB - Open House - June 2026"
  */
 export function generateHubspotEmailName(opts: {
   acronym?: string;
-  eyebrow?: string;
+  eventCategory?: string;
   date?: Date;
 }): string {
-  const { acronym = "Eblast", eyebrow, date = new Date() } = opts;
+  const { acronym = "Eblast", eventCategory, date = new Date() } = opts;
   const month = date.toLocaleString("en-US", { month: "long" });
   const year = date.getFullYear();
-  const description = eyebrow
-    ? eyebrow
+  const description = eventCategory
+    ? eventCategory
         .split(/\s+/)
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(" ")
@@ -339,8 +357,10 @@ export async function uploadEmailTemplate(opts: {
   path: string;       // e.g. "email-templates/caretta-dining.html"
   html: string;
   label?: string;
+  communityName?: string;
+  communityAddress?: { street?: string; city?: string; state?: string; zip?: string };
 }): Promise<ApiCallResult> {
-  const wrapped = wrapAsHubLEmailTemplate(opts.html, opts.label ?? "Eblast Drafter Template");
+  const wrapped = wrapAsHubLEmailTemplate(opts.html, opts.label ?? "Eblast Drafter Template", opts.communityName, opts.communityAddress);
   const url = `${HUBSPOT_BASE}/cms/v3/source-code/published/content/${opts.path}`;
 
   const fileName = opts.path.split("/").pop() ?? "template.html";

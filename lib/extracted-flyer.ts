@@ -68,6 +68,14 @@ export interface ExtractedFlyer {
   footerAddress?: string;  // default: "{street} · {city}, {state} {zip}"
 
   /**
+   * 1–3 generic words classifying the event type — used for the HubSpot email
+   * name so the list view is scannable. e.g. "Open House", "Social Event",
+   * "Presentation", "Info Session", "Community Tour", "Dining Event".
+   * Not specific to this flyer — just the category.
+   */
+  eventCategory?: string;
+
+  /**
    * 1–2 sentences from the drafter explaining which past-send patterns or
    * brand rules they leaned on. Surfaced in the UI under "Intelligence
    * applied" so the user can see how the agent's memory shaped the draft.

@@ -120,6 +120,8 @@ export interface ExtractedFlyer {
   galleryLabel?: string;
   footerName?: string;
   footerAddress?: string;
+  // 1–3 word generic event type used for the HubSpot email list name.
+  eventCategory?: string;
 }
 
 export type FindingSeverity = "blocker" | "important" | "nice_to_have";
@@ -781,7 +783,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           communitySlug: activeCommunitySlug,
           subject: extracted.subject,
           previewText: extracted.previewText,
-          eyebrow: extracted.eyebrow,
+          eventCategory: extracted.eventCategory,
           html: pushHtml,
         }),
       });

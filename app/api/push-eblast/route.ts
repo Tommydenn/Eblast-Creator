@@ -17,8 +17,8 @@ interface PushBody {
   previewText?: string;
   /** Optional override of the draft name in HubSpot. */
   name?: string;
-  /** Short eyebrow description (e.g. "OPEN HOUSE") used to build the HubSpot email name. */
-  eyebrow?: string;
+  /** 1–3 word generic event category (e.g. "Open House") used to build the HubSpot email name. */
+  eventCategory?: string;
   /** Inline HTML to use as the email body (preferred). */
   html?: string;
   /** Or: filename of a template under data/communities/{slug}/templates/. */
@@ -116,6 +116,8 @@ export async function POST(req: NextRequest) {
     path: hubspotPath,
     html: finalHtml,
     label: `${community.displayName} — ${templateFileName}`,
+    communityName: community.displayName,
+    communityAddress: community.address,
   });
   if (!upload.ok) {
     console.error(`[push-eblast] upload failed status=${upload.status}`, JSON.stringify(upload.body));
@@ -146,7 +148,7 @@ export async function POST(req: NextRequest) {
   const create = await createEmail({
     name: body.name ?? generateHubspotEmailName({
       acronym: community.hubspot.acronym,
-      eyebrow: body.eyebrow,
+      eventCategory: body.eventCategory,
     }),
     subject: body.subject,
     previewText: body.previewText,

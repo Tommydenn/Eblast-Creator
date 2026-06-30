@@ -71,6 +71,10 @@ const extractFlyerToolSchema = {
       items: { type: "string" },
       description: "Who this is for, e.g. ['adult children of prospects', 'current residents'].",
     },
+    eventCategory: {
+      type: "string",
+      description: "1–3 generic words naming the event type — used as the HubSpot email name so the list view is scannable. Choose the broadest accurate category: 'Open House', 'Social Event', 'Presentation', 'Info Session', 'Community Tour', 'Dining Event', 'Health & Wellness', 'Music & Entertainment'. Do NOT use the specific event title — just the category.",
+    },
     drafterRationale: {
       type: "string",
       description:

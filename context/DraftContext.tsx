@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
+import { compressPdfIfNeeded } from "@/lib/compress-pdf-client";
 
 // ─── Image injection helpers ─────────────────────────────────────────────────
 
@@ -461,8 +462,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setUndoStack([]);
     setRedoStack([]);
 
+    const pdfToUpload = await compressPdfIfNeeded(pdf);
+
     const fd = new FormData();
-    fd.append("file", pdf);
+    fd.append("file", pdfToUpload);
     fd.append("communitySlug", selectedSlug);
 
     try {

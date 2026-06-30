@@ -89,9 +89,6 @@ const EBLAST_EDIT_SCRIPT = `(function(){
         var nw=tmp.naturalWidth, nh=tmp.naturalHeight;
         // Ensure BOTH axes have at least 12% panning room, regardless of aspect ratio.
         var MARGIN=0.12;
-        var scaleX=(cw/nw)*(1+MARGIN), scaleY=(ch/nh)*(1+MARGIN);
-        var scale=Math.max(scaleX,scaleY);
-        var bgW=Math.round(nw*scale), bgH=Math.round(nh*scale);
         // Normalize colors: draw through Canvas → export as sRGB JPEG.
         var maxSide=1600;
         var nrmW=nw>maxSide?maxSide:nw, nrmH=Math.round(nh*(nrmW/nw));
@@ -99,7 +96,10 @@ const EBLAST_EDIT_SCRIPT = `(function(){
         canvas.width=nrmW; canvas.height=nrmH;
         canvas.getContext('2d').drawImage(tmp,0,0,nrmW,nrmH);
         var normSrc=canvas.toDataURL('image/jpeg',0.92);
-        // Recalculate bg dimensions against the normalized (possibly resampled) size
+        // Scale the normalized image to fill the container with panning room.
+        // Must use nrmW/nrmH (not nw/nh) — they differ when the image was downsampled.
+        var scaleX=(cw/nrmW)*(1+MARGIN), scaleY=(ch/nrmH)*(1+MARGIN);
+        var scale=Math.max(scaleX,scaleY);
         var bgWn=Math.round(nrmW*scale), bgHn=Math.round(nrmH*scale);
         var div=document.createElement('div');
         div.setAttribute('data-img-label',lbl);

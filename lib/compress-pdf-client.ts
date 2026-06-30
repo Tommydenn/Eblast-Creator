@@ -105,13 +105,13 @@ export async function compressPdfIfNeeded(
       context.assign(ref, PDFRawStream.of(d, result.bytes));
     }
 
-    const saved: Uint8Array = await pdfDoc.save();
+    const saved = new Uint8Array(await pdfDoc.save() as Uint8Array<ArrayBuffer>);
     if (saved.length <= maxBytes) {
       return new File([saved], file.name, { type: "application/pdf" });
     }
   }
 
   // Return best-effort result even if still over the limit.
-  const best: Uint8Array = await pdfDoc.save();
+  const best = new Uint8Array(await pdfDoc.save() as Uint8Array<ArrayBuffer>);
   return new File([best], file.name, { type: "application/pdf" });
 }

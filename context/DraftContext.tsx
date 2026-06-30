@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
-import { compressPdfIfNeeded } from "@/lib/compress-pdf-client";
+import { draftFromPdfAction } from "@/app/actions/draft-from-pdf";
 
 // ─── Image injection helpers ─────────────────────────────────────────────────
 
@@ -462,32 +462,20 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setUndoStack([]);
     setRedoStack([]);
 
-    const pdfToUpload = await compressPdfIfNeeded(pdf);
-
     const fd = new FormData();
-    fd.append("file", pdfToUpload);
+    fd.append("file", pdf);
     fd.append("communitySlug", selectedSlug);
 
     try {
-      const res = await fetch("/api/draft-from-pdf", {
-        method: "POST",
-        body: fd,
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        if (res.status === 413) throw new Error("The PDF file is too large. Please compress it and try again.");
-        throw new Error(`Server error ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}`);
-      }
-      const data = await res.json();
+      const data = await draftFromPdfAction(fd);
+      if (!data) throw new Error("Draft generation failed — please try again.");
       if (!data.ok) {
         setError(data.error ?? "Draft failed");
         setStage("idle");
         return;
       }
 
-      // Route returns sentinel HTML — inject the returned image data URIs
-      // client-side so images aren't duplicated inside the response body.
+      // Action returns sentinel HTML — inject image data URIs client-side.
       const injectedHtml = injectImages(data.html, {
         hero: data.heroImageUrl,
         secondary: data.secondaryImageUrl,
@@ -515,11 +503,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
       setDuplicateWarning(null);
     } catch (e: any) {
-      if (e?.name === "AbortError") {
-        setStage("idle");
-        return;
-      }
-      setError(String(e));
+      setError(e?.message ?? String(e));
       setStage("idle");
     }
   }

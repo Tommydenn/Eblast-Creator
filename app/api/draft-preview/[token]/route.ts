@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { inlineRelativeImages } from "@/lib/inline-images";
 
 export const runtime = "nodejs";
 
@@ -37,7 +38,8 @@ export async function GET(
   }
 
   const draftData = draftRow.data as Record<string, any>;
-  const html: string = draftData?.html ?? "<p>No preview available.</p>";
+  const rawHtml: string = draftData?.html ?? "<p>No preview available.</p>";
+  const html = await inlineRelativeImages(rawHtml);
 
   return new NextResponse(html, {
     status: 200,

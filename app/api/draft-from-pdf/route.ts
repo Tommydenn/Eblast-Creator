@@ -5,6 +5,7 @@ import { extractFlyerContent } from "@/lib/anthropic";
 import { extractImagesFromPdf, cropDataUriToAspectRatio } from "@/lib/pdf-images";
 import { rankImagesByRelevance } from "@/lib/image-selector";
 import { buildEblastHtml } from "@/lib/render-email";
+import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 
 export const runtime = "nodejs";
@@ -153,11 +154,11 @@ export async function POST(req: NextRequest) {
     ...rawGallery.map((uri) => cropDataUriToAspectRatio(uri, 4 / 3)),
   ]);
 
-  const html = buildEblastHtml(extracted, community, {
+  const html = await inlineRelativeImages(buildEblastHtml(extracted, community, {
     heroImageUrl,
     secondaryImageUrl,
     galleryImageUrls,
-  });
+  }));
 
   // All original (pre-crop) ranked images — passed to the refine tool so the
   // AI can reference them for fresh crops, and shown in the image bank so the

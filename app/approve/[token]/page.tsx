@@ -4,27 +4,9 @@ import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages } from "@/lib/hubspot";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { inlineRelativeImages } from "@/lib/inline-images";
 
 export const dynamic = "force-dynamic";
-
-const RELATIVE_IMG_RE = /src="(\/[^"]+\.(?:png|jpg|jpeg|gif|webp|svg))"/gi;
-async function inlineRelativeImages(html: string): Promise<string> {
-  const matches = [...html.matchAll(RELATIVE_IMG_RE)];
-  if (matches.length === 0) return html;
-  let result = html;
-  for (const [fullMatch, relPath] of matches) {
-    const filePath = path.join(process.cwd(), "public", relPath);
-    try {
-      const bytes = await readFile(filePath);
-      const ext = relPath.split(".").pop()?.toLowerCase() ?? "png";
-      const mime = ext === "svg" ? "image/svg+xml" : `image/${ext === "jpg" ? "jpeg" : ext}`;
-      result = result.replaceAll(fullMatch, `src="data:${mime};base64,${bytes.toString("base64")}"`);
-    } catch { /* leave as-is */ }
-  }
-  return result;
-}
 
 function safeSlug(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);

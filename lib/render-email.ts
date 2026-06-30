@@ -130,9 +130,11 @@ export function buildEblastHtml(
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();
   const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "rgba(255,255,255,0.7)" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
-  const logoSrc = chosenLogo
-    ? (chosenLogo.url.startsWith("http") ? chosenLogo.url : `${process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")}${chosenLogo.url}`)
-    : null;
+  // Keep logo URLs as-is. Relative paths (e.g. /logos/slug/primary.png) are
+  // intentionally left relative so callers can embed them as base64 data URIs
+  // via inlineRelativeImages — this works in srcDoc iframes, approval emails,
+  // and any other context without depending on env-var URL construction.
+  const logoSrc = chosenLogo?.url ?? null;
   const logoContent = logoSrc
     ? `<img src="${logoSrc}" alt="${escapeHtml(community.displayName)}" height="88" style="display:block; height:88px; width:auto; max-width:300px; border:0; margin:0 auto;">`
     : textFallback;

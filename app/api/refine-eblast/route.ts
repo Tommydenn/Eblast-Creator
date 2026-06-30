@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCommunity } from "@/data/communities";
 import { refineFlyerContent } from "@/lib/anthropic";
 import { buildEblastHtml } from "@/lib/render-email";
+import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import { cropDataUriToFocusAndRatio } from "@/lib/pdf-images";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
@@ -163,11 +164,11 @@ export async function POST(req: NextRequest) {
       nextSecondary !== body.secondaryImageUrl ||
       JSON.stringify(nextGallery) !== JSON.stringify(body.galleryImageUrls ?? []);
 
-    const html = buildEblastHtml(mergedExtracted, community, {
+    const html = await inlineRelativeImages(buildEblastHtml(mergedExtracted, community, {
       heroImageUrl: nextHero,
       secondaryImageUrl: nextSecondary,
       galleryImageUrls: nextGallery,
-    });
+    }));
     // Human-readable labels for the history pill (a tracked subset)…
     const changedFields = getChangedFields(body.current, mergedExtracted);
     // …but the "nothing happened" decision compares the ENTIRE object, so an

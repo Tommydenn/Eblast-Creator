@@ -7,6 +7,7 @@ import { sendEditNotificationEmail, sendApprovalEmail } from "@/lib/email";
 import { swapDataUrisForHostedImages } from "@/lib/hubspot";
 import { refineFlyerContent } from "@/lib/anthropic";
 import { buildEblastHtml } from "@/lib/render-email";
+import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { randomBytes } from "node:crypto";
@@ -172,11 +173,11 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
       if (textChanged || imagesChanged) {
         // Apply the refinement.
-        const newHtml = buildEblastHtml(mergedExtracted, community, {
+        const newHtml = await inlineRelativeImages(buildEblastHtml(mergedExtracted, community, {
           heroImageUrl: nextHero,
           secondaryImageUrl: nextSecondary,
           galleryImageUrls: nextGallery,
-        });
+        }));
 
         // Update the saved draft with the refined content.
         const updatedData = { ...draftData, extracted: mergedExtracted, html: newHtml };

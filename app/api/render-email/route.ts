@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCommunity } from "@/data/communities";
 import { buildEblastHtml } from "@/lib/render-email";
+import { inlineRelativeImages } from "@/lib/inline-images";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 
 export const runtime = "nodejs";
@@ -28,11 +29,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `Unknown community: ${body.communitySlug}` }, { status: 404 });
   }
 
-  const html = buildEblastHtml(body.extracted, community, {
+  const html = await inlineRelativeImages(buildEblastHtml(body.extracted, community, {
     heroImageUrl: body.heroImageUrl,
     secondaryImageUrl: body.secondaryImageUrl,
     galleryImageUrls: body.galleryImageUrls,
-  });
+  }));
 
   return NextResponse.json({ ok: true, html });
 }

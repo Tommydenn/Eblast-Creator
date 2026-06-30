@@ -9,6 +9,10 @@ const inter = Inter({
   display: "swap",
 });
 
+// Server Actions called from pages within this layout inherit this duration.
+// The agentic draft loop can take up to 3 rounds × (refine + review).
+export const maxDuration = 300;
+
 export const metadata: Metadata = {
   title: "Eblast Drafter — Great Lakes Management",
   description: "Agentic eblast drafting and HubSpot publishing for Great Lakes Management's senior-living communities.",

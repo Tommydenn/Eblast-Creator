@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
+import { draftFromPdfAction } from "@/app/actions/draft-from-pdf";
 
 // ─── Image injection helpers ─────────────────────────────────────────────────
 
@@ -338,7 +339,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [undoStack, setUndoStack] = useState<RefineSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<RefineSnapshot[]>([]);
 
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const generationIdRef = useRef<number>(0);
   const pendingHashRef = useRef<string | null>(null);
   // Stable ref so the postMessage listener can read current extracted without
   // capturing a stale closure (the listener is set up once with empty deps).
@@ -440,8 +441,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   async function generateDraft() {
     if (!pdf || !selectedSlug) return;
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
 
     // Freeze the draft's community so clearing the Generate card later can't orphan it.
     setActiveCommunitySlug(selectedSlug);
@@ -461,29 +460,41 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setUndoStack([]);
     setRedoStack([]);
 
+    // Track cancellation: Server Actions can't be aborted mid-flight, but we
+    // can discard the result if the user cancelled while waiting.
+    const generationId = ++generationIdRef.current;
+
     const fd = new FormData();
     fd.append("file", pdf);
     fd.append("communitySlug", selectedSlug);
 
     try {
-      const res = await fetch("/api/draft-from-pdf", {
-        method: "POST",
-        body: fd,
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        if (res.status === 413) throw new Error("The PDF file is too large. Please use a smaller PDF (under 4 MB).");
-        throw new Error(`Server error ${res.status}${text ? `: ${text.slice(0, 120)}` : ""}`);
-      }
-      const data = await res.json();
+      // Calling a Server Action instead of a Route Handler. Server Actions
+      // respect the experimental.serverActions.bodySizeLimit: "20mb" setting
+      // in next.config.js, which Vercel honours at the proxy level — bypassing
+      // the default 4.5 MB Route Handler limit that was causing 413 errors for
+      // real-world flyer PDFs.
+      const data = await draftFromPdfAction(fd);
+
+      // Discard result if the user cancelled while the action was running.
+      if (generationIdRef.current !== generationId) return;
+
       if (!data.ok) {
         setError(data.error ?? "Draft failed");
         setStage("idle");
         return;
       }
+
+      // The action returns sentinel HTML (no embedded images). Inject the
+      // returned image data URIs client-side to avoid doubling the payload.
+      const injectedHtml = injectImages(data.html, {
+        hero: data.heroImageUrl,
+        secondary: data.secondaryImageUrl,
+        gallery: data.galleryImageUrls ?? [],
+      });
+
       setExtracted(data.extracted);
-      setHtml(data.html);
+      setHtml(injectedHtml);
       setHeroImageUrl(data.heroImageUrl);
       setSecondaryImageUrl(data.secondaryImageUrl);
       setGalleryImageUrls(data.galleryImageUrls ?? []);
@@ -503,17 +514,16 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
       setDuplicateWarning(null);
     } catch (e: any) {
-      if (e?.name === "AbortError") {
-        setStage("idle");
-        return;
-      }
+      if (generationIdRef.current !== generationId) return;
       setError(String(e));
       setStage("idle");
     }
   }
 
   function cancelGeneration() {
-    abortControllerRef.current?.abort();
+    // Bump the generation counter so the in-flight action result is discarded
+    // when it eventually arrives (Server Actions can't be aborted mid-flight).
+    ++generationIdRef.current;
     setStage("idle");
     setError(null);
   }

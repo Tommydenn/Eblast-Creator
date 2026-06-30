@@ -62,18 +62,13 @@ async function call(step: string, init: { method: string; url: string; body?: an
 
 function wrapAsHubLEmailTemplate(html: string, label: string): string {
   const stripped = html
-    // Remove our footer row (replaced with HubSpot's CAN-SPAM module below).
-    .replace(/<tr>\s*<td class="px"[^>]*padding: 22px 36px 32px 36px[\s\S]*?<\/td>\s*<\/tr>/, "")
+    // Remove our designed footer row — HubSpot's CAN-SPAM module (below) replaces it.
+    .replace(/<tr[^>]*data-section="Footer"[^>]*>[\s\S]*?<\/tr>/, "")
     .replace(/\{\{\s*unsubscribe_link\s*\}\}/g, "{{ unsubscribe_link }}")
     .replace(/\{\{\s*manage_preferences\s*\}\}/g, "{{ unsubscribe_section_url }}");
 
-  return `<!--
-  templateType: email
-  isAvailableForNewContent: true
-  label: ${label}
--->
-${stripped}
-
+  // HubSpot's compliance footer must live inside <body>, not after </html>.
+  const complianceBlock = `
 {# HubSpot-required CAN-SPAM compliance footer (unsubscribe + physical address) #}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#FBF7EE;">
   <tr><td align="center" style="padding: 16px 36px 32px 36px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #888; line-height: 1.7;">
@@ -83,8 +78,41 @@ ${stripped}
       {% module_attribute "show_can_spam_message" %}false{% end_module_attribute %}
     {% end_module_block %}
   </td></tr>
-</table>
+</table>`;
+
+  const withCompliance = stripped.includes("</body>")
+    ? stripped.replace("</body>", `${complianceBlock}\n</body>`)
+    : stripped + complianceBlock;
+
+  return `<!--
+  templateType: email
+  isAvailableForNewContent: true
+  label: ${label}
+-->
+${withCompliance}
 `;
+}
+
+/**
+ * Generate the HubSpot email "name" (list view label) in the format:
+ * "{Acronym} - {Title Case eyebrow} - {Month} {Year}"
+ * e.g. "CB - Open House - June 2026"
+ */
+export function generateHubspotEmailName(opts: {
+  acronym: string;
+  eyebrow?: string;
+  date?: Date;
+}): string {
+  const { acronym, eyebrow, date = new Date() } = opts;
+  const month = date.toLocaleString("en-US", { month: "long" });
+  const year = date.getFullYear();
+  const description = eyebrow
+    ? eyebrow
+        .split(/\s+/)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ")
+    : "Eblast";
+  return `${acronym} - ${description} - ${month} ${year}`;
 }
 
 // ---------- API surface ---------------------------------------------------

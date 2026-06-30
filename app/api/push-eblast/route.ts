@@ -1,28 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-
-const RELATIVE_IMG_RE = /src="(\/[^"]+\.(?:png|jpg|jpeg|gif|webp|svg))"/gi;
-
-async function inlineRelativeImages(html: string): Promise<string> {
-  const matches = [...html.matchAll(RELATIVE_IMG_RE)];
-  if (matches.length === 0) return html;
-  let result = html;
-  for (const [fullMatch, relPath] of matches) {
-    const filePath = path.join(process.cwd(), "public", relPath);
-    try {
-      const bytes = await readFile(filePath);
-      const ext = relPath.split(".").pop()?.toLowerCase() ?? "png";
-      const mime = ext === "svg" ? "image/svg+xml" : `image/${ext === "jpg" ? "jpeg" : ext}`;
-      result = result.replaceAll(fullMatch, `src="data:${mime};base64,${bytes.toString("base64")}"`);
-    } catch {
-      // file not in public/ — leave src as-is
-    }
-  }
-  return result;
-}
 import { NextRequest, NextResponse } from "next/server";
 import { getCommunity } from "@/data/communities";
-import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages } from "@/lib/hubspot";
+import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
+import { inlineRelativeImages } from "@/lib/inline-images";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -36,6 +17,8 @@ interface PushBody {
   previewText?: string;
   /** Optional override of the draft name in HubSpot. */
   name?: string;
+  /** Short eyebrow description (e.g. "OPEN HOUSE") used to build the HubSpot email name. */
+  eyebrow?: string;
   /** Inline HTML to use as the email body (preferred). */
   html?: string;
   /** Or: filename of a template under data/communities/{slug}/templates/. */
@@ -161,7 +144,10 @@ export async function POST(req: NextRequest) {
     JSON.stringify(segmentsPayload),
   );
   const create = await createEmail({
-    name: body.name ?? `${community.displayName} – ${body.subject}`,
+    name: body.name ?? generateHubspotEmailName({
+      acronym: community.hubspot.acronym,
+      eyebrow: body.eyebrow,
+    }),
     subject: body.subject,
     previewText: body.previewText,
     fromName: community.senders[0]?.name ?? community.displayName,

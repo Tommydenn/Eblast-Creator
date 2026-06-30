@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
-import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages } from "@/lib/hubspot";
+import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +73,10 @@ export default async function ApprovePage({ params, searchParams }: Props) {
       if (!upload.ok) throw new Error(`Template upload failed: ${upload.status}`);
 
       const create = await createEmail({
-        name: `${community.displayName} – ${subject}`,
+        name: generateHubspotEmailName({
+          acronym: community.hubspot.acronym,
+          eyebrow: (draftData.extracted as any)?.eyebrow,
+        }),
         subject,
         fromName: community.senders[0]?.name ?? community.displayName,
         replyTo: community.senders[0]?.email ?? community.email ?? "",

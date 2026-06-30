@@ -688,6 +688,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           communitySlug: activeCommunitySlug,
           subject: extracted.subject,
           previewText: extracted.previewText,
+          eyebrow: extracted.eyebrow,
           html: pushHtml,
         }),
       });

@@ -99,11 +99,11 @@ ${withCompliance}
  * e.g. "CB - Open House - June 2026"
  */
 export function generateHubspotEmailName(opts: {
-  acronym: string;
+  acronym?: string;
   eyebrow?: string;
   date?: Date;
 }): string {
-  const { acronym, eyebrow, date = new Date() } = opts;
+  const { acronym = "Eblast", eyebrow, date = new Date() } = opts;
   const month = date.toLocaleString("en-US", { month: "long" });
   const year = date.getFullYear();
   const description = eyebrow

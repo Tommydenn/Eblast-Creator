@@ -8,7 +8,7 @@ type RecompressResult = { bytes: Uint8Array; width: number; height: number } | n
 
 async function recompressJpeg(source: Uint8Array, quality: number): Promise<RecompressResult> {
   try {
-    const url = URL.createObjectURL(new Blob([source], { type: "image/jpeg" }));
+    const url = URL.createObjectURL(new Blob([new Uint8Array(source)], { type: "image/jpeg" }));
 
     const img = new Image();
     await new Promise<void>((resolve, reject) => {

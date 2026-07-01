@@ -45,7 +45,7 @@ const extractFlyerToolSchema = {
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2–4 short paragraphs. Mirror the flyer's own wording, tone, and energy as closely as possible — do not invent angles. Always warm and upbeat — use at least one exclamation point somewhere in the body. Do NOT include logistical details (date, time, location, RSVP instructions) — those are in the hero and CTA sections. Para 1: open with the most compelling line directly from the flyer. Para 2: expand on the key benefit or highlight from the flyer. Para 3 (optional): a supporting detail the flyer mentions. Para 4 (optional): a warm, forward-looking closing line.",
+      description: "2–4 short paragraphs. Stay as close to the flyer's actual wording as possible — lift its phrases and sentences directly. Do not reframe, restructure, or invent angles the flyer does not support. Match the flyer's tone: if it is cheerful and celebratory, be cheerful; if it is informational, be warm but measured. Include at least one exclamation point for upbeat events. Do NOT include logistical details (date, time, location, RSVP) — those belong in the hero and CTA sections. No em dashes.",
     },
 
     rsvpRequired: { type: "boolean", description: "True only if the flyer explicitly requires or requests RSVP (phrases like 'RSVP required', 'RSVP requested', 'please RSVP', 'reservations required'). False if attendance is open/walk-in." },
@@ -128,6 +128,7 @@ This community's voice
 ${hasVoice ? voiceBlock : fallbackVoice}
 
 Inviolable rules
+- Never use em dashes (—) anywhere in the email. Replace with a comma, a period, or a new sentence.
 - Never invent facts. Every name, date, phone number, time, location, and quote in your output must appear in the flyer. If a detail isn't in the flyer, leave that field empty.
 - pullQuote must be a verbatim or near-verbatim lift from the flyer's printed text — not a sentence you composed. If no quotable line exists in the flyer, leave pullQuote AND pullQuoteAttribution EMPTY. A composed value proposition is not a quote.
 - Use the community's actual name (${community.displayName}) — never generic substitutes like "our community" or "the community."${trackingPhoneNote}

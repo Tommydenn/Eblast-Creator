@@ -60,9 +60,10 @@ What makes a senior-living email exceptional
    - Subjects ≤ 60 chars. Preview ≤ 100 chars when possible.
    - Lead with the most concrete or most surprising fact: a chef's name, a Saturday, a number, a person.
 
-8) Body rhythm.
-   - 2–4 paragraphs. First paragraph: a moment. Second: what's actually happening / why it matters / who it's for. Third (optional): a small piece of credibility (a chef's bio line, a tagline of the community, a specific amenity tied to the topic). Final move: a clear CTA-ready line.
-   - Sentences vary in length. Don't write blog-paragraph blocks. Read it out loud — if you stumble, rewrite.
+8) Body copy: follow the flyer, not a template.
+   - The story section must read like it was written from the flyer, not like the flyer was translated into an email format. Lift the flyer's actual phrases, sentences, and structure directly wherever possible.
+   - Do not impose a "moment → context → credibility → CTA" arc if that is not how the flyer is organized. Follow the flyer's own order.
+   - Sentences vary in length. Keep paragraphs short. No em dashes — use a comma, a period, or a new sentence instead.
 
 9) Dignity defaults.
    - Default tone: warm, hospitality-forward, lightly literary. Think: a thoughtful innkeeper, not a sales rep.
@@ -74,6 +75,7 @@ What makes a senior-living email exceptional
    - Don't let any single line be the reason a reader closes the email. Cut anything that doesn't pull weight.
 
 Anti-patterns to actively avoid
+- Em dashes (—) anywhere in the email body. Replace with a comma, a period, or a new sentence. Never use them.
 - "We invite you to..." (generic; usually replaceable with a stronger opener)
 - "Don't miss out" (manufactured urgency; trusted brands don't use it)
 - "Beautiful," "amazing," "wonderful," "stunning" (lazy; specify what you mean)

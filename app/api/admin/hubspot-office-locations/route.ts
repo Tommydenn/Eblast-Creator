@@ -5,11 +5,9 @@ export const runtime = "nodejs";
 /**
  * GET /api/admin/hubspot-office-locations
  *
- * Fetches the portal's configured office/physical addresses from HubSpot so
- * you can find the correct `officeLocationId` to set per community.
- *
- * After finding the right IDs, set `hubspot.officeLocationId` on each
- * community row in the DB (via the admin UI or a direct SQL update).
+ * Probes multiple HubSpot endpoints to find the configured office/physical
+ * addresses and their IDs. Returns all raw responses so we can see exactly
+ * where the data lives and what IDs to use per community.
  */
 export async function GET() {
   const token = process.env.HUBSPOT_PRIVATE_APP_TOKEN;
@@ -17,39 +15,41 @@ export async function GET() {
     return NextResponse.json({ error: "HUBSPOT_PRIVATE_APP_TOKEN not set" }, { status: 500 });
   }
 
-  const headers = { Authorization: `Bearer ${token}` };
+  const h = { Authorization: `Bearer ${token}` };
 
-  // HubSpot stores email footer office locations as "Additional Addresses"
-  // on the portal's marketing email settings.
-  const res = await fetch(
-    "https://api.hubapi.com/email/public/v1/portalSettings",
-    { headers },
-  );
-
-  const text = await res.text();
-  let body: any;
-  try { body = JSON.parse(text); } catch { body = { raw: text }; }
-
-  if (!res.ok) {
-    return NextResponse.json({
-      error: "HubSpot API returned an error",
-      status: res.status,
-      body,
-      note: "If this endpoint is unavailable, check portal settings in HubSpot UI under Settings → Marketing → Email → Footer to see configured addresses and their IDs.",
-    }, { status: res.status });
+  async function probe(label: string, url: string) {
+    try {
+      const res = await fetch(url, { headers: h });
+      const text = await res.text();
+      let body: unknown;
+      try { body = JSON.parse(text); } catch { body = text; }
+      return { label, url, status: res.status, ok: res.ok, body };
+    } catch (e: any) {
+      return { label, url, status: 0, ok: false, body: e?.message ?? String(e) };
+    }
   }
 
-  // Extract address-like fields for easier scanning.
-  const addresses =
-    body?.additionalAddresses ??
-    body?.officeLocations ??
-    body?.addresses ??
-    null;
+  // Probe every endpoint that might carry office/address location data.
+  const results = await Promise.all([
+    probe("portalSettings (v1)", "https://api.hubapi.com/email/public/v1/portalSettings"),
+    probe("account-info (v3)", "https://api.hubapi.com/account-info/v3/details"),
+    probe("business-units", "https://api.hubapi.com/business-units/v3/business-units"),
+    probe("marketing-email settings", "https://api.hubapi.com/marketing/v3/emails/settings"),
+    probe("cms site-settings", "https://api.hubapi.com/cms/v3/site-settings"),
+  ]);
 
-  return NextResponse.json({
-    ok: true,
-    note: "Set hubspot.officeLocationId on each community to the matching ID below.",
-    addresses,
-    raw: body,
-  });
+  // Try to surface anything that looks like an address list.
+  const addressHints = results
+    .filter((r) => r.ok)
+    .map((r) => {
+      const str = JSON.stringify(r.body);
+      const hasAddress =
+        str.includes("address") ||
+        str.includes("location") ||
+        str.includes("street") ||
+        str.includes("officeLocation");
+      return { label: r.label, hasAddressData: hasAddress };
+    });
+
+  return NextResponse.json({ results, addressHints });
 }

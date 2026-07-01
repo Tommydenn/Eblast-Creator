@@ -5,6 +5,7 @@ import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
+import { updateCommunitySegments } from "@/lib/db/queries";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -166,6 +167,12 @@ export async function POST(req: NextRequest) {
 
   if (!create.ok) {
     console.error(`[push-eblast] create failed status=${create.status}`, JSON.stringify(create.body));
+  }
+
+  // Keep the community's stored segments in sync with what was actually used,
+  // so the communities tab always reflects the most recently pushed lists.
+  if (create.ok && (segments.includedListIds.length > 0 || segments.excludedListIds.length > 0)) {
+    updateCommunitySegments(community.slug, segments.includedListIds, segments.excludedListIds).catch(() => null);
   }
 
   return NextResponse.json({

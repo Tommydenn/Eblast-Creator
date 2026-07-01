@@ -6,6 +6,7 @@ import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
+import { updateCommunitySegments } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,11 @@ export default async function ApprovePage({ params, searchParams }: Props) {
       });
       if (!upload.ok) throw new Error(`Template upload failed: ${upload.status}`);
 
+      const segments = await resolveSegmentsFromRecentSend({
+        communityId: community.id,
+        fallbackIncluded: community.hubspot.includedListIds ?? (community.hubspot.listId ? [community.hubspot.listId] : []),
+        fallbackExcluded: community.hubspot.excludedListIds ?? [],
+      });
       const create = await createEmail({
         name: generateHubspotEmailName({
           acronym: community.hubspot.acronym,
@@ -82,13 +88,12 @@ export default async function ApprovePage({ params, searchParams }: Props) {
         fromName: community.senders[0]?.name ?? community.displayName,
         replyTo: community.senders[0]?.email ?? community.email ?? "",
         templatePath: hubspotPath,
-        ...(await resolveSegmentsFromRecentSend({
-          communityId: community.id,
-          fallbackIncluded: community.hubspot.includedListIds ?? (community.hubspot.listId ? [community.hubspot.listId] : []),
-          fallbackExcluded: community.hubspot.excludedListIds ?? [],
-        })),
+        ...segments,
       });
       if (!create.ok) throw new Error(`HubSpot create failed: ${create.status}`);
+      if (segments.includedListIds.length > 0 || segments.excludedListIds.length > 0) {
+        updateCommunitySegments(community.slug, segments.includedListIds, segments.excludedListIds).catch(() => null);
+      }
     } catch (e: any) {
       pushError = e.message ?? String(e);
     }

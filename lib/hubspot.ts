@@ -60,60 +60,22 @@ async function call(step: string, init: { method: string; url: string; body?: an
 // the design intact. Our footer's hardcoded copy is replaced with HubSpot's
 // `email_footer` module so the unsubscribe links resolve to real values.
 
-function formatAddress(addr?: { street?: string; city?: string; state?: string; zip?: string }): string {
-  if (!addr) return "";
-  const line1 = addr.street ?? "";
-  const line2 = [addr.city, [addr.state, addr.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  return [line1, line2].filter(Boolean).join(" &middot; ");
-}
-
-function wrapAsHubLEmailTemplate(
-  html: string,
-  label: string,
-  opts?: {
-    /** If set, delegates address resolution to HubSpot's email_footer module using this portal address ID. */
-    officeLocationId?: number;
-    /** Community display name, shown above the address line in the hardcoded fallback. */
-    communityName?: string;
-    /** Physical address used when officeLocationId is not configured. */
-    communityAddress?: { street?: string; city?: string; state?: string; zip?: string };
-  },
-): string {
+function wrapAsHubLEmailTemplate(html: string, label: string): string {
   const stripped = html
     .replace(/<tr[^>]*data-section="Footer"[^>]*>[\s\S]*?<\/tr>/, "")
     .replace(/\{\{\s*unsubscribe_link\s*\}\}/g, "{{ unsubscribe_link }}")
     .replace(/\{\{\s*manage_preferences\s*\}\}/g, "{{ unsubscribe_section_url }}");
 
-  let complianceBlock: string;
-
-  if (opts?.officeLocationId != null) {
-    // Preferred: let HubSpot resolve the address from the portal's address list.
-    complianceBlock = `
-{# HubSpot-required CAN-SPAM compliance footer — address resolved by portal office location ID #}
+  const complianceBlock = `
+{# HubSpot-required CAN-SPAM compliance footer #}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#FBF7EE;">
   <tr><td align="center" style="padding: 16px 36px 32px 36px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #888; line-height: 1.7;">
     {% module_block module "compliance_footer" path="@hubspot/email_footer", label="Email footer" %}
-      {% module_attribute "office_location_id" %}${opts.officeLocationId}{% end_module_attribute %}
       {% module_attribute "show_address" %}true{% end_module_attribute %}
       {% module_attribute "show_can_spam_message" %}false{% end_module_attribute %}
     {% end_module_block %}
   </td></tr>
 </table>`;
-  } else {
-    // Fallback: embed community address directly from our DB record.
-    const nameHtml = opts?.communityName ? `${opts.communityName}<br>` : "";
-    const addrHtml = formatAddress(opts?.communityAddress);
-    complianceBlock = `
-{# HubSpot-required CAN-SPAM compliance footer — address from community DB record #}
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#FBF7EE;">
-  <tr><td align="center" style="padding: 16px 36px 32px 36px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #888; line-height: 1.7;">
-    ${nameHtml}${addrHtml ? `${addrHtml}<br>` : ""}
-    <a href="{{ unsubscribe_link }}" style="color:#888; text-decoration:underline;">Unsubscribe</a>
-    &nbsp;&middot;&nbsp;
-    <a href="{{ unsubscribe_section_url }}" style="color:#888; text-decoration:underline;">Manage Preferences</a>
-  </td></tr>
-</table>`;
-  }
 
   const withCompliance = stripped.includes("</body>")
     ? stripped.replace("</body>", `${complianceBlock}\n</body>`)
@@ -374,18 +336,8 @@ export async function uploadEmailTemplate(opts: {
   path: string;       // e.g. "email-templates/caretta-dining.html"
   html: string;
   label?: string;
-  /** HubSpot office-location ID. When set, HubSpot resolves the address from its portal list. */
-  officeLocationId?: number;
-  /** Community display name — used in the hardcoded footer fallback when officeLocationId is unset. */
-  communityName?: string;
-  /** Physical address — used in the hardcoded footer fallback when officeLocationId is unset. */
-  communityAddress?: { street?: string; city?: string; state?: string; zip?: string };
 }): Promise<ApiCallResult> {
-  const wrapped = wrapAsHubLEmailTemplate(opts.html, opts.label ?? "Eblast Drafter Template", {
-    officeLocationId: opts.officeLocationId,
-    communityName: opts.communityName,
-    communityAddress: opts.communityAddress,
-  });
+  const wrapped = wrapAsHubLEmailTemplate(opts.html, opts.label ?? "Eblast Drafter Template");
   const url = `${HUBSPOT_BASE}/cms/v3/source-code/published/content/${opts.path}`;
 
   const fileName = opts.path.split("/").pop() ?? "template.html";

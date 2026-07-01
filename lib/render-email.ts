@@ -188,7 +188,11 @@ export function buildEblastHtml(
           <td style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
             ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
             <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
-            ${flyer.scriptSubheadline ? `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 44px; color: #F0E2C0; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; margin: 0 auto 18px auto;">${escapeHtml(flyer.scriptSubheadline)}</p>` : ""}
+            ${flyer.scriptSubheadline ? (() => {
+              const len = flyer.scriptSubheadline.length;
+              const fontSize = len <= 18 ? 44 : len <= 28 ? 36 : len <= 38 ? 28 : 22;
+              return `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${fontSize}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${escapeHtml(flyer.scriptSubheadline)}</p>`;
+            })() : ""}
             ${eventDateLine ? `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto;">
               <tr>

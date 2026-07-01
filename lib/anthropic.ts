@@ -33,7 +33,7 @@ const extractFlyerToolSchema = {
 
     eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
     headline: { type: "string", description: "The event name or a short direct description of it, taken as closely as possible from the flyer. 2–5 words. Title-case. Do NOT try to be clever or construct a noun+verb phrase — just use the event name." },
-    scriptSubheadline: { type: "string", description: "Optional 1–5 word subtitle. Only use if the flyer itself has a subtitle or secondary line worth showing. Do NOT invent one. If nothing from the flyer fits naturally here, leave it empty." },
+    scriptSubheadline: { type: "string", description: "Optional short subtitle shown in cursive under the headline. Only use if the flyer itself has a subtitle or secondary line worth showing — do NOT invent one. Must be short enough to fit on one line: aim for under 25 characters, hard limit 35. If nothing from the flyer fits, leave it empty." },
     heroHook: { type: "string", description: "Always emit an empty string. This field is no longer rendered in the email." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
@@ -112,7 +112,8 @@ Recent eblasts from ${community.displayName} (use as voice/style/length referenc
 ${formatPastSendsForPrompt(pastSends)}
 
 Notes on using this:
-- High-performing past subjects (higher open %) are signals about what works for this audience. Match their structure when the topic fits.
+- High-performing past subjects (higher open %) tell you what tone and angle resonates with this specific audience. Use them as your primary style cue for the story section — if past high-performers are warm and upbeat, match that; if they are measured and informational, match that.
+- The body copy tone and energy of this email's story section should feel consistent with what has worked for this community before.
 - The drafts that already shipped represent the brand's accepted voice — match it. If your draft sounds noticeably different, that's a yellow flag.`
       : "";
 
@@ -131,7 +132,6 @@ Inviolable rules
 - Never use em dashes (—) anywhere in the email. Replace with a comma, a period, or a new sentence.
 - Never invent quotes or testimonials. Do not put words in anyone's mouth — not a resident, not a family member, not staff. This includes paraphrased "what residents say" framing. The phrase "My only regret is that I didn't move here sooner" is a banned example of exactly this — never use it or anything like it.
 - Never invent facts. Every name, date, phone number, time, location, and quote in your output must appear in the flyer. If a detail isn't in the flyer, leave that field empty.
-- pullQuote must be a verbatim or near-verbatim lift from the flyer's printed text — not a sentence you composed. If no quotable line exists in the flyer, leave pullQuote AND pullQuoteAttribution EMPTY. A composed value proposition is not a quote.
 - Use the community's actual name (${community.displayName}) — never generic substitutes like "our community" or "the community."${trackingPhoneNote}
 - The CTA href is the tracking number above (or a real mailto:/https:// from the flyer). The CTA label is human-formatted ("Call 920.504.3028", not "Click here").
 - Honor the flyer's intent. If the flyer is event-focused, your email is event-focused. Do not invent angles the flyer doesn't support.${pastSendsBlock}

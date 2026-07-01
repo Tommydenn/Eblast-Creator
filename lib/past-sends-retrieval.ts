@@ -7,6 +7,7 @@
 import { eq, sql, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { pastSends } from "@/lib/db/schema";
+import { getMarketingEmail } from "@/lib/hubspot";
 
 export interface PastSendForContext {
   subject: string;
@@ -50,6 +51,52 @@ export async function getRecentSendsForCommunity(opts: {
     clickRatePct: asPercent(r.clickCount, r.recipientCount),
     fromName: r.fromName,
   }));
+}
+
+/**
+ * Resolve send/suppress list IDs for a community by inspecting its most
+ * recent published HubSpot email. Falls back to the community's static config
+ * if no past send exists or the HubSpot fetch fails.
+ *
+ * HubSpot stores list assignments on the email object itself
+ * (`to.contactIlsLists.include / .exclude`), so we fetch the full email by ID
+ * to read them. The list in `past_sends.raw` is the campaign-stats body, which
+ * does not contain list data.
+ */
+export async function resolveSegmentsFromRecentSend(opts: {
+  communityId: string;
+  fallbackIncluded?: number[];
+  fallbackExcluded?: number[];
+}): Promise<{ includedListIds: number[]; excludedListIds: number[] }> {
+  const fallback = {
+    includedListIds: opts.fallbackIncluded ?? [],
+    excludedListIds: opts.fallbackExcluded ?? [],
+  };
+
+  try {
+    const [recent] = await db
+      .select({ hubspotEmailId: pastSends.hubspotEmailId })
+      .from(pastSends)
+      .where(and(eq(pastSends.communityId, opts.communityId), eq(pastSends.state, "PUBLISHED")))
+      .orderBy(sql`${pastSends.publishedAt} DESC NULLS LAST`)
+      .limit(1);
+
+    if (!recent?.hubspotEmailId) return fallback;
+
+    const res = await getMarketingEmail(recent.hubspotEmailId);
+    if (!res.ok || !res.body) return fallback;
+
+    const lists = res.body?.to?.contactIlsLists;
+    if (!lists) return fallback;
+
+    const included = (lists.include ?? []).map(Number).filter(Boolean);
+    const excluded = (lists.exclude ?? []).map(Number).filter(Boolean);
+
+    if (included.length === 0 && excluded.length === 0) return fallback;
+    return { includedListIds: included, excludedListIds: excluded };
+  } catch {
+    return fallback;
+  }
 }
 
 /**

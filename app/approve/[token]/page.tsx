@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
+import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 
 export const dynamic = "force-dynamic";
 
@@ -81,9 +82,11 @@ export default async function ApprovePage({ params, searchParams }: Props) {
         fromName: community.senders[0]?.name ?? community.displayName,
         replyTo: community.senders[0]?.email ?? community.email ?? "",
         templatePath: hubspotPath,
-        contactListId: community.hubspot.listId,
-        includedListIds: community.hubspot.includedListIds ?? [],
-        excludedListIds: community.hubspot.excludedListIds ?? [],
+        ...(await resolveSegmentsFromRecentSend({
+          communityId: community.id,
+          fallbackIncluded: community.hubspot.includedListIds ?? (community.hubspot.listId ? [community.hubspot.listId] : []),
+          fallbackExcluded: community.hubspot.excludedListIds ?? [],
+        })),
       });
       if (!create.ok) throw new Error(`HubSpot create failed: ${create.status}`);
     } catch (e: any) {

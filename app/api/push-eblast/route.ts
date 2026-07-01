@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
+import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -134,10 +135,17 @@ export async function POST(req: NextRequest) {
   }
 
   // 2) Create the marketing email pointing at it.
+  // Pull segments from the most recent published send for this community so
+  // new emails automatically inherit the same lists. Falls back to the
+  // community's static config if no past send is found or the API call fails.
+  const segments = await resolveSegmentsFromRecentSend({
+    communityId: community.id,
+    fallbackIncluded: community.hubspot.includedListIds ?? (community.hubspot.listId ? [community.hubspot.listId] : []),
+    fallbackExcluded: community.hubspot.excludedListIds ?? [],
+  });
   const segmentsPayload = {
-    contactListId: community.hubspot.listId,
-    includedListIds: community.hubspot.includedListIds ?? [],
-    excludedListIds: community.hubspot.excludedListIds ?? [],
+    includedListIds: segments.includedListIds,
+    excludedListIds: segments.excludedListIds,
   };
   console.log(
     `[push-eblast] segments being sent to HubSpot:`,

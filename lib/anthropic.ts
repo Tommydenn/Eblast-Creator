@@ -45,7 +45,7 @@ const extractFlyerToolSchema = {
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2–4 short paragraphs. Mirror the flyer's own wording, tone, and energy as closely as possible — do not invent angles. If the flyer is warm and upbeat (open house, social event), match that warmth. If the topic is serious or informational, stay friendly but measured. Do NOT include logistical details (date, time, location, RSVP instructions) — those are in the hero and CTA sections. Para 1: open with the most compelling line directly from the flyer. Para 2: expand on the key benefit or highlight from the flyer. Para 3 (optional): a supporting detail the flyer mentions. Para 4 (optional): a warm, forward-looking closing line. No exclamation marks.",
+      description: "2–4 short paragraphs. Mirror the flyer's own wording, tone, and energy as closely as possible — do not invent angles. Always warm and upbeat — use at least one exclamation point somewhere in the body. Do NOT include logistical details (date, time, location, RSVP instructions) — those are in the hero and CTA sections. Para 1: open with the most compelling line directly from the flyer. Para 2: expand on the key benefit or highlight from the flyer. Para 3 (optional): a supporting detail the flyer mentions. Para 4 (optional): a warm, forward-looking closing line.",
     },
 
     pullQuoteEyebrow: { type: "string", description: "Optional eyebrow above the pull-quote block. Omit if it would just echo the ctaEyebrow." },

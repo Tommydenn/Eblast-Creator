@@ -10,7 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import type { ExtractedImage } from "./pdf-images";
 
-const MAX_CANDIDATES = 5;
+const MAX_CANDIDATES = 8;
 const THUMBNAIL_PX = 512;
 const TIMEOUT_MS = 12_000;
 
@@ -64,9 +64,10 @@ export async function classifyImagesForSlots(
 Categories:
 - "exterior": outside of a building, community entrance, grounds, parking, signage, building facade
 - "interior": inside the building — rooms, dining area, common space, hallway, apartment interior
-- "other": people, events, food, artwork, logos, diagrams, text-only images
+- "people": photos of residents, staff, events, activities, food, lifestyle — real photography with people or life in it
+- "graphic": flyer design elements that are NOT real photography — logos, watermarks, text overlays, decorative borders, gradient backgrounds, clip art, icons, color blocks, texture fills, any image that is primarily text or a design graphic
 
-Reply with ONLY a JSON array, one label per image. Example for 3 images: ["exterior","interior","other"]`,
+Reply with ONLY a JSON array, one label per image. Example for 4 images: ["exterior","interior","people","graphic"]`,
             },
             ...thumbnails.map((uri) => ({
               type: "image" as const,
@@ -94,18 +95,19 @@ Reply with ONLY a JSON array, one label per image. Example for 3 images: ["exter
     if (!match) return images;
 
     const classes: string[] = JSON.parse(match[0]);
-    const labeled = rest.map((img, i) => ({ img, cls: classes[i] ?? "other" }));
+    const labeled = rest.map((img, i) => ({ img, cls: classes[i] ?? "graphic" }));
 
     const exteriors = labeled.filter((x) => x.cls === "exterior").map((x) => x.img);
     const interiors = labeled.filter((x) => x.cls === "interior").map((x) => x.img);
-    const others    = labeled.filter((x) => x.cls === "other").map((x) => x.img);
+    const people    = labeled.filter((x) => x.cls === "people").map((x) => x.img);
+    // "graphic" images (logos, text overlays, design elements) are excluded entirely
 
-    // secondary = exterior[0] if available, else interior[0]
-    // gallery   = interiors; remaining exteriors ONLY if secondary is exterior; then others
+    // secondary = exterior[0] if available, else interior[0], else people[0]
+    // gallery   = interiors + people; remaining exteriors ONLY if secondary is already exterior
     const secondaryIsExterior = exteriors.length > 0;
     const ordered = secondaryIsExterior
-      ? [...exteriors, ...interiors, ...others]   // exterior leads → secondary, rest in gallery
-      : [...interiors, ...others, ...exteriors];  // no exterior → interior leads secondary, no exteriors in gallery
+      ? [...exteriors, ...interiors, ...people]   // exterior leads → secondary, rest in gallery
+      : [...interiors, ...people, ...exteriors];  // no exterior → interior leads secondary
 
     return [hero, ...ordered, ...images.slice(1 + MAX_CANDIDATES)];
   } catch {

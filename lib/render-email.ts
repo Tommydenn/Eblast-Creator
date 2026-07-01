@@ -230,25 +230,9 @@ export function buildEblastHtml(
   </tr>` : ""}
   `;
 
-  const pullQuote = flyer.pullQuote
-    ? `
-  <tr data-section="Pull Quote">
-    <td>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${brand.primary};">
-        <tr>
-          <td style="padding: 40px 36px;" align="center">
-            ${flyer.pullQuoteEyebrow ? `<p data-field="pullQuoteEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #C8B98A; margin: 0 0 14px 0;">${escapeHtml(flyer.pullQuoteEyebrow)}</p>` : ""}
-            <p data-field="pullQuote" style="font-family: ${brand.fontHeadline}; font-style: italic; font-size: 26px; line-height: 1.4; color: ${pickTextColor(brand.primary)}; margin: 0 auto; max-width: 460px;">${escapeHtml(flyer.pullQuote)}</p>
-            ${flyer.pullQuoteAttribution ? `<p data-field="pullQuoteAttribution" style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #C8B98A; margin: 20px 0 0 0;">${escapeHtml(flyer.pullQuoteAttribution)}</p>` : ""}
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>`
-    : "";
 
   // Gallery: 2- or 4-up grid of additional photos extracted from the flyer.
-  // Sits between the pull-quote and the final CTA.
+  // Sits between the story and the final CTA.
   // Requires at least 2 images — a single orphaned photo looks unfinished.
   const gallery = (() => {
     if (galleryImgs.length === 0) return "";
@@ -341,7 +325,6 @@ export function buildEblastHtml(
       ${header}
       ${hero}
       ${story}
-      ${pullQuote}
       ${gallery}
       ${finalCta}
       ${footer}

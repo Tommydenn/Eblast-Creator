@@ -103,9 +103,6 @@ export interface ExtractedFlyer {
   storyEyebrow: string;
   storyScriptTitle?: string;
   bodyParagraphs: string[];
-  pullQuoteEyebrow?: string;
-  pullQuote?: string;
-  pullQuoteAttribution?: string;
   rsvpRequired?: boolean;
   ctaEyebrow: string;
   ctaHeadline: string;

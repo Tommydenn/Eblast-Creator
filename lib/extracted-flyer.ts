@@ -30,11 +30,6 @@ export interface ExtractedFlyer {
   /** 2–4 paragraphs of body copy. Plain text, no HTML. */
   bodyParagraphs: string[];
 
-  // Pull-quote / value prop block
-  pullQuoteEyebrow?: string;  // "How Unidine is Different"
-  pullQuote?: string;         // "Fresh ingredients. Made-from-scratch cooking..."
-  pullQuoteAttribution?: string; // "— The Unidine Standard"
-
   /** True if the flyer explicitly requires or requests RSVP. */
   rsvpRequired?: boolean;
 

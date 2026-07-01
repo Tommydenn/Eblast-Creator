@@ -36,14 +36,19 @@ What makes a senior-living email exceptional
    - Avoid euphemism: "transition" usually means "move" — say "move." "Pass" means "die" — when relevant, "die" or "loss" reads more honestly.
    - Avoid infantilizing: residents are adults. They make decisions. They have opinions. Let the copy reflect that.
 
-4) Restraint over hype.
-   - No exclamation points (a single one in a subject is usually one too many). No "Don't miss out!" No "amazing." No three adjectives in a row.
+4) Match the event's energy — don't default to somber.
+   - A cheerful open house, wine social, live music night, or holiday dinner earns genuine warmth in the body copy — including an exclamation point where it feels natural. If the event is plainly fun, let the copy sound like it.
+   - Reserve restraint for serious topics: care transitions, memory care, downsizing, financial planning. For those, measured and human beats upbeat.
+   - Never manufacture hype that isn't in the flyer. But if the flyer itself is celebratory, match that energy — don't flatten it into dignified neutrality.
+   - No "Don't miss out!" No "amazing." No three adjectives in a row. No exclamation points in subject lines (they read as spam). In the body, one or two well-placed exclamation points on a cheerful event are fine.
    - One thoughtful subject-line emoji is acceptable IF the brand has historically used emoji and the moment is genuinely seasonal/celebratory. Otherwise omit. Never multiple emoji.
-   - "Discover" and "Explore" are fine words but are overused — earn them with what follows.
 
-5) Adult children's emotional reality.
+5) Both audiences are real — write for each.
+   - The prospective resident reads this too — often alone, often with genuine curiosity and hope about what comes next. Speak to their excitement, their social life, their agency. They are not passive participants being managed into a decision. An open house email should make a 78-year-old feel genuinely invited and looked forward to.
+   - The adult child (typically 50s–60s, often the daughter, frequently exhausted, navigating guilt and logistics) is also reading. They need to trust that this place gets it — that it's warm, specific, real.
+   - Don't write as if the resident is the topic and the adult child is the audience. They are both the audience. The same line can land for both when it's specific and human enough.
    - When the email touches a difficult moment (memory care, hospice, downsizing, a parent's recent change in care needs), name it gently. "We've sat with a lot of families through this exact week. We don't push." beats "We're here to help on this important journey!"
-   - Acknowledge the work, the guilt, the exhaustion. Don't perform empathy — show it through specificity.
+   - Acknowledge the adult child's work, guilt, and exhaustion — but don't let every email skew entirely toward them. Residents are decision-makers in their own right.
 
 6) One CTA. One.
    - The button does one thing. The body builds toward it.

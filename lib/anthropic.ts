@@ -48,10 +48,6 @@ const extractFlyerToolSchema = {
       description: "2–4 short paragraphs. Mirror the flyer's own wording, tone, and energy as closely as possible — do not invent angles. Always warm and upbeat — use at least one exclamation point somewhere in the body. Do NOT include logistical details (date, time, location, RSVP instructions) — those are in the hero and CTA sections. Para 1: open with the most compelling line directly from the flyer. Para 2: expand on the key benefit or highlight from the flyer. Para 3 (optional): a supporting detail the flyer mentions. Para 4 (optional): a warm, forward-looking closing line.",
     },
 
-    pullQuoteEyebrow: { type: "string", description: "Optional eyebrow above the pull-quote block. Omit if it would just echo the ctaEyebrow." },
-    pullQuote: { type: "string", description: "A verbatim or near-verbatim line taken DIRECTLY from the flyer — a tagline printed on the flyer, a quote from a named person, or the flyer's most specific value statement word-for-word. Do NOT compose a new sentence. Do NOT paraphrase. If the flyer contains no quotable line, leave this field EMPTY." },
-    pullQuoteAttribution: { type: "string", description: "The name or role of the person quoted, exactly as it appears in the flyer (e.g. 'Chef Marco Rossi' or 'Mary B., Resident'). Leave EMPTY if no attribution is in the flyer — never invent one." },
-
     rsvpRequired: { type: "boolean", description: "True only if the flyer explicitly requires or requests RSVP (phrases like 'RSVP required', 'RSVP requested', 'please RSVP', 'reservations required'). False if attendance is open/walk-in." },
 
     ctaEyebrow: { type: "string", description: "Action label above the final CTA block. Must NOT repeat the hero eyebrow. Verb-led and specific: 'Reserve Your Seat', 'Save Saturday', 'Join the Table'." },

@@ -96,6 +96,13 @@ export interface CommunityHubSpot {
   includedListIds?: number[];
   /** HubSpot list IDs (Segments) to SUPPRESS — moved-in/out, closed-lost, referral sources. */
   excludedListIds?: number[];
+  /**
+   * HubSpot office-location ID for the CAN-SPAM footer address.
+   * Find available IDs at /api/admin/hubspot-office-locations.
+   * When set, the email_footer module uses this community's registered address
+   * instead of the portal default.
+   */
+  officeLocationId?: number;
 }
 
 export interface CommunityLogo {

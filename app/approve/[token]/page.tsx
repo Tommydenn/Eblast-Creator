@@ -69,8 +69,7 @@ export default async function ApprovePage({ params, searchParams }: Props) {
         path: hubspotPath,
         html: swap.html,
         label: `${community.displayName} — ${templateFileName}`,
-        communityName: community.displayName,
-        communityAddress: community.address,
+        officeLocationId: community.hubspot.officeLocationId,
       });
       if (!upload.ok) throw new Error(`Template upload failed: ${upload.status}`);
 

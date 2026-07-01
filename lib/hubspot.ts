@@ -60,41 +60,32 @@ async function call(step: string, init: { method: string; url: string; body?: an
 // the design intact. Our footer's hardcoded copy is replaced with HubSpot's
 // `email_footer` module so the unsubscribe links resolve to real values.
 
-function formatCommunityAddress(addr?: { street?: string; city?: string; state?: string; zip?: string }): string {
-  if (!addr) return "";
-  const line1 = addr.street ?? "";
-  const cityState = addr.city ?? "";
-  const stateZip = [addr.state, addr.zip].filter(Boolean).join(" ");
-  const line2 = [cityState, stateZip].filter(Boolean).join(", ");
-  return [line1, line2].filter(Boolean).join("<br>");
-}
-
 function wrapAsHubLEmailTemplate(
   html: string,
   label: string,
-  communityName?: string,
-  communityAddress?: { street?: string; city?: string; state?: string; zip?: string },
+  officeLocationId?: number,
 ): string {
   const stripped = html
-    // Remove our designed footer row — replaced below with community-specific CAN-SPAM footer.
+    // Remove our designed footer row — HubSpot's email_footer module below replaces it.
     .replace(/<tr[^>]*data-section="Footer"[^>]*>[\s\S]*?<\/tr>/, "")
     .replace(/\{\{\s*unsubscribe_link\s*\}\}/g, "{{ unsubscribe_link }}")
     .replace(/\{\{\s*manage_preferences\s*\}\}/g, "{{ unsubscribe_section_url }}");
 
-  const nameHtml = communityName ? `${communityName}<br>` : "A Great Lakes Management Community<br>";
-  const addrHtml = formatCommunityAddress(communityAddress);
+  // Use HubSpot's native email_footer module so the portal resolves the correct
+  // community address from its own list. office_location_id selects the right
+  // address; omit it to use the portal default.
+  const officeAttr = officeLocationId != null
+    ? `\n      {% module_attribute "office_location_id" %}${officeLocationId}{% end_module_attribute %}`
+    : "";
 
-  // HubSpot's compliance footer must live inside <body>, not after </html>.
-  // We build a community-specific physical address block instead of relying on
-  // HubSpot's portal-global registered address — each community has its own address.
   const complianceBlock = `
-{# HubSpot-required CAN-SPAM compliance footer (unsubscribe + physical address) #}
+{# HubSpot-required CAN-SPAM compliance footer #}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#FBF7EE;">
   <tr><td align="center" style="padding: 16px 36px 32px 36px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #888; line-height: 1.7;">
-    ${nameHtml}${addrHtml ? `${addrHtml}<br>` : ""}
-    <a href="{{ unsubscribe_link }}" style="color:#888; text-decoration:underline;">Unsubscribe</a>
-    &nbsp;&middot;&nbsp;
-    <a href="{{ unsubscribe_section_url }}" style="color:#888; text-decoration:underline;">Manage Preferences</a>
+    {% module_block module "compliance_footer" path="@hubspot/email_footer", label="Email footer" %}${officeAttr}
+      {% module_attribute "show_address" %}true{% end_module_attribute %}
+      {% module_attribute "show_can_spam_message" %}false{% end_module_attribute %}
+    {% end_module_block %}
   </td></tr>
 </table>`;
 
@@ -357,10 +348,10 @@ export async function uploadEmailTemplate(opts: {
   path: string;       // e.g. "email-templates/caretta-dining.html"
   html: string;
   label?: string;
-  communityName?: string;
-  communityAddress?: { street?: string; city?: string; state?: string; zip?: string };
+  /** HubSpot office-location ID — selects the correct community address in the footer. */
+  officeLocationId?: number;
 }): Promise<ApiCallResult> {
-  const wrapped = wrapAsHubLEmailTemplate(opts.html, opts.label ?? "Eblast Drafter Template", opts.communityName, opts.communityAddress);
+  const wrapped = wrapAsHubLEmailTemplate(opts.html, opts.label ?? "Eblast Drafter Template", opts.officeLocationId);
   const url = `${HUBSPOT_BASE}/cms/v3/source-code/published/content/${opts.path}`;
 
   const fileName = opts.path.split("/").pop() ?? "template.html";

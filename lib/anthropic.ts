@@ -32,8 +32,8 @@ const extractFlyerToolSchema = {
     previewText: { type: "string", description: "Inbox preview text. <=120 chars. Reinforces subject without repeating it." },
 
     eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
-    headline: { type: "string", description: "The single biggest message. 2–5 words. Title-case. The 'what.' Do not use adjectives here — use the most concrete noun+verb the flyer supports." },
-    scriptSubheadline: { type: "string", description: "Optional script-styled subhead. 1–3 evocative words. Only include if it adds emotional texture not in the headline (e.g. a season, a feeling). Omit rather than echo the headline." },
+    headline: { type: "string", description: "The event name or a short direct description of it, taken as closely as possible from the flyer. 2–5 words. Title-case. Do NOT try to be clever or construct a noun+verb phrase — just use the event name." },
+    scriptSubheadline: { type: "string", description: "Optional 1–5 word subtitle. Only use if the flyer itself has a subtitle or secondary line worth showing. Do NOT invent one. If nothing from the flyer fits naturally here, leave it empty." },
     heroHook: { type: "string", description: "Always emit an empty string. This field is no longer rendered in the email." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
@@ -45,7 +45,7 @@ const extractFlyerToolSchema = {
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2–4 short paragraphs. Stay as close to the flyer's actual wording as possible — lift its phrases and sentences directly. Do not reframe, restructure, or invent angles the flyer does not support. Match the flyer's tone: if it is cheerful and celebratory, be cheerful; if it is informational, be warm but measured. Include at least one exclamation point for upbeat events. Do NOT include logistical details (date, time, location, RSVP) — those belong in the hero and CTA sections. No em dashes.",
+      description: "2–4 short paragraphs. Copy the flyer's wording as closely as possible — treat it almost like a copy-paste with minor adaptation for email format. Do not rephrase, restructure, or add your own angles. Keep it short and non-redundant: say each thing once. For cheerful events (open house, social, dining), the tone must be upbeat and friendly — use exclamation points freely and naturally throughout, not just once. If the flyer is informational, be warm but measured. Do NOT include logistical details (date, time, location, RSVP) — those are in the hero and CTA. No em dashes.",
     },
 
     rsvpRequired: { type: "boolean", description: "True only if the flyer explicitly requires or requests RSVP (phrases like 'RSVP required', 'RSVP requested', 'please RSVP', 'reservations required'). False if attendance is open/walk-in." },

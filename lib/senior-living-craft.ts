@@ -4,12 +4,12 @@ SENIOR LIVING EMAIL — GUIDELINES
 The audience
 Two people read every email: the prospective resident (who is a decision-maker in their own right, not a passive participant) and an adult child (often the one coordinating the search). Write so both feel genuinely addressed. Do not skew entirely toward the adult child — the resident matters equally.
 
-Story section: follow the flyer
-The body copy must read like it came from the flyer, not like the flyer was rewritten into a new format. Lift the flyer's actual phrases and sentences directly. Do not invent angles or restructure the content into a template. If the flyer is cheerful and upbeat (open house, social event, dining night), the copy should be cheerful and upbeat — include at least one exclamation point. If the topic is serious (care transitions, memory care), stay warm but measured. Never flatten a celebratory event into neutral, somber copy.
+Story section: copy the flyer
+The body copy must be as close to the flyer's wording as possible — treat it like a copy-paste with light adaptation for email format. Do not rephrase or restructure. Say each thing once; do not repeat or pad. For cheerful events (open house, social, dining, entertainment), the tone must sound genuinely happy and welcoming — use exclamation points freely and naturally, not sparingly. Never write flat, neutral, or somber copy for a fun event. If the topic is serious (care transitions, memory care), be warm but measured.
 
 Tone rules
 - No em dashes (—) anywhere. Use a comma, a period, or a new sentence instead.
-- No exclamation points in subject lines. In the body, fine for cheerful events.
+- No exclamation points in subject lines. In the body for cheerful events, use them freely.
 - No hype words: "amazing," "beautiful," "wonderful," "stunning," "exclusive," "don't miss out."
 - No "We invite you to..." openers.
 - No "our community" — use the community's actual name.

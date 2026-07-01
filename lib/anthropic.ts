@@ -45,7 +45,7 @@ const extractFlyerToolSchema = {
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2–4 paragraphs. Each paragraph advances the story — do NOT restate the headline in paragraph 1. Para 1: a moment (sensory, specific). Para 2: what is actually happening / why it matters. Para 3 (optional): one piece of grounding detail (a person, an amenity, a credential). Para 4 (optional): clear CTA-ready line. No exclamation marks.",
+      description: "2–4 short paragraphs. Mirror the flyer's own wording, tone, and energy as closely as possible — do not invent angles. If the flyer is warm and upbeat (open house, social event), match that warmth. If the topic is serious or informational, stay friendly but measured. Do NOT include logistical details (date, time, location, RSVP instructions) — those are in the hero and CTA sections. Para 1: open with the most compelling line directly from the flyer. Para 2: expand on the key benefit or highlight from the flyer. Para 3 (optional): a supporting detail the flyer mentions. Para 4 (optional): a warm, forward-looking closing line. No exclamation marks.",
     },
 
     pullQuoteEyebrow: { type: "string", description: "Optional eyebrow above the pull-quote block. Omit if it would just echo the ctaEyebrow." },
@@ -74,6 +74,10 @@ const extractFlyerToolSchema = {
     eventCategory: {
       type: "string",
       description: "1–3 generic words naming the event type — used as the HubSpot email name so the list view is scannable. Choose the broadest accurate category: 'Open House', 'Social Event', 'Presentation', 'Info Session', 'Community Tour', 'Dining Event', 'Health & Wellness', 'Music & Entertainment'. Do NOT use the specific event title — just the category.",
+    },
+    rsvpLabel: {
+      type: "string",
+      description: "The RSVP label to display at the top of the email. Use 'RSVP Required' if the flyer says RSVP is required/mandatory. Use 'RSVP Requested' if the flyer says RSVP is requested/appreciated. Leave EMPTY if the flyer has no RSVP mention at all.",
     },
     drafterRationale: {
       type: "string",

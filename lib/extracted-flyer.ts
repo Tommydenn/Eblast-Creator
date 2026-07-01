@@ -76,6 +76,13 @@ export interface ExtractedFlyer {
   eventCategory?: string;
 
   /**
+   * Exact RSVP label from the flyer: "RSVP Required" or "RSVP Requested".
+   * Empty/undefined when the flyer has no RSVP requirement.
+   * Rendered at the top of the Hero and CTA sections.
+   */
+  rsvpLabel?: string;
+
+  /**
    * 1–2 sentences from the drafter explaining which past-send patterns or
    * brand rules they leaned on. Surfaced in the UI under "Intelligence
    * applied" so the user can see how the agent's memory shaped the draft.

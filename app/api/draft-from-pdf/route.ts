@@ -4,7 +4,7 @@ import { getCommunity } from "@/data/communities";
 import { agenticDraftLoop } from "@/lib/agentic-draft";
 import { extractFlyerContent } from "@/lib/anthropic";
 import { extractImagesFromPdf, cropDataUriToAspectRatio } from "@/lib/pdf-images";
-import { rankImagesByRelevance } from "@/lib/image-selector";
+import { classifyImagesForSlots } from "@/lib/image-selector";
 import { buildEblastHtml } from "@/lib/render-email";
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
   // happened to have the largest pixel area. Failures fall back gracefully.
   let rankedImages = imageRun.images;
   try {
-    rankedImages = await rankImagesByRelevance(imageRun.images, initialDraftResult.value);
+    rankedImages = await classifyImagesForSlots(imageRun.images);
   } catch {
     // fall back to area-sorted order
   }

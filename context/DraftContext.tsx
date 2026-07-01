@@ -122,6 +122,8 @@ export interface ExtractedFlyer {
   footerAddress?: string;
   // 1–3 word generic event type used for the HubSpot email list name.
   eventCategory?: string;
+  // "RSVP Required" or "RSVP Requested" from the flyer; empty if no RSVP.
+  rsvpLabel?: string;
 }
 
 export type FindingSeverity = "blocker" | "important" | "nice_to_have";

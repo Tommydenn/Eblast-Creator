@@ -108,7 +108,7 @@ export async function draftFromPdfAction(formData: FormData): Promise<ActionResu
 
   let rankedImages = imageRun.images;
   try {
-    rankedImages = await rankImagesByRelevance(imageRun.images, initialDraftResult.value);
+    rankedImages = await rankImagesByRelevance(imageRun.images);
   } catch {
     // fall back to area-sorted order
   }

@@ -1,16 +1,18 @@
-// Ranks extracted images by relevance to the event described in the flyer.
-// Runs a quick Claude Haiku call with downscaled thumbnail versions of the
-// top candidate images — keeping the payload small so this adds <5 seconds
-// to the pipeline rather than 30-60 seconds with full-resolution images.
+// Classifies extracted images into exterior / interior / other slots so the
+// correct type of photo lands in each section of the email:
+//   hero      → images[0] (largest, typically the main flyer photo — unchanged)
+//   secondary → first exterior shot; fallback: first interior
+//   gallery   → interiors; additional exteriors allowed only when secondary is already exterior
+//
+// Runs a single Claude Haiku call with downscaled thumbnails — adds <5 seconds.
 
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
-import type { ExtractedFlyer } from "./extracted-flyer";
 import type { ExtractedImage } from "./pdf-images";
 
 const MAX_CANDIDATES = 5;
-const THUMBNAIL_PX = 512; // longest edge — enough to distinguish event content from stock shots
-const RANKING_TIMEOUT_MS = 12_000; // fall back to area-order if Haiku doesn't respond in time
+const THUMBNAIL_PX = 512;
+const TIMEOUT_MS = 12_000;
 
 async function toThumbnailDataUri(dataUri: string): Promise<string> {
   try {
@@ -27,55 +29,54 @@ async function toThumbnailDataUri(dataUri: string): Promise<string> {
   }
 }
 
-export async function rankImagesByRelevance(
+/**
+ * Reorders images so the correct types land in the correct email slots:
+ *   [0] hero     = images[0] (largest/first from PDF — always the main flyer photo)
+ *   [1] secondary = first exterior shot (building/grounds); fallback: first interior
+ *   [2+] gallery  = interiors first; remaining exteriors only if secondary is already exterior
+ */
+export async function classifyImagesForSlots(
   images: ExtractedImage[],
-  flyer: ExtractedFlyer,
 ): Promise<ExtractedImage[]> {
   if (images.length <= 1) return images;
   if (!process.env.ANTHROPIC_API_KEY) return images;
 
-  const candidates = images.slice(0, MAX_CANDIDATES);
-
-  const eventContext = [
-    flyer.headline,
-    flyer.heroHook,
-    flyer.eventDate ? `Date: ${flyer.eventDate}` : null,
-    flyer.eventLocation ? `Location: ${flyer.eventLocation}` : null,
-    flyer.bodyParagraphs?.[0],
-  ]
-    .filter(Boolean)
-    .join(" | ");
+  // Hero is always images[0] — never touched. Classify the remainder.
+  const hero = images[0];
+  const rest = images.slice(1, 1 + MAX_CANDIDATES);
+  if (rest.length === 0) return images;
 
   try {
-    // Downscale to thumbnails in parallel before sending — dramatically reduces
-    // the Anthropic request payload from potentially 10MB+ to ~200KB.
-    const thumbnailUris = await Promise.all(
-      candidates.map((img) => toThumbnailDataUri(img.dataUri)),
-    );
-
+    const thumbnails = await Promise.all(rest.map((img) => toThumbnailDataUri(img.dataUri)));
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1 });
 
-    const rankingCall = anthropic.messages.create({
+    const classifyCall = anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 60,
+      max_tokens: 80,
       messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `You are selecting images for a senior living marketing email about: "${eventContext}"
+              text: `Classify each image (numbered 0–${rest.length - 1}) for a senior living community marketing email.
 
-Here are ${candidates.length} images numbered 0–${candidates.length - 1}. Rank them best-to-worst. Prefer images related to the event theme, activity, or food. Generic community/building shots rank below event-specific ones. Logos, diagrams, and blank images rank last.
+Categories:
+- "exterior": outside of a building, community entrance, grounds, parking, signage, building facade
+- "interior": inside the building — rooms, dining area, common space, hallway, apartment interior
+- "other": people, events, food, artwork, logos, diagrams, text-only images
 
-Reply with ONLY a JSON array of indices. Example: [2,0,3,1]`,
+Reply with ONLY a JSON array, one label per image. Example for 3 images: ["exterior","interior","other"]`,
             },
-            ...thumbnailUris.map((uri) => ({
+            ...thumbnails.map((uri) => ({
               type: "image" as const,
               source: {
                 type: "base64" as const,
-                media_type: (uri.split(";")[0].replace("data:", "") ||
-                  "image/jpeg") as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                media_type: (uri.split(";")[0].replace("data:", "") || "image/jpeg") as
+                  | "image/jpeg"
+                  | "image/png"
+                  | "image/gif"
+                  | "image/webp",
                 data: uri.split(",")[1] ?? "",
               },
             })),
@@ -84,35 +85,37 @@ Reply with ONLY a JSON array of indices. Example: [2,0,3,1]`,
       ],
     });
 
-    // Race against a timeout — if Haiku is slow, fall back to area order rather
-    // than blocking the rest of the pipeline.
-    const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), RANKING_TIMEOUT_MS),
-    );
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS));
+    const response = await Promise.race([classifyCall, timeout]);
+    if (!response) return images;
 
-    const response = await Promise.race([rankingCall, timeoutPromise]);
-    if (!response) return images; // timed out
-
-    const text =
-      response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
-    const match = text.match(/\[[\d,\s]+\]/);
+    const text = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    const match = text.match(/\[[\s\S]*?\]/);
     if (!match) return images;
 
-    const ranking: number[] = JSON.parse(match[0]);
-    const seen = new Set<number>();
-    const reordered: ExtractedImage[] = [];
+    const classes: string[] = JSON.parse(match[0]);
+    const labeled = rest.map((img, i) => ({ img, cls: classes[i] ?? "other" }));
 
-    for (const idx of ranking) {
-      if (idx >= 0 && idx < candidates.length && !seen.has(idx)) {
-        reordered.push(candidates[idx]);
-        seen.add(idx);
-      }
-    }
-    for (let i = 0; i < candidates.length; i++) {
-      if (!seen.has(i)) reordered.push(candidates[i]);
-    }
-    return [...reordered, ...images.slice(MAX_CANDIDATES)];
+    const exteriors = labeled.filter((x) => x.cls === "exterior").map((x) => x.img);
+    const interiors = labeled.filter((x) => x.cls === "interior").map((x) => x.img);
+    const others    = labeled.filter((x) => x.cls === "other").map((x) => x.img);
+
+    // secondary = exterior[0] if available, else interior[0]
+    // gallery   = interiors; remaining exteriors ONLY if secondary is exterior; then others
+    const secondaryIsExterior = exteriors.length > 0;
+    const ordered = secondaryIsExterior
+      ? [...exteriors, ...interiors, ...others]   // exterior leads → secondary, rest in gallery
+      : [...interiors, ...others, ...exteriors];  // no exterior → interior leads secondary, no exteriors in gallery
+
+    return [hero, ...ordered, ...images.slice(1 + MAX_CANDIDATES)];
   } catch {
     return images;
   }
+}
+
+/** @deprecated Use classifyImagesForSlots instead. Kept for any callers not yet migrated. */
+export async function rankImagesByRelevance(
+  images: ExtractedImage[],
+): Promise<ExtractedImage[]> {
+  return classifyImagesForSlots(images);
 }

@@ -45,7 +45,7 @@ const extractFlyerToolSchema = {
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2–4 short paragraphs. Copy the flyer's wording as closely as possible — treat it almost like a copy-paste with minor adaptation for email format. Do not rephrase, restructure, or add your own angles. Keep it short and non-redundant: say each thing once. For cheerful events (open house, social, dining), the tone must be upbeat and friendly — use exclamation points freely and naturally throughout, not just once. If the flyer is informational, be warm but measured. Do NOT include logistical details (date, time, location, RSVP) — those are in the hero and CTA. No em dashes.",
+      description: "2–4 short paragraphs. Copy the flyer's wording as closely as possible — treat it almost like a copy-paste with minor adaptation for email format. Do not rephrase, restructure, or add your own angles. Keep it short and non-redundant: say each thing once. For cheerful events (open house, social, dining), the tone must be upbeat and friendly — use exclamation points freely and naturally throughout, not just once. If the flyer is informational, be warm but measured. Do NOT include logistical details (date, time, location, RSVP) — those are in the hero and CTA. No em dashes. NEVER invent quotes or put words in residents' or families' mouths — not even paraphrased ('many residents say...' or 'families tell us...'). Only use wording that is actually in the flyer.",
     },
 
     rsvpRequired: { type: "boolean", description: "True only if the flyer explicitly requires or requests RSVP (phrases like 'RSVP required', 'RSVP requested', 'please RSVP', 'reservations required'). False if attendance is open/walk-in." },
@@ -129,6 +129,7 @@ ${hasVoice ? voiceBlock : fallbackVoice}
 
 Inviolable rules
 - Never use em dashes (—) anywhere in the email. Replace with a comma, a period, or a new sentence.
+- Never invent quotes or testimonials. Do not put words in anyone's mouth — not a resident, not a family member, not staff. This includes paraphrased "what residents say" framing. The phrase "My only regret is that I didn't move here sooner" is a banned example of exactly this — never use it or anything like it.
 - Never invent facts. Every name, date, phone number, time, location, and quote in your output must appear in the flyer. If a detail isn't in the flyer, leave that field empty.
 - pullQuote must be a verbatim or near-verbatim lift from the flyer's printed text — not a sentence you composed. If no quotable line exists in the flyer, leave pullQuote AND pullQuoteAttribution EMPTY. A composed value proposition is not a quote.
 - Use the community's actual name (${community.displayName}) — never generic substitutes like "our community" or "the community."${trackingPhoneNote}

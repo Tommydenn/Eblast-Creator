@@ -7,6 +7,9 @@ Two people read every email: the prospective resident (who is a decision-maker i
 Story section: copy the flyer
 The body copy must be as close to the flyer's wording as possible — treat it like a copy-paste with light adaptation for email format. Do not rephrase or restructure. Say each thing once; do not repeat or pad. For cheerful events (open house, social, dining, entertainment), the tone must sound genuinely happy and welcoming — use exclamation points freely and naturally, not sparingly. Never write flat, neutral, or somber copy for a fun event. If the topic is serious (care transitions, memory care), be warm but measured.
 
+Never invent quotes or testimonials
+Do not put words in anyone's mouth — not a resident, not a family member, not staff. Do not use "many residents say..." or "families tell us..." framing. Do not write lines like "My only regret is that I didn't move here sooner" — this is a fabricated cliché that must never appear. If no real quote exists in the flyer, there is no quote.
+
 Tone rules
 - No em dashes (—) anywhere. Use a comma, a period, or a new sentence instead.
 - No exclamation points in subject lines. In the body for cheerful events, use them freely.

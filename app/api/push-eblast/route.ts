@@ -117,6 +117,8 @@ export async function POST(req: NextRequest) {
     html: finalHtml,
     label: `${community.displayName} — ${templateFileName}`,
     officeLocationId: community.hubspot.officeLocationId,
+    communityName: community.displayName,
+    communityAddress: community.address,
   });
   if (!upload.ok) {
     console.error(`[push-eblast] upload failed status=${upload.status}`, JSON.stringify(upload.body));

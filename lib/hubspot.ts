@@ -61,8 +61,9 @@ async function call(step: string, init: { method: string; url: string; body?: an
 // `email_footer` module so the unsubscribe links resolve to real values.
 
 function wrapAsHubLEmailTemplate(html: string, label: string): string {
+  // Keep the designed footer (Thank You, sender name, Visit Website button).
+  // Only sanitize HubL token placeholders if they somehow appear in the source.
   const stripped = html
-    .replace(/<tr[^>]*data-section="Footer"[^>]*>[\s\S]*?<\/tr>/, "")
     .replace(/\{\{\s*unsubscribe_link\s*\}\}/g, "{{ unsubscribe_link }}")
     .replace(/\{\{\s*manage_preferences\s*\}\}/g, "{{ unsubscribe_section_url }}");
 

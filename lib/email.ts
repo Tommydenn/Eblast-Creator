@@ -37,8 +37,8 @@ export interface SendApprovalEmailParams {
 
 export async function sendApprovalEmail(params: SendApprovalEmailParams) {
   const { to, recipientName, communityName, draftSubject, draftHtml, token } = params;
-  // ?confirmed=1 skips the browser confirmation page and pushes directly to HubSpot.
-  const approveUrl = `${APP_URL}/approve/${token}?confirmed=1`;
+  // Quick-approve route processes the push and returns a minimal confirmation page.
+  const approveUrl = `${APP_URL}/api/quick-approve/${token}`;
   const editsUrl = `${APP_URL}/approve/${token}/edits`;
   const greeting = firstName(recipientName);
   const eblastBody = extractBody(draftHtml);
@@ -64,17 +64,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
               Eblast Draft Review &mdash; ${communityName}
             </p>
 
-            <!-- Subject line — prominent -->
-            <div style="background:#f0ece4;border-left:4px solid #9e8c7a;border-radius:0 6px 6px 0;
-                        padding:14px 20px;margin:12px 0 24px;">
-              <p style="margin:0 0 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
-                        color:#9e9484;font-family:Arial,sans-serif;">Email Subject</p>
-              <p style="margin:0;font-size:17px;color:#2d2926;font-weight:600;font-family:Arial,sans-serif;">
-                ${draftSubject}
-              </p>
-            </div>
-
-            <p style="margin:0 0 6px;font-size:16px;line-height:1.6;color:#3d3530;">
+            <p style="margin:12px 0 6px;font-size:16px;line-height:1.6;color:#3d3530;">
               Hi ${greeting},
             </p>
             <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3d3530;">
@@ -82,7 +72,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
             </p>
 
             <!-- CTA buttons -->
-            <table cellpadding="0" cellspacing="0" role="presentation">
+            <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:20px;">
               <tr>
                 <td style="padding-right:12px;">
                   <a href="${approveUrl}"
@@ -100,6 +90,30 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
                             border:1.5px solid #c9b99a;">
                     ✎ &nbsp;Request Edits
                   </a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Subject line below buttons — envelope icon signals it belongs to the eblast -->
+            <table cellpadding="0" cellspacing="0" role="presentation" width="100%">
+              <tr>
+                <td style="background:#f7f5f0;border:1px solid #e0ddd7;border-radius:6px;padding:12px 16px;">
+                  <table cellpadding="0" cellspacing="0" role="presentation" width="100%">
+                    <tr>
+                      <td width="28" valign="middle" style="padding-right:10px;">
+                        <!-- Envelope icon -->
+                        <svg width="18" height="14" viewBox="0 0 18 14" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+                          <rect x="0" y="0" width="18" height="14" rx="2" fill="none" stroke="#9e8c7a" stroke-width="1.5"/>
+                          <polyline points="0,0 9,8 18,0" fill="none" stroke="#9e8c7a" stroke-width="1.5"/>
+                        </svg>
+                      </td>
+                      <td valign="middle">
+                        <p style="margin:0;font-size:15px;color:#2d2926;font-family:Arial,sans-serif;font-weight:600;line-height:1.3;">
+                          ${draftSubject}
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
                 </td>
               </tr>
             </table>

@@ -108,6 +108,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
                         </svg>
                       </td>
                       <td valign="middle">
+                        <p style="margin:0 0 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#9e9484;font-family:Arial,sans-serif;">Eblast Subject Line</p>
                         <p style="margin:0;font-size:15px;color:#2d2926;font-family:Arial,sans-serif;font-weight:600;line-height:1.3;">
                           ${draftSubject}
                         </p>

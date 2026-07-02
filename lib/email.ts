@@ -37,7 +37,8 @@ export interface SendApprovalEmailParams {
 
 export async function sendApprovalEmail(params: SendApprovalEmailParams) {
   const { to, recipientName, communityName, draftSubject, draftHtml, token } = params;
-  const approveUrl = `${APP_URL}/approve/${token}`;
+  // ?confirmed=1 skips the browser confirmation page and pushes directly to HubSpot.
+  const approveUrl = `${APP_URL}/approve/${token}?confirmed=1`;
   const editsUrl = `${APP_URL}/approve/${token}/edits`;
   const greeting = firstName(recipientName);
   const eblastBody = extractBody(draftHtml);
@@ -59,25 +60,29 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
              style="background:#ffffff;border-radius:8px 8px 0 0;padding:40px 48px 32px;border:1px solid #e0ddd7;border-bottom:none;">
         <tr>
           <td>
-            <p style="margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9e9484;">
-              Eblast Draft Review
+            <p style="margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9e9484;font-family:Arial,sans-serif;">
+              Eblast Draft Review &mdash; ${communityName}
             </p>
-            <h1 style="margin:0 0 20px;font-size:22px;color:#2d2926;font-weight:normal;">
-              ${communityName}
-            </h1>
-            <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d3530;">
+
+            <!-- Subject line — prominent -->
+            <div style="background:#f0ece4;border-left:4px solid #9e8c7a;border-radius:0 6px 6px 0;
+                        padding:14px 20px;margin:12px 0 24px;">
+              <p style="margin:0 0 2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+                        color:#9e9484;font-family:Arial,sans-serif;">Email Subject</p>
+              <p style="margin:0;font-size:17px;color:#2d2926;font-weight:600;font-family:Arial,sans-serif;">
+                ${draftSubject}
+              </p>
+            </div>
+
+            <p style="margin:0 0 6px;font-size:16px;line-height:1.6;color:#3d3530;">
               Hi ${greeting},
             </p>
-            <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d3530;">
-              A new eblast draft is ready for your review. Please take a look at the email below and let us know
-              if it looks good or if you&rsquo;d like any changes made before it goes out.
-            </p>
-            <p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:#7a7066;">
-              Use the buttons below &mdash; please do <strong>not</strong> reply to this email, as replies aren&rsquo;t monitored.
+            <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3d3530;">
+              A new Eblast draft is ready for your review. Please take a look at the email below and let us know if it looks good or if you&rsquo;d like any changes made before it goes out. Thanks!
             </p>
 
             <!-- CTA buttons -->
-            <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:8px;">
+            <table cellpadding="0" cellspacing="0" role="presentation">
               <tr>
                 <td style="padding-right:12px;">
                   <a href="${approveUrl}"
@@ -98,9 +103,6 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
                 </td>
               </tr>
             </table>
-            <p style="margin:8px 0 0;font-size:12px;color:#a09888;font-family:Arial,sans-serif;">
-              Subject: <em>${draftSubject}</em>
-            </p>
           </td>
         </tr>
       </table>
@@ -130,51 +132,13 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <!-- Eblast content -->
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
-    <td align="center" style="padding:0 16px;">
+    <td align="center" style="padding:0 16px 32px;">
       <table width="600" cellpadding="0" cellspacing="0" role="presentation"
-             style="background:#ffffff;border:1px solid #e0ddd7;border-top:none;padding:0;">
+             style="background:#ffffff;border:1px solid #e0ddd7;border-top:none;
+                    border-radius:0 0 8px 8px;padding:0;">
         <tr>
           <td>
             ${eblastBody}
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-
-<!-- Footer CTA repeat -->
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-  <tr>
-    <td align="center" style="padding:0 16px 32px;">
-      <table width="600" cellpadding="0" cellspacing="0" role="presentation"
-             style="background:#f9f8f5;border:1px solid #e0ddd7;border-top:none;
-                    border-radius:0 0 8px 8px;padding:28px 48px 32px;">
-        <tr>
-          <td>
-            <p style="margin:0 0 16px;font-size:14px;color:#7a7066;font-family:Arial,sans-serif;">
-              Ready to approve, or have changes? Use the buttons:
-            </p>
-            <table cellpadding="0" cellspacing="0" role="presentation">
-              <tr>
-                <td style="padding-right:12px;">
-                  <a href="${approveUrl}"
-                     style="display:inline-block;padding:11px 24px;background:#2d6a4f;color:#ffffff;
-                            font-family:Arial,sans-serif;font-size:14px;font-weight:600;
-                            text-decoration:none;border-radius:6px;">
-                    ✓ &nbsp;Approve
-                  </a>
-                </td>
-                <td>
-                  <a href="${editsUrl}"
-                     style="display:inline-block;padding:11px 24px;background:#ffffff;color:#5c4a3a;
-                            font-family:Arial,sans-serif;font-size:14px;font-weight:600;
-                            text-decoration:none;border-radius:6px;border:1.5px solid #c9b99a;">
-                    ✎ &nbsp;Request Edits
-                  </a>
-                </td>
-              </tr>
-            </table>
           </td>
         </tr>
       </table>

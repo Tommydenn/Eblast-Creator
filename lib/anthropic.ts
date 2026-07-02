@@ -40,8 +40,8 @@ const extractFlyerToolSchema = {
     eventTime: { type: "string", description: "Event time, e.g. '2:00 PM'." },
     eventLocation: { type: "string" },
 
-    storyEyebrow: { type: "string", description: "Short scene-setting label above the body copy. 2–4 words. Must NOT echo the hero eyebrow or headline. Not sales-pitchy. No exclamation points. Examples: 'About the Evening', 'Inside the Kitchen', 'What to Expect', 'A Little About Us'. Give it a different angle: a place, a process, a context." },
-    storyScriptTitle: { type: "string", description: "Optional script-styled title that opens the story. Only include if it adds genuine warmth not covered by storyEyebrow. Must feel like natural speech — not a slogan or marketing line. No exclamation points. Examples: 'Come Join Us', \"What's Happening\", 'A Night Together'. Omit rather than force it." },
+    storyEyebrow: { type: "string", description: "Short scene-setting label above the body copy. 2–4 words. Must NOT echo the hero eyebrow or headline. Not sales-pitchy. No exclamation points. Examples: 'About the Evening', 'Inside the Kitchen', 'What to Expect'. If you also populate storyScriptTitle, the eyebrow must directly set it up — they should read as one unified thought (e.g. eyebrow: 'About the Dinner' → title: 'A Night Worth Attending')." },
+    storyScriptTitle: { type: "string", description: "Optional script-styled title below the eyebrow. Only include if it extends the eyebrow with warmth — they must be cohesive, not two unrelated ideas. No exclamation points. Must feel like natural speech, not a slogan. If the eyebrow already says enough, omit rather than add a disconnected title. Example pairs: 'About the Evening' → 'Come Join Us'; 'Inside the Kitchen' → 'Meet the Chef'." },
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },

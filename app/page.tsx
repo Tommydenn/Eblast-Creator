@@ -68,7 +68,10 @@ const EBLAST_EDIT_SCRIPT = `(function(){
     });
     el.addEventListener('blur',function(){ finish(el); });
     el.addEventListener('keydown',function(e){
-      if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); el.blur(); }
+      if(e.key==='Enter'&&!e.shiftKey){
+        if(el.getAttribute('data-field')==='bodyParagraphs') return;
+        e.preventDefault(); el.blur();
+      }
       if(e.key==='Escape'){ el.contentEditable='false'; el.style.outline=''; el.blur(); }
     });
   });
@@ -245,12 +248,14 @@ function PlacedImagesPanel({
 function ImageBankPanel({
   imageUrls,
   onSwap,
+  onAddImage,
 }: {
   imageUrls: string[];
   onSwap: (slot: 'hero' | 'secondary' | 'gallery', url: string) => void;
+  onAddImage: (dataUri: string) => void;
 }) {
   const [swapping, setSwapping] = useState<number | null>(null);
-  if (imageUrls.length === 0) return null;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleSwap(slot: 'hero' | 'secondary' | 'gallery', url: string, i: number) {
     setSwapping(i);
@@ -258,44 +263,84 @@ function ImageBankPanel({
     setSwapping(null);
   }
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') onAddImage(reader.result);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
   return (
-    <details className="rounded-md border border-sand-200 bg-sand-50/60">
+    <details className="rounded-md border border-sand-200 bg-sand-50/60" open={imageUrls.length === 0}>
       <summary className="flex cursor-pointer items-center justify-between px-4 py-3">
         <span className="text-xs font-medium uppercase tracking-[0.12em] text-sand-600">Image bank</span>
         <span className="text-[11px] text-sand-500">{imageUrls.length} image{imageUrls.length === 1 ? "" : "s"}</span>
       </summary>
-      <div className="grid grid-cols-4 gap-2 border-t border-sand-200 p-3">
-        {imageUrls.map((url, i) => (
-          <div key={i} className="flex flex-col gap-1.5">
-            <div
-              className="relative overflow-hidden rounded border border-sand-200 bg-sand-100"
-              style={{ aspectRatio: '4/3' }}
+      <div className="border-t border-sand-200 p-3">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+        {imageUrls.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-3 text-center">
+            <p className="text-[11px] text-sand-400">No images extracted from PDF</p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded border border-sand-300 bg-white px-3 py-1.5 text-[11px] font-medium text-sand-600 transition-colors hover:border-clay-300 hover:text-clay-700"
             >
-              <img src={url} alt={`Extracted image ${i + 1}`} className="h-full w-full object-cover" />
-              {swapping === i && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-                  <span className="text-[10px] text-sand-500">Placing…</span>
-                </div>
-              )}
-            </div>
-            <select
-              value=""
-              disabled={swapping === i}
-              onChange={(e) => {
-                const slot = e.target.value as 'hero' | 'secondary' | 'gallery';
-                if (!slot) return;
-                handleSwap(slot, url, i);
-                e.currentTarget.value = '';
-              }}
-              className="w-full rounded border border-sand-200 bg-white px-1 py-[3px] text-[9px] text-sand-600 transition-colors hover:border-clay-300 focus:outline-none disabled:opacity-40 cursor-pointer"
-            >
-              <option value="">Place image…</option>
-              <option value="hero">Set as Hero</option>
-              <option value="secondary">Set as Secondary</option>
-              <option value="gallery">Add to Gallery</option>
-            </select>
+              Upload image
+            </button>
           </div>
-        ))}
+        ) : (
+          <>
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {imageUrls.map((url, i) => (
+                <div key={i} className="flex flex-col gap-1.5">
+                  <div
+                    className="relative overflow-hidden rounded border border-sand-200 bg-sand-100"
+                    style={{ aspectRatio: '4/3' }}
+                  >
+                    <img src={url} alt={`Image ${i + 1}`} className="h-full w-full object-cover" />
+                    {swapping === i && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-white/70">
+                        <span className="text-[10px] text-sand-500">Placing…</span>
+                      </div>
+                    )}
+                  </div>
+                  <select
+                    value=""
+                    disabled={swapping === i}
+                    onChange={(e) => {
+                      const slot = e.target.value as 'hero' | 'secondary' | 'gallery';
+                      if (!slot) return;
+                      handleSwap(slot, url, i);
+                      e.currentTarget.value = '';
+                    }}
+                    className="w-full rounded border border-sand-200 bg-white px-1 py-[3px] text-[9px] text-sand-600 transition-colors hover:border-clay-300 focus:outline-none disabled:opacity-40 cursor-pointer"
+                  >
+                    <option value="">Place image…</option>
+                    <option value="hero">Set as Hero</option>
+                    <option value="secondary">Set as Secondary</option>
+                    <option value="gallery">Add to Gallery</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full rounded border border-dashed border-sand-300 py-1.5 text-[11px] text-sand-400 transition-colors hover:border-clay-300 hover:text-clay-600"
+            >
+              + Upload image
+            </button>
+          </>
+        )}
       </div>
     </details>
   );
@@ -319,7 +364,7 @@ export default function Home() {
     duplicateWarning,
     currentDraftSaved, currentDraftId, saveNotice,
     htmlDirty, syncHtml, swapSubjectLine,
-    allExtractedImageUrls, swapImage, repositionImage, removeImage,
+    allExtractedImageUrls, swapImage, repositionImage, removeImage, addToImageBank,
     heroOriginalUrl, secondaryOriginalUrl, galleryOriginalUrls,
     handleFileChange, clearInputs,
     generateDraft, cancelGeneration,
@@ -807,11 +852,12 @@ export default function Home() {
                   onRemove={removeImage}
                 />
 
-                {/* Image bank — all extracted images, collapsible */}
-                {allExtractedImageUrls.length > 0 && (
+                {/* Image bank — collapsible; always shown when a draft exists so images can be uploaded */}
+                {extracted && (
                   <ImageBankPanel
                     imageUrls={allExtractedImageUrls}
                     onSwap={(slot, url) => swapImage(slot, url, undefined, 'center')}
+                    onAddImage={addToImageBank}
                   />
                 )}
 

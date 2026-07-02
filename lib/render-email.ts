@@ -224,16 +224,11 @@ export function buildEblastHtml(
       ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${escapeHtml(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
-  ${flyer.bodyParagraphs
-    .map(
-      (p, i) => `
   <tr data-section="Story">
-    <td style="padding: 0 36px ${i === flyer.bodyParagraphs.length - 1 ? "28px" : "16px"} 36px;">
-      <p data-field="bodyParagraphs.${i}" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${escapeHtml(p)}</p>
+    <td style="padding: 0 36px 28px 36px;">
+      <p data-field="bodyParagraphs" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => escapeHtml(p)).join("<br><br>")}</p>
     </td>
-  </tr>`,
-    )
-    .join("")}
+  </tr>
   ${secondaryImg ? `
   <tr data-section="Secondary Image">
     <td style="padding: 0 36px 28px 36px;">

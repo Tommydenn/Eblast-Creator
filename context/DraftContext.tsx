@@ -323,6 +323,7 @@ export interface DraftContextValue {
   /** Remove the image from a specific slot (hero/secondary/gallery). */
   removeImage: (slot: 'hero' | 'secondary' | 'gallery', galleryIdx?: number) => Promise<void>;
   dismissDuplicateWarning: () => void;
+  addToImageBank: (dataUri: string) => void;
 }
 
 const DraftContext = createContext<DraftContextValue | null>(null);
@@ -427,9 +428,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       if (!current) return;
       const parts = field.split(".");
       let updated: ExtractedFlyer;
-      if (parts.length === 1) {
+      if (field === "bodyParagraphs") {
+        // Combined edit: split by double newlines back into individual paragraphs.
+        const paras = value.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+        updated = { ...current, bodyParagraphs: paras.length > 0 ? paras : current.bodyParagraphs };
+      } else if (parts.length === 1) {
         updated = { ...current, [field]: value } as ExtractedFlyer;
       } else if (parts[0] === "bodyParagraphs" && !isNaN(parseInt(parts[1], 10))) {
+        // Legacy indexed field — kept for any existing drafts that still use it.
         const idx = parseInt(parts[1], 10);
         const bp = [...current.bodyParagraphs];
         bp[idx] = value;
@@ -1205,6 +1211,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setDuplicateWarning(null);
   }
 
+  function addToImageBank(dataUri: string) {
+    setAllExtractedImageUrls(prev => [...prev, dataUri]);
+    setCurrentDraftSaved(false);
+  }
+
   const value: DraftContextValue = {
     communities,
     selectedSlug, setSelectedSlug,
@@ -1252,6 +1263,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     secondaryOriginalUrl,
     galleryOriginalUrls,
     dismissDuplicateWarning,
+    addToImageBank,
   };
 
   return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>;

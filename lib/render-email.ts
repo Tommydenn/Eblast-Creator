@@ -154,13 +154,20 @@ export function buildEblastHtml(
   const ctaHref = ctaPhone
     ? `tel:+1${ctaPhone.replace(/\D/g, "")}`
     : flyer.ctaButtonHref;
-  // Format as XXX.XXX.XXXX — uppercase button text matches the email's voice.
-  const formattedPhone = ctaPhone
+  // Use the AI-generated button label (context-aware action phrase with phone).
+  // If a tracking phone is configured, replace any phone number in the label
+  // with the tracking phone formatted as XXX.XXX.XXXX.
+  const formattedTracking = ctaPhone
     ? ctaPhone.replace(/\D/g, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1.$2.$3")
     : null;
-  const ctaDisplayText = formattedPhone
-    ? `CALL ${formattedPhone} TO RSVP!`
-    : flyer.ctaButtonLabel.toUpperCase();
+  const rawLabel = flyer.ctaButtonLabel || (formattedTracking ? `Call ${formattedTracking}` : "Call Us");
+  const ctaDisplayText = formattedTracking
+    ? rawLabel.replace(/\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/, formattedTracking).toUpperCase()
+    : rawLabel.toUpperCase();
+
+  // Scale button font down for longer labels so they fit without wrapping.
+  const ctaBtnFontSize = ctaDisplayText.length <= 30 ? 14 : ctaDisplayText.length <= 42 ? 12 : 10;
+  const ctaBtnLetterSpacing = ctaBtnFontSize >= 12 ? "2.5px" : "1.5px";
 
   // Component fragments — kept as inline HTML because email clients reward
   // redundancy and table-based layouts. CSS variables/classes don't survive Outlook.
@@ -202,7 +209,7 @@ export function buildEblastHtml(
                 </td>
               </tr>
             </table>` : ""}
-            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.accent}; color:${buttonTextColor("#FFFFFF", brand.accent)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
+            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.accent}; color:${buttonTextColor("#FFFFFF", brand.accent)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: ${ctaBtnFontSize}px; letter-spacing: ${ctaBtnLetterSpacing}; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
           </td>
         </tr>
       </table>
@@ -291,7 +298,7 @@ export function buildEblastHtml(
           <td style="padding: 40px 36px;" align="center">
             ${rsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
             ${eventDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>` : ""}
-            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.primary}; color:${buttonTextColor("#FFFFFF", brand.primary)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
+            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; background:${brand.primary}; color:${buttonTextColor("#FFFFFF", brand.primary)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: ${ctaBtnFontSize}px; letter-spacing: ${ctaBtnLetterSpacing}; text-transform: uppercase; font-weight: 700; padding: 16px 36px;">${escapeHtml(ctaDisplayText)}</a>
           </td>
         </tr>
       </table>

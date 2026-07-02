@@ -53,7 +53,7 @@ const extractFlyerToolSchema = {
     ctaEyebrow: { type: "string", description: "Action label above the final CTA block. Must NOT repeat the hero eyebrow. Verb-led and specific: 'Reserve Your Seat', 'Save Saturday', 'Join the Table'." },
     ctaHeadline: { type: "string", description: "CTA headline — state the date+time OR a final reason to act (not the event name again). E.g. 'Saturday, June 28 · 5:30 PM' or 'Seating Is Limited'." },
     ctaSubline: { type: "string", description: "One supporting, factual line that lowers friction or adds a useful detail (cost, who's invited, what to bring). If the flyer requires or requests RSVP, this line MUST say so explicitly (e.g. 'RSVP required — seating is limited'). Never include a person's name. No urgency, scarcity, or hype. Omit if nothing fresh to add." },
-    ctaButtonLabel: { type: "string", description: "Button text using the phone number only, e.g. 'Call 920.504.3443'. Never include a salesperson's name." },
+    ctaButtonLabel: { type: "string", description: "Button text that matches the flyer's call to action. Always include the phone number formatted as XXX.XXX.XXXX, followed by a SHORT context-appropriate phrase. Examples: 'Call 920.504.3443 to RSVP', 'Call 920.504.3443 to Schedule a Tour', 'Call 920.504.3443 to Request Info', 'Call 920.504.3443 for Details'. Follow the flyer's intent — do not default to 'to RSVP' if the flyer is not about RSVPing. Keep it as short as possible. Never include a salesperson's name." },
     ctaButtonHref: { type: "string", description: "Button href: tel:, mailto:, or https:// URL. Pull from the flyer." },
 
     heroImageAlt: { type: "string" },

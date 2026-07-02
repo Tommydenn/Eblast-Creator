@@ -40,8 +40,8 @@ const extractFlyerToolSchema = {
     eventTime: { type: "string", description: "Event time, e.g. '2:00 PM'." },
     eventLocation: { type: "string" },
 
-    storyEyebrow: { type: "string", description: "Short scene-setting label above the body copy. 2–4 words. Must NOT echo the hero eyebrow or headline. Not sales-pitchy. No exclamation points. Examples: 'About the Evening', 'Inside the Kitchen', 'What to Expect'. If you also populate storyScriptTitle, the eyebrow must directly set it up — they should read as one unified thought (e.g. eyebrow: 'About the Dinner' → title: 'A Night Worth Attending')." },
-    storyScriptTitle: { type: "string", description: "Optional script-styled title below the eyebrow. Only include if it extends the eyebrow with warmth — they must be cohesive, not two unrelated ideas. No exclamation points. Must feel like natural speech, not a slogan. If the eyebrow already says enough, omit rather than add a disconnected title. Example pairs: 'About the Evening' → 'Come Join Us'; 'Inside the Kitchen' → 'Meet the Chef'." },
+    storyEyebrow: { type: "string", description: "2–4 word label that names what the story section is about. Be specific — not 'About the Event' but 'The Summer Concert' or 'Friday's Dinner Menu'. Must NOT echo the hero headline. No exclamation points. No sales language." },
+    storyScriptTitle: { type: "string", description: "Optional script-styled line below the eyebrow. The ONLY valid use: adding a specific detail or warmth that the eyebrow left out, so together they read as one idea. NEVER use 'Come join us', 'Join us', 'Join us for...', or any invitation phrase — those are body copy, not a title. NEVER echo the eyebrow or state a different topic. If the eyebrow already says enough on its own, leave this empty. Good pair: eyebrow 'The Summer Concert' → title 'Live Music by the Garden'. Bad pair: eyebrow 'About the Concert' → title 'Come Join Us' (invitation, unrelated to the label)." },
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },

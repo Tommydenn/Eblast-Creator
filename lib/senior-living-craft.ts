@@ -31,8 +31,8 @@ Facts and content
 Titles and subtitles
 Hero headline: Name the event clearly — use the event name or a short factual description from the flyer. 2–5 words. Title-case. No exclamation points. No clever marketing phrases ("Discover...", "Experience...", "A Culinary Journey", "An Evening of Elegance"). Just say what it is.
 Hero subtitle (scriptSubheadline): Only include if the flyer has a natural subtitle worth showing. Must be a plain, warm factual phrase — not a tagline. Under 25 chars. Examples: "With Live Entertainment", "Families Welcome", "Dinner Included". No exclamation points. Blank if nothing from the flyer fits.
-Story eyebrow: A short scene-setting label. 2–4 words. Must NOT echo the headline. Not sales-pitchy. Examples: "About the Evening", "Inside the Kitchen", "What to Expect". No exclamation points.
-Story script title: Only if it opens the story with genuine warmth. Must feel like natural speech, not a slogan. Examples: "Come Join Us", "What's Happening". No exclamation points. Omit rather than force it.
+Story eyebrow: 2–4 words that name what the story section covers. Be specific: not "About the Event" but "The Summer Concert" or "Friday's Dinner." No exclamation points.
+Story script title: Only include if it adds a specific detail that completes the eyebrow — they must read as one thought. Never use "Come join us", "Join us", or any invitation phrase there — invitations belong in the body copy. If the eyebrow stands alone, leave this empty. Good: eyebrow "The Summer Concert" → title "Live Music by the Garden". Bad: eyebrow "About the Concert" → title "Come Join Us".
 What to avoid in all titles/subtitles: "Exciting", "Special", "Amazing", "Wonderful", "Exclusive", "Experience...", "Discover...", tagline-style phrases, long sentences, anything that sounds like a billboard.
 
 Structure

@@ -32,16 +32,16 @@ const extractFlyerToolSchema = {
     previewText: { type: "string", description: "Inbox preview text. <=120 chars. Reinforces subject without repeating it." },
 
     eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
-    headline: { type: "string", description: "The event name or a short direct description of it, taken as closely as possible from the flyer. 2–5 words. Title-case. Do NOT try to be clever or construct a noun+verb phrase — just use the event name." },
-    scriptSubheadline: { type: "string", description: "Optional short subtitle shown in cursive under the headline. Only use if the flyer itself has a subtitle or secondary line worth showing — do NOT invent one. Must be short enough to fit on one line: aim for under 25 characters, hard limit 35. If nothing from the flyer fits, leave it empty." },
+    headline: { type: "string", description: "The event name or a short factual description from the flyer. 2–5 words. Title-case. No exclamation points. Do NOT be clever — no 'Discover...', 'Experience...', 'An Evening of...', or any tagline-style phrase. Just name the event clearly and warmly, exactly as the flyer does." },
+    scriptSubheadline: { type: "string", description: "Optional short subtitle in cursive under the headline. Only include if the flyer itself has a natural subtitle worth showing — do NOT invent one. Must be a plain, warm factual phrase, not a tagline. No exclamation points. Aim under 25 chars, hard limit 35. Examples: 'With Live Entertainment', 'Families Welcome', 'Dinner Included'. Leave empty if nothing from the flyer fits naturally." },
     heroHook: { type: "string", description: "Always emit an empty string. This field is no longer rendered in the email." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
     eventTime: { type: "string", description: "Event time, e.g. '2:00 PM'." },
     eventLocation: { type: "string" },
 
-    storyEyebrow: { type: "string", description: "Section label above the body copy. Must be fresh — must NOT echo the hero eyebrow or headline. Give it a different angle: a place, a person, a process ('Inside Our Kitchen', 'Meet Chef Marcos', 'How It Works')." },
-    storyScriptTitle: { type: "string", description: "Optional script-styled section title. Only include if it opens the story with warmth or personality not covered by storyEyebrow. Omit rather than repeat." },
+    storyEyebrow: { type: "string", description: "Short scene-setting label above the body copy. 2–4 words. Must NOT echo the hero eyebrow or headline. Not sales-pitchy. No exclamation points. Examples: 'About the Evening', 'Inside the Kitchen', 'What to Expect', 'A Little About Us'. Give it a different angle: a place, a process, a context." },
+    storyScriptTitle: { type: "string", description: "Optional script-styled title that opens the story. Only include if it adds genuine warmth not covered by storyEyebrow. Must feel like natural speech — not a slogan or marketing line. No exclamation points. Examples: 'Come Join Us', \"What's Happening\", 'A Night Together'. Omit rather than force it." },
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },

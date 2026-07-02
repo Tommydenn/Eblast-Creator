@@ -28,6 +28,13 @@ Facts and content
 - Use specific details from the flyer — a person's name, a specific dish, a partner organization. Specifics make the email feel real.
 - Do not include logistical details (date, time, location, RSVP) in the body paragraphs. Those live in the hero and CTA sections.
 
+Titles and subtitles
+Hero headline: Name the event clearly — use the event name or a short factual description from the flyer. 2–5 words. Title-case. No exclamation points. No clever marketing phrases ("Discover...", "Experience...", "A Culinary Journey", "An Evening of Elegance"). Just say what it is.
+Hero subtitle (scriptSubheadline): Only include if the flyer has a natural subtitle worth showing. Must be a plain, warm factual phrase — not a tagline. Under 25 chars. Examples: "With Live Entertainment", "Families Welcome", "Dinner Included". No exclamation points. Blank if nothing from the flyer fits.
+Story eyebrow: A short scene-setting label. 2–4 words. Must NOT echo the headline. Not sales-pitchy. Examples: "About the Evening", "Inside the Kitchen", "What to Expect". No exclamation points.
+Story script title: Only if it opens the story with genuine warmth. Must feel like natural speech, not a slogan. Examples: "Come Join Us", "What's Happening". No exclamation points. Omit rather than force it.
+What to avoid in all titles/subtitles: "Exciting", "Special", "Amazing", "Wonderful", "Exclusive", "Experience...", "Discover...", tagline-style phrases, long sentences, anything that sounds like a billboard.
+
 Structure
 - One CTA. The body builds toward it. Phone number formatted human-style ("Call 920.504.3028").
 - Subject line: 60 chars or fewer, specific, gives a reason to care beyond just naming the event.

@@ -31,9 +31,12 @@ async function toThumbnailDataUri(dataUri: string): Promise<string> {
 
 /**
  * Reorders images so the correct types land in the correct email slots:
- *   [0] hero     = images[0] (largest/first from PDF — always the main flyer photo)
+ *   [0] hero      = largest non-graphic image by pixel area (graphics like logos are skipped)
  *   [1] secondary = first exterior shot (building/grounds); fallback: first interior
  *   [2+] gallery  = interiors first; remaining exteriors only if secondary is already exterior
+ *
+ * All candidates (including index 0) are classified so that a high-res logo that
+ * sorts to the top of the area list doesn't accidentally become the hero image.
  */
 export async function classifyImagesForSlots(
   images: ExtractedImage[],
@@ -41,25 +44,24 @@ export async function classifyImagesForSlots(
   if (images.length <= 1) return images;
   if (!process.env.ANTHROPIC_API_KEY) return images;
 
-  // Hero is always images[0] — never touched. Classify the remainder.
-  const hero = images[0];
-  const rest = images.slice(1, 1 + MAX_CANDIDATES);
-  if (rest.length === 0) return images;
+  // Classify all candidates (images already sorted by area desc from pdf-images).
+  const candidates = images.slice(0, MAX_CANDIDATES);
+  const overflow = images.slice(MAX_CANDIDATES);
 
   try {
-    const thumbnails = await Promise.all(rest.map((img) => toThumbnailDataUri(img.dataUri)));
+    const thumbnails = await Promise.all(candidates.map((img) => toThumbnailDataUri(img.dataUri)));
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1 });
 
     const classifyCall = anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 80,
+      max_tokens: 100,
       messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `Classify each image (numbered 0–${rest.length - 1}) for a senior living community marketing email.
+              text: `Classify each image (numbered 0–${candidates.length - 1}) for a senior living community marketing email.
 
 Categories:
 - "exterior": outside of a building, community entrance, grounds, parking, signage, building facade
@@ -95,21 +97,28 @@ Reply with ONLY a JSON array, one label per image. Example for 4 images: ["exter
     if (!match) return images;
 
     const classes: string[] = JSON.parse(match[0]);
-    const labeled = rest.map((img, i) => ({ img, cls: classes[i] ?? "graphic" }));
+    const labeled = candidates.map((img, i) => ({ img, cls: classes[i] ?? "graphic" }));
 
-    const exteriors = labeled.filter((x) => x.cls === "exterior").map((x) => x.img);
-    const interiors = labeled.filter((x) => x.cls === "interior").map((x) => x.img);
-    const people    = labeled.filter((x) => x.cls === "people").map((x) => x.img);
-    // "graphic" images (logos, text overlays, design elements) are excluded entirely
+    // "graphic" images (logos, text overlays, design elements) are excluded entirely.
+    // Candidates are already sorted by area desc, so the first non-graphic is the largest real photo.
+    const allReal = labeled.filter((x) => x.cls !== "graphic");
+    if (allReal.length === 0) return images; // nothing real — leave untouched
+
+    const hero = allReal[0].img;
+    const rest = allReal.slice(1);
+
+    const exteriors = rest.filter((x) => x.cls === "exterior").map((x) => x.img);
+    const interiors = rest.filter((x) => x.cls === "interior").map((x) => x.img);
+    const people    = rest.filter((x) => x.cls === "people").map((x) => x.img);
 
     // secondary = exterior[0] if available, else interior[0], else people[0]
     // gallery   = interiors + people; remaining exteriors ONLY if secondary is already exterior
     const secondaryIsExterior = exteriors.length > 0;
     const ordered = secondaryIsExterior
-      ? [...exteriors, ...interiors, ...people]   // exterior leads → secondary, rest in gallery
-      : [...interiors, ...people, ...exteriors];  // no exterior → interior leads secondary
+      ? [...exteriors, ...interiors, ...people]
+      : [...interiors, ...people, ...exteriors];
 
-    return [hero, ...ordered, ...images.slice(1 + MAX_CANDIDATES)];
+    return [hero, ...ordered, ...overflow];
   } catch {
     return images;
   }

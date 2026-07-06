@@ -14,63 +14,6 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// Maps known Google Font names (lowercase) to their Fonts API family parameter
-// string. Only fonts confirmed available on Google Fonts are listed here —
-// commercial or system fonts are intentionally absent so they get no link tag.
-const GOOGLE_FONT_PARAMS: Record<string, string> = {
-  "josefin sans": "Josefin+Sans:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
-  "bebas neue": "Bebas+Neue",
-  "montserrat": "Montserrat:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
-  "open sans": "Open+Sans:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
-  "lato": "Lato:ital,wght@0,300;0,400;0,700;1,300;1,400",
-  "raleway": "Raleway:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
-  "roboto": "Roboto:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400",
-  "poppins": "Poppins:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
-  "playfair display": "Playfair+Display:ital,wght@0,400;0,700;1,400;1,700",
-  "nunito": "Nunito:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
-  "merriweather": "Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400",
-  "pt sans": "PT+Sans:ital,wght@0,400;0,700;1,400;1,700",
-};
-
-// Returns a Google Fonts <link> href for any community fonts that are available
-// on Google Fonts, or null if neither font is a known Google Font.
-// Outlook ignores <link> tags in email <head>s, so no MSO conditional is needed.
-function buildGoogleFontsUrl(fontHeadline: string, fontBody: string): string | null {
-  const seen = new Set<string>();
-  const families: string[] = [];
-  for (const fontStr of [fontHeadline, fontBody]) {
-    const name = fontStr.split(",")[0].trim().replace(/['"]/g, "").toLowerCase();
-    const param = GOOGLE_FONT_PARAMS[name];
-    if (param && !seen.has(param)) {
-      seen.add(param);
-      families.push(`family=${param}`);
-    }
-  }
-  if (families.length === 0) return null;
-  return `https://fonts.googleapis.com/css2?${families.join("&")}&display=swap`;
-}
-
-// Ensures every font-family string has an email-safe generic fallback so
-// Outlook falls back to a readable system font instead of Times New Roman.
-// Multi-word font names are quoted so the browser/email client parses them as a
-// single family name rather than splitting on commas (e.g. "Josefin Sans" must
-// become "Josefin Sans", not Josefin, Sans as two separate tokens).
-function safeFontStack(fontFamily: string): string {
-  if (/\b(serif|sans-serif|monospace|cursive|fantasy)\b/.test(fontFamily)) return fontFamily;
-  // Quote each part that contains whitespace and isn't already quoted.
-  const parts = fontFamily.split(/\s*,\s*/);
-  const quoted = parts.map(p => {
-    const t = p.trim();
-    return /\s/.test(t) && !/^['"]/.test(t) ? `"${t}"` : t;
-  });
-  const base = quoted.join(", ");
-  if (/\b(serif|sans-serif|monospace|cursive|fantasy)\b/.test(base)) return base;
-  const isSerif = /garamond|caslon|minion|georgia|times|bookman|mackinac|adobe caslon|palatino/i.test(fontFamily);
-  return isSerif
-    ? `${base}, Georgia, 'Times New Roman', serif`
-    : `${base}, Arial, Helvetica, sans-serif`;
-}
-
 // Relative luminance (0 = black, 1 = white). Returns null for malformed hex.
 function relLuminance(hex: string): number | null {
   const h = hex.replace("#", "");
@@ -195,7 +138,7 @@ export function buildEblastHtml(
 
   // Text fallback when no logo asset is available.
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();
-  const textFallback = `<span style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "#cccccc" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
+  const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "#cccccc" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
   // Keep logo URLs as-is. Relative paths (e.g. /logos/slug/primary.png) are
   // intentionally left relative so callers can embed them as base64 data URIs
@@ -227,8 +170,6 @@ export function buildEblastHtml(
   const ctaBtnFontSize = ctaDisplayText.length <= 32 ? 14 : 13;
   const ctaBtnLetterSpacing = ctaBtnFontSize >= 14 ? "2.5px" : "2px";
 
-  const googleFontsUrl = buildGoogleFontsUrl(brand.fontHeadline, brand.fontBody);
-
   // Component fragments — kept as inline HTML because email clients reward
   // redundancy and table-based layouts. CSS variables/classes don't survive Outlook.
   // data-section and data-field attributes are used by the preview's interactive
@@ -253,8 +194,8 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
-            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
-            <p data-field="headline" style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
+            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
+            <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
               const len = flyer.scriptSubheadline.length;
               const fontSize = len <= 18 ? 44 : len <= 28 ? 36 : len <= 38 ? 28 : 22;
@@ -264,15 +205,15 @@ export function buildEblastHtml(
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto;">
               <tr>
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
-                  <p style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>
-                  ${communityAddressLine ? `<p style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 12px; letter-spacing: 1px; color: #E8DDC4; margin: 0;">${escapeHtml(communityAddressLine)}</p>` : ""}
+                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>
+                  ${communityAddressLine ? `<p style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 1px; color: #E8DDC4; margin: 0;">${escapeHtml(communityAddressLine)}</p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
               <tr>
                 <td align="center" style="background:${brand.accent};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; max-width:280px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${safeFontStack(brand.fontBody)}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4; white-space:nowrap;">${escapeHtml(ctaDisplayText)}</a>
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; max-width:280px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4; white-space:nowrap;">${escapeHtml(ctaDisplayText)}</a>
                 </td>
               </tr>
             </table>
@@ -285,13 +226,13 @@ export function buildEblastHtml(
   const story = `
   <tr data-section="Story">
     <td style="padding: 44px 36px 12px 36px;">
-      <p data-field="storyEyebrow" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow)}</p>
+      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow)}</p>
       ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${escapeHtml(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
   <tr data-section="Story">
     <td style="padding: 0 36px 28px 36px;">
-      <p data-field="bodyParagraphs" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => escapeHtml(p)).join("<br><br>")}</p>
+      <p data-field="bodyParagraphs" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => escapeHtml(p)).join("<br><br>")}</p>
     </td>
   </tr>
   ${secondaryImg ? `
@@ -325,7 +266,7 @@ export function buildEblastHtml(
     return `
   <tr data-section="Photo Gallery">
     <td style="padding: 44px 36px 12px 36px;" align="center">
-      <p data-field="galleryLabel" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${escapeHtml(flyer.galleryLabel ?? `A Look Around ${community.shortName}`)}</p>
+      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${escapeHtml(flyer.galleryLabel ?? `A Look Around ${community.shortName}`)}</p>
     </td>
   </tr>
   <tr data-section="Photo Gallery">
@@ -357,12 +298,12 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${brand.accent};">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${rsvpLabel ? `<p style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
-            ${eventDateLine ? `<p style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>` : ""}
+            ${rsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
+            ${eventDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>` : ""}
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
               <tr>
                 <td align="center" style="background:${brand.primary};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; max-width:280px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${safeFontStack(brand.fontBody)}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4; white-space:nowrap;">${escapeHtml(ctaDisplayText)}</a>
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; max-width:280px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4; white-space:nowrap;">${escapeHtml(ctaDisplayText)}</a>
                 </td>
               </tr>
             </table>
@@ -384,14 +325,14 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin-bottom:28px;">
         <tr>
           <td align="center" style="background:${brand.primary};">
-            <a href="${escapeHtml(websiteHref)}" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${safeFontStack(brand.fontBody)}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700; white-space:nowrap;">Visit Website</a>
+            <a href="${escapeHtml(websiteHref)}" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700; white-space:nowrap;">Visit Website</a>
           </td>
         </tr>
       </table>` : ""}
-      <p style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 26px; color: ${brand.primary}; margin: 0 0 10px 0;">Thank You!</p>
-      ${primarySender?.name ? `<p style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 14px; color: #3A3A3A; margin: 0 0 2px 0;">${escapeHtml(primarySender.name)}</p>` : ""}
-      <p data-field="footerName" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${escapeHtml(flyer.footerName ?? community.displayName)}</p>
-      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${escapeHtml(primarySender.email)}</a>` : ""}
+      <p style="font-family: ${brand.fontHeadline}; font-size: 26px; color: ${brand.primary}; margin: 0 0 10px 0;">Thank You!</p>
+      ${primarySender?.name ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 2px 0;">${escapeHtml(primarySender.name)}</p>` : ""}
+      <p data-field="footerName" style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${escapeHtml(flyer.footerName ?? community.displayName)}</p>
+      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" style="font-family: ${brand.fontBody}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${escapeHtml(primarySender.email)}</a>` : ""}
     </td>
   </tr>`;
 
@@ -401,9 +342,7 @@ export function buildEblastHtml(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(flyer.subject)}</title>
-${googleFontsUrl ? `<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="${googleFontsUrl}" rel="stylesheet">` : ""}</head>
+</head>
 <body style="margin:0; padding:0; background:#f5f5f5;">
 <span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(flyer.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f5f5;">

@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { inlineRelativeImages } from "@/lib/inline-images";
+import { buildEblastHtml } from "@/lib/render-email";
+import { getCommunity } from "@/data/communities";
 
 export const runtime = "nodejs";
 
@@ -38,7 +40,24 @@ export async function GET(
   }
 
   const draftData = draftRow.data as Record<string, any>;
-  const rawHtml: string = draftData?.html ?? "<p>No preview available.</p>";
+
+  // New format: build HTML from fields. Fallback to legacy html field for old drafts.
+  let rawHtml: string;
+  if (draftData?.fields) {
+    const community = await getCommunity(draftRow.communitySlug);
+    if (!community) {
+      return new NextResponse("Community not found", { status: 404, headers: { "Content-Type": "text/plain" } });
+    }
+    const imgs = draftData.images ?? {};
+    rawHtml = buildEblastHtml(draftData.fields, community, {
+      heroImageUrl: imgs.hero?.url,
+      secondaryImageUrl: imgs.secondary?.url,
+      galleryImageUrls: (imgs.gallery ?? []).map((g: any) => g?.url).filter(Boolean),
+    });
+  } else {
+    rawHtml = draftData?.html ?? "<p>No preview available.</p>";
+  }
+
   const html = await inlineRelativeImages(rawHtml);
 
   return new NextResponse(html, {

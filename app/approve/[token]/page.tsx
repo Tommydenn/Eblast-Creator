@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
+import { buildEblastHtml } from "@/lib/render-email";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 
@@ -54,10 +55,22 @@ export default async function ApprovePage({ params, searchParams }: Props) {
       if (!draftRow) throw new Error("Draft not found");
 
       const draftData = draftRow.data as Record<string, any>;
-      const rawHtml: string = draftData?.html ?? "";
-      const subject: string = draftRow.subject ?? draftData?.subject ?? "Draft";
+      const subject: string = draftRow.subject ?? draftData?.subject ?? draftData?.fields?.subject ?? "Draft";
       const community = await getCommunity(approval.communitySlug);
       if (!community) throw new Error("Community not found");
+
+      // New format: build HTML from fields. Legacy drafts still have html field.
+      let rawHtml: string;
+      if (draftData?.fields) {
+        const imgs = draftData.images ?? {};
+        rawHtml = buildEblastHtml(draftData.fields, community, {
+          heroImageUrl: imgs.hero?.url,
+          secondaryImageUrl: imgs.secondary?.url,
+          galleryImageUrls: (imgs.gallery ?? []).map((g: any) => g?.url).filter(Boolean),
+        });
+      } else {
+        rawHtml = draftData?.html ?? "";
+      }
 
       let html = await inlineRelativeImages(rawHtml);
       const swap = await swapDataUrisForHostedImages({ html, folderPath: `/eblast-drafter/${community.slug}` });
@@ -82,7 +95,7 @@ export default async function ApprovePage({ params, searchParams }: Props) {
       const create = await createEmail({
         name: generateHubspotEmailName({
           acronym: community.hubspot.acronym,
-          eventCategory: (draftData.extracted as any)?.eventCategory,
+          eventCategory: (draftData.fields ?? draftData.extracted)?.eventCategory,
         }),
         subject,
         fromName: community.senders[0]?.name ?? community.displayName,

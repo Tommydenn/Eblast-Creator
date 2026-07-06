@@ -83,24 +83,37 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .limit(1);
 
   const draftData = (draftRow?.data as Record<string, unknown>) ?? {};
-  const currentExtracted = draftData.extracted as ExtractedFlyer | undefined;
+  // Support both new format (fields) and old format (extracted)
+  const currentExtracted = (draftData.fields ?? draftData.extracted) as ExtractedFlyer | undefined;
+  const isNewFormat = !!draftData.fields;
   const currentHtml = (draftData.html as string) ?? "";
+  const currentImages = draftData.images as { hero?: { url: string; originalUrl: string } | null; secondary?: { url: string; originalUrl: string } | null; gallery?: Array<{ url: string; originalUrl: string }> } | undefined;
 
   // ── Attempt AI auto-refine ─────────────────────────────────────────────────
   let autoRefined = false;
   let refineNote: string | null = null;
 
-  if (currentExtracted && currentHtml) {
+  if (currentExtracted && (currentHtml || isNewFormat)) {
     try {
       const community = await getCommunity(approval.communitySlug);
       if (!community) throw new Error("Community not found");
 
       const pastSends = await getRecentSendsForCommunity({ communityId: community.id, limit: 12 });
 
-      // Build image pool from placed images in the HTML + full image bank.
-      const heroImageUrl = extractImgSrc(currentHtml, "Hero image");
-      const secondaryImageUrl = extractImgSrc(currentHtml, "Secondary image");
-      const galleryImageUrls = extractGalleryImgs(currentHtml);
+      // Build image pool: prefer structured images (new format), fall back to HTML parsing.
+      let heroImageUrl: string | undefined;
+      let secondaryImageUrl: string | undefined;
+      let galleryImageUrls: string[];
+
+      if (isNewFormat && currentImages) {
+        heroImageUrl = currentImages.hero?.url;
+        secondaryImageUrl = currentImages.secondary?.url;
+        galleryImageUrls = (currentImages.gallery ?? []).map((g) => g.url).filter(Boolean);
+      } else {
+        heroImageUrl = extractImgSrc(currentHtml, "Hero image");
+        secondaryImageUrl = extractImgSrc(currentHtml, "Secondary image");
+        galleryImageUrls = extractGalleryImgs(currentHtml);
+      }
 
       const bankRows = await db
         .select({ url: draftImageBank.url })
@@ -187,8 +200,19 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
           galleryImageUrls: nextGallery,
         }));
 
-        // Update the saved draft with the refined content.
-        const updatedData = { ...draftData, extracted: mergedExtracted, html: newHtml };
+        // Update the saved draft with the refined content (write both formats for compatibility).
+        const updatedImages = isNewFormat ? {
+          hero: nextHero ? { url: nextHero, originalUrl: currentImages?.hero?.originalUrl ?? nextHero } : null,
+          secondary: nextSecondary ? { url: nextSecondary, originalUrl: currentImages?.secondary?.originalUrl ?? nextSecondary } : null,
+          gallery: nextGallery.map((url, i) => ({ url, originalUrl: currentImages?.gallery?.[i]?.originalUrl ?? url })),
+        } : undefined;
+        const updatedData = {
+          ...draftData,
+          ...(isNewFormat ? { fields: mergedExtracted } : {}),
+          extracted: mergedExtracted,
+          ...(updatedImages ? { images: updatedImages } : {}),
+          html: newHtml,
+        };
         await db
           .update(savedDrafts)
           .set({ data: updatedData, subject: mergedExtracted.subject })

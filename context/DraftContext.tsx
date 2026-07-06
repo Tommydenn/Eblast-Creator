@@ -314,6 +314,8 @@ export interface DraftContextValue {
   swapSubjectLine: (subject: string, previewText: string) => void;
   /** Re-render HTML from current `extracted` without calling any AI. */
   syncHtml: () => Promise<void>;
+  /** Directly set the HTML from the iframe DOM (used after inline formatting). */
+  updateHtml: (newHtml: string) => void;
   saveDraft: () => void;
   discardDraft: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
@@ -736,6 +738,12 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setCurrentDraftSaved(false);
     setRedoStack([]); // a manual swap invalidates the redo stack
     // Subject/preview don't affect the visible preview rendering, so no htmlDirty.
+  }
+
+  function updateHtml(newHtml: string) {
+    setHtml(newHtml);
+    setHtmlDirty(false);
+    setCurrentDraftSaved(false);
   }
 
   async function syncHtml() {
@@ -1254,6 +1262,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     pushDraft,
     swapSubjectLine,
     syncHtml,
+    updateHtml,
     saveDraft, discardDraft,
     loadSavedDraft,
     swapImage,

@@ -76,9 +76,28 @@ const EBLAST_EDIT_SCRIPT = `(function(){
     });
   });
   document.addEventListener('click',function(){ stopAll(null); });
+  // Track the last selected data-field element and range for cross-frame formatting.
+  var _fmtEl=null,_fmtRange=null;
+  document.addEventListener('selectionchange',function(){
+    var sel=window.getSelection();
+    if(!sel||sel.rangeCount===0) return;
+    var r=sel.getRangeAt(0);
+    var n=r.commonAncestorContainer;
+    var el=n.nodeType===1?n:n.parentElement;
+    while(el&&!el.getAttribute('data-field')) el=el.parentElement;
+    if(el){_fmtEl=el;try{_fmtRange=r.cloneRange();}catch(ex){}}
+  });
   // Receive position-control messages from the parent frame.
   window.addEventListener('message',function(e){
     if(!e.data) return;
+    if(e.data.type==='eblast-format'){
+      if(_fmtEl&&_fmtEl.contentEditable!=='true'){_fmtEl.contentEditable='true';_fmtEl.focus();}
+      if(_fmtRange){var sel=window.getSelection();sel.removeAllRanges();try{sel.addRange(_fmtRange);}catch(ex){}}
+      document.execCommand(e.data.command,false,e.data.value||null);
+      var s2=window.getSelection();
+      if(s2&&s2.rangeCount>0){try{_fmtRange=s2.getRangeAt(0).cloneRange();}catch(ex){}}
+      window.parent.postMessage({type:'eblast-format-done'},'*');
+    }
     if(e.data.type==='eblast-show-original'){
       var imgEl=document.querySelector('[data-img-label="'+e.data.label+'"]');
       if(!imgEl) return;
@@ -346,6 +365,106 @@ function ImageBankPanel({
   );
 }
 
+// ─── Formatting Toolbar ───────────────────────────────────────────────────────
+
+function FormattingToolbar({
+  iframeRef,
+  enabled,
+}: {
+  iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  enabled: boolean;
+}) {
+  function send(command: string, value?: string) {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'eblast-format', command, value: value ?? null },
+      '*',
+    );
+  }
+
+  const btn = `rounded border border-sand-200 bg-white px-2.5 py-1.5 text-sm font-medium
+    text-sand-700 transition-colors hover:border-sand-300 hover:bg-sand-50
+    disabled:cursor-not-allowed disabled:opacity-40`;
+
+  return (
+    <div className="rounded-md border border-sand-200 bg-white p-4">
+      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sand-500">
+        Text formatting
+      </p>
+      <p className="mb-3 text-[11px] text-sand-400">
+        Click a field in the preview to select it, highlight text, then apply formatting here.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Weight / style */}
+        <div className="flex items-center gap-1">
+          <button disabled={!enabled} onClick={() => send('bold')} className={btn} style={{ fontWeight: 700 }} title="Bold">B</button>
+          <button disabled={!enabled} onClick={() => send('italic')} className={btn} style={{ fontStyle: 'italic' }} title="Italic">I</button>
+          <button disabled={!enabled} onClick={() => send('underline')} className={btn + ' underline'} title="Underline">U</button>
+        </div>
+
+        <div className="h-6 w-px bg-sand-200" />
+
+        {/* Font family */}
+        <select
+          disabled={!enabled}
+          defaultValue=""
+          onChange={(e) => { if (e.target.value) { send('fontName', e.target.value); e.target.value = ''; } }}
+          className="rounded border border-sand-200 bg-white px-2 py-1.5 text-xs text-sand-700 focus:outline-none disabled:opacity-40 cursor-pointer"
+        >
+          <option value="">Font family…</option>
+          <option value="Arial, Helvetica, sans-serif">Arial</option>
+          <option value="Georgia, serif">Georgia</option>
+          <option value="'Times New Roman', Times, serif">Times New Roman</option>
+          <option value="Verdana, Geneva, sans-serif">Verdana</option>
+          <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+          <option value="'Courier New', monospace">Courier New</option>
+        </select>
+
+        {/* Font size */}
+        <select
+          disabled={!enabled}
+          defaultValue=""
+          onChange={(e) => { if (e.target.value) { send('fontSize', e.target.value); e.target.value = ''; } }}
+          className="rounded border border-sand-200 bg-white px-2 py-1.5 text-xs text-sand-700 focus:outline-none disabled:opacity-40 cursor-pointer"
+        >
+          <option value="">Size…</option>
+          <option value="1">Extra small</option>
+          <option value="2">Small</option>
+          <option value="3">Normal</option>
+          <option value="4">Large</option>
+          <option value="5">X-Large</option>
+          <option value="6">XX-Large</option>
+        </select>
+
+        <div className="h-6 w-px bg-sand-200" />
+
+        {/* Text color */}
+        <label className={`flex items-center gap-1.5 ${!enabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
+          <span className="text-xs text-sand-600">Color</span>
+          <input
+            type="color"
+            disabled={!enabled}
+            defaultValue="#000000"
+            onChange={(e) => send('foreColor', e.target.value)}
+            className="h-7 w-10 rounded border border-sand-200 p-0.5 cursor-pointer disabled:cursor-not-allowed"
+            title="Text color"
+          />
+        </label>
+
+        <div className="h-6 w-px bg-sand-200" />
+
+        {/* Clear */}
+        <button
+          disabled={!enabled}
+          onClick={() => send('removeFormat')}
+          className={btn + ' text-xs text-clay-600 hover:text-clay-800 hover:border-clay-200 hover:bg-clay-50/40'}
+        >
+          Clear formatting
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -363,7 +482,7 @@ export default function Home() {
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
     currentDraftSaved, currentDraftId, saveNotice,
-    htmlDirty, syncHtml, swapSubjectLine,
+    htmlDirty, syncHtml, updateHtml, swapSubjectLine,
     allExtractedImageUrls, swapImage, repositionImage, removeImage, addToImageBank,
     heroOriginalUrl, secondaryOriginalUrl, galleryOriginalUrls,
     handleFileChange, clearInputs,
@@ -507,7 +626,13 @@ export default function Home() {
   // Listen for image clicks from the iframe and initialize repositioning.
   useEffect(() => {
     function handler(e: MessageEvent) {
-      if (!e.data || e.data.type !== 'eblast-image-select') return;
+      if (!e.data) return;
+      if (e.data.type === 'eblast-format-done') {
+        const doc = iframeRef.current?.contentDocument;
+        if (doc) updateHtml(doc.documentElement.outerHTML);
+        return;
+      }
+      if (e.data.type !== 'eblast-image-select') return;
       const label: string = e.data.label ?? '';
       let next: typeof selectedImage = null;
       if (label === 'Hero image') {
@@ -843,23 +968,6 @@ export default function Home() {
                     )}
                   </CardContent>
                 </Card>
-
-                {/* Placed images — shows current slots with remove controls */}
-                <PlacedImagesPanel
-                  heroImageUrl={heroImageUrl}
-                  secondaryImageUrl={secondaryImageUrl}
-                  galleryImageUrls={galleryImageUrls}
-                  onRemove={removeImage}
-                />
-
-                {/* Image bank — collapsible; always shown when a draft exists so images can be uploaded */}
-                {extracted && (
-                  <ImageBankPanel
-                    imageUrls={allExtractedImageUrls}
-                    onSwap={(slot, url) => swapImage(slot, url, undefined, 'center')}
-                    onAddImage={addToImageBank}
-                  />
-                )}
 
                 {/* Reviewer — collapsible, open by default */}
                 <div className="rounded-lg border border-sand-200 bg-white shadow-card">
@@ -1361,6 +1469,26 @@ export default function Home() {
                   />
                 </CardContent>
               </Card>
+            </div>
+
+            {/* Formatting toolbar + image sections — below the main grid */}
+            <div className="mt-6 grid items-start gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
+              {/* Left: image sections aligned under controls column */}
+              <div className="flex flex-col gap-4">
+                <PlacedImagesPanel
+                  heroImageUrl={heroImageUrl}
+                  secondaryImageUrl={secondaryImageUrl}
+                  galleryImageUrls={galleryImageUrls}
+                  onRemove={removeImage}
+                />
+                <ImageBankPanel
+                  imageUrls={allExtractedImageUrls}
+                  onSwap={(slot, url) => swapImage(slot, url, undefined, 'center')}
+                  onAddImage={addToImageBank}
+                />
+              </div>
+              {/* Right: formatting toolbar aligned under preview */}
+              <FormattingToolbar iframeRef={iframeRef} enabled={!!extracted} />
             </div>
 
             {confirmExit && (

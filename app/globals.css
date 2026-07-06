@@ -9,7 +9,8 @@
     text-rendering: optimizeLegibility;
   }
   body {
-    @apply bg-sand-50 text-sand-900 font-sans;
+    @apply text-sand-900 font-sans;
+    background: #f9f7f3;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
   /* Slightly tighter headings — serif default for Hx, sans for UI elsewhere */
@@ -20,6 +21,38 @@
   *:focus-visible {
     @apply outline-none ring-2 ring-forest-600/40 ring-offset-2 ring-offset-sand-50;
   }
+  /* Smooth easing globally */
+  * {
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  /* Text selection */
+  ::selection {
+    background: rgba(31, 69, 56, 0.15);
+    color: #0e1f19;
+  }
+  /* Minimal scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #dccfb5;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #c4b290;
+  }
+}
+
+/* --- Glass utility --------------------------------------------------- */
+
+.glass {
+  backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 /* --- Loading + motion utilities ------------------------------------- */
@@ -85,7 +118,14 @@
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.eb-rise { animation: eb-rise 0.25s ease-out both; }
+.eb-rise { animation: eb-rise 0.2s ease both; }
+
+/* Scale-in appearance for panels and modals */
+@keyframes eb-appear {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+.eb-appear { animation: eb-appear 0.18s ease; }
 
 /* Transient save toast: fade/slide in, hold, then fade out over ~3.5s. */
 @keyframes eb-toast {

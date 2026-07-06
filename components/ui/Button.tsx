@@ -6,19 +6,19 @@ type Size = "sm" | "md" | "lg";
 
 const variantStyles: Record<Variant, string> = {
   primary:
-    "bg-forest-600 text-white hover:bg-forest-700 active:bg-forest-800 disabled:bg-forest-600/50",
+    "bg-forest-600 text-white hover:bg-forest-700 active:bg-forest-800 disabled:bg-forest-600/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.1)]",
   secondary:
-    "bg-white text-sand-900 border border-sand-200 hover:bg-sand-50 hover:border-sand-300 active:bg-sand-100 disabled:opacity-50",
+    "bg-sand-100 text-sand-800 hover:bg-sand-200 active:bg-sand-300 disabled:opacity-50",
   ghost:
-    "bg-transparent text-sand-700 hover:bg-sand-100 active:bg-sand-200 disabled:opacity-50",
+    "bg-transparent text-sand-700 hover:bg-sand-100/80 hover:text-sand-900 active:bg-sand-200 disabled:opacity-50",
   destructive:
-    "bg-clay-600 text-white hover:bg-clay-700 active:bg-clay-800 disabled:bg-clay-600/50",
+    "bg-clay-600 text-white hover:bg-clay-700 active:bg-clay-800 disabled:bg-clay-600/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.1)]",
 };
 
 const sizeStyles: Record<Size, string> = {
-  sm: "h-8 px-3 text-xs",
-  md: "h-10 px-4 text-sm",
-  lg: "h-12 px-6 text-sm",
+  sm: "h-8 px-3 py-1.5 text-xs",
+  md: "h-10 px-4 py-2 text-sm",
+  lg: "h-12 px-5 py-2.5 text-sm",
 };
 
 export interface ButtonProps
@@ -34,7 +34,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded font-medium transition-colors duration-150 disabled:cursor-not-allowed",
+        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-all duration-150 disabled:cursor-not-allowed hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-forest-600/30 focus-visible:ring-offset-2 focus-visible:outline-none",
         variantStyles[variant],
         sizeStyles[size],
         className,

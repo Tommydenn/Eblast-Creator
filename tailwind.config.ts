@@ -47,6 +47,11 @@ const config: Config = {
           800: "#3e352a",
           900: "#1f1b15",
         },
+        // Frosted-glass surface colors
+        surface: {
+          DEFAULT: "rgba(255,255,255,0.85)",
+          muted: "rgba(250,248,245,0.85)",
+        },
       },
       fontFamily: {
         serif: ['Georgia', '"Times New Roman"', "serif"],
@@ -56,6 +61,22 @@ const config: Config = {
         card: "0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.04)",
         cardHover: "0 4px 8px rgba(15,23,42,0.06), 0 2px 4px rgba(15,23,42,0.04)",
         elevated: "0 12px 24px -8px rgba(15,23,42,0.10), 0 4px 8px rgba(15,23,42,0.05)",
+        sm: "0 1px 2px rgba(30,20,10,0.06)",
+        md: "0 4px 12px rgba(30,20,10,0.08), 0 1px 3px rgba(30,20,10,0.06)",
+        float: "0 16px 40px -8px rgba(30,20,10,0.14), 0 4px 12px rgba(30,20,10,0.08)",
+      },
+      backdropBlur: {
+        xs: "4px",
+        sm: "8px",
+        DEFAULT: "12px",
+        md: "16px",
+        lg: "20px",
+        xl: "24px",
+        "2xl": "40px",
+      },
+      ringColor: {
+        DEFAULT: "rgba(31,69,56,0.2)",
+        focus: "rgba(31,69,56,0.4)",
       },
       borderRadius: {
         sm: "4px",

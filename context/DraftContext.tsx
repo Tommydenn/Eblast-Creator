@@ -397,6 +397,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const heroOriginalUrlRef = useRef<string | undefined>();
   const secondaryOriginalUrlRef = useRef<string | undefined>();
   const galleryOriginalUrlsRef = useRef<string[]>([]);
+  // Stores formatted innerHTML for each data-field element the user has styled.
+  // Using a ref (not state) so it updates synchronously before syncHtml reads it,
+  // preventing formatting from being discarded on image swaps.
+  const fieldHtmlOverridesRef = useRef<Record<string, string>>({});
 
   // Keep refs in sync with state
   useEffect(() => { extractedRef.current = extracted; }, [extracted]);
@@ -430,12 +434,20 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       // Save/Discard buttons appear. Sync Preview reads the iframe DOM directly
       // (not extracted), so it safely captures these changes.
       if (e.data.type === "eblast-html-edit" || e.data.type === "eblast-format-done") {
+        // Capture formatted HTML if the iframe sent field context with the message.
+        if (e.data.field && typeof e.data.html === "string") {
+          fieldHtmlOverridesRef.current = { ...fieldHtmlOverridesRef.current, [e.data.field]: e.data.html };
+        }
         setHtmlDirty(true);
         setCurrentDraftSaved(false);
         return;
       }
       if (e.data.type !== "eblast-field-edit") return;
-      const { field, value } = e.data as { field: string; value: string };
+      const { field, value } = e.data as { field: string; value: string; html?: string };
+      // Capture formatted HTML for data-field elements if provided.
+      if (e.data.html !== undefined) {
+        fieldHtmlOverridesRef.current = { ...fieldHtmlOverridesRef.current, [field]: e.data.html };
+      }
       const current = extractedRef.current;
       if (!current) return;
       const parts = field.split(".");
@@ -756,6 +768,20 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setCurrentDraftSaved(false);
   }
 
+  function applyFieldOverrides(html: string, overrides: Record<string, string>): string {
+    if (typeof window === "undefined" || Object.keys(overrides).length === 0) return html;
+    try {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      for (const [field, content] of Object.entries(overrides)) {
+        const el = doc.querySelector(`[data-field="${field}"]`);
+        if (el) el.innerHTML = content;
+      }
+      return "<!DOCTYPE html>" + doc.documentElement.outerHTML;
+    } catch {
+      return html;
+    }
+  }
+
   async function syncHtml(): Promise<string | null> {
     const current = extractedRef.current;
     const slug = activeCommunitySlugRef.current;
@@ -774,11 +800,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (data.ok) {
-        const newHtml = injectImages(data.html, {
-          hero: heroImageUrlRef.current,
-          secondary: secondaryImageUrlRef.current,
-          gallery: galleryImageUrlsRef.current,
-        });
+        const newHtml = applyFieldOverrides(
+          injectImages(data.html, {
+            hero: heroImageUrlRef.current,
+            secondary: secondaryImageUrlRef.current,
+            gallery: galleryImageUrlsRef.current,
+          }),
+          fieldHtmlOverridesRef.current
+        );
         setHtml(newHtml);
         setHtmlDirty(false);
         return newHtml;
@@ -916,6 +945,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }
 
   function discardDraft() {
+    fieldHtmlOverridesRef.current = {};
     setExtracted(null);
     setHtml("");
     setHeroImageUrl(undefined);
@@ -943,6 +973,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }
 
   function loadSavedDraft(draft: SavedDraft) {
+    fieldHtmlOverridesRef.current = {};
     setSelectedSlug(draft.communitySlug);
     setActiveCommunitySlug(draft.communitySlug);
     setExtracted(draft.extracted);

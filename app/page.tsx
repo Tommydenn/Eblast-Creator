@@ -692,7 +692,7 @@ export default function Home() {
     pastSendsContext, subjectSpecialist,
     duplicateWarning,
     currentDraftSaved, currentDraftId, saveNotice,
-    htmlDirty, syncHtml, updateHtml, swapSubjectLine,
+    htmlDirty, syncHtml, mergeFieldOverrides, updateHtml, swapSubjectLine,
     allExtractedImageUrls, swapImage, repositionImage, removeImage, addToImageBank,
     heroOriginalUrl, secondaryOriginalUrl, galleryOriginalUrls,
     handleFileChange, clearInputs,
@@ -711,10 +711,21 @@ export default function Home() {
     saveDraft(iframeHtml);
   }
 
-  // Capture iframe DOM as the new baseline — preserves all inline edits and formatting.
-  function handleSyncPreview() {
-    const iframeHtml = iframeRef.current?.contentDocument?.documentElement.outerHTML;
-    if (iframeHtml) updateHtml(iframeHtml);
+  // Re-render from the template while preserving all field edits.
+  // Reading the iframe DOM directly captures any in-progress edits that haven't fired
+  // eblast-field-edit yet (e.g. an active field not yet blurred), then syncHtml regenerates
+  // clean HTML — avoiding double-script injection caused by capturing documentElement.outerHTML.
+  async function handleSyncPreview() {
+    const doc = iframeRef.current?.contentDocument;
+    if (doc) {
+      const fresh: Record<string, string> = {};
+      doc.querySelectorAll('[data-field]').forEach((el) => {
+        const k = el.getAttribute('data-field');
+        if (k) fresh[k] = el.innerHTML;
+      });
+      if (Object.keys(fresh).length > 0) mergeFieldOverrides(fresh);
+    }
+    await syncHtml();
   }
   const [reviewerOpen, setReviewerOpen] = useState(true);
   const [confirmExit, setConfirmExit] = useState(false);
@@ -1742,9 +1753,17 @@ export default function Home() {
                     onLoad={() => {
                       const doc = iframeRef.current?.contentDocument;
                       if (!doc?.body) return;
-                      const s = doc.createElement("script");
-                      s.textContent = EBLAST_EDIT_SCRIPT;
-                      doc.body.appendChild(s);
+                      // Guard against double-injection: when handleSyncPreview captures
+                      // documentElement.outerHTML the injected script is included in the
+                      // serialised HTML. Setting that as srcDoc runs the script once from
+                      // the HTML; without this guard, onLoad would inject it a second time,
+                      // doubling every event listener and causing duplicate text edits.
+                      if (!doc.body.querySelector('script[data-eblast-edit]')) {
+                        const s = doc.createElement("script");
+                        s.setAttribute('data-eblast-edit', '1');
+                        s.textContent = EBLAST_EDIT_SCRIPT;
+                        doc.body.appendChild(s);
+                      }
                       // Restore text field edits captured before an image-triggered reload.
                       if (pendingTextEditsRef.current) {
                         const edits = pendingTextEditsRef.current;

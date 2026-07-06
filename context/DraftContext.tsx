@@ -314,6 +314,8 @@ export interface DraftContextValue {
   swapSubjectLine: (subject: string, previewText: string) => void;
   /** Re-render HTML from current `extracted` without calling any AI. Returns the new HTML string on success, null on failure. */
   syncHtml: () => Promise<string | null>;
+  /** Merge additional field overrides into the persistent ref (called by Sync Preview to flush in-progress edits). */
+  mergeFieldOverrides: (overrides: Record<string, string>) => void;
   /** Directly set the HTML from the iframe DOM (used after inline formatting). */
   updateHtml: (newHtml: string) => void;
   saveDraft: (htmlSnapshot?: string) => void;
@@ -760,6 +762,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setCurrentDraftSaved(false);
     setRedoStack([]); // a manual swap invalidates the redo stack
     // Subject/preview don't affect the visible preview rendering, so no htmlDirty.
+  }
+
+  function mergeFieldOverrides(overrides: Record<string, string>) {
+    fieldHtmlOverridesRef.current = { ...fieldHtmlOverridesRef.current, ...overrides };
   }
 
   function updateHtml(newHtml: string) {
@@ -1307,6 +1313,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     pushDraft,
     swapSubjectLine,
     syncHtml,
+    mergeFieldOverrides,
     updateHtml,
     saveDraft, discardDraft,
     loadSavedDraft,

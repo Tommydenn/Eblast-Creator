@@ -14,6 +14,42 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// Maps known Google Font names (lowercase) to their Fonts API family parameter
+// string. Only fonts confirmed available on Google Fonts are listed here —
+// commercial or system fonts are intentionally absent so they get no link tag.
+const GOOGLE_FONT_PARAMS: Record<string, string> = {
+  "josefin sans": "Josefin+Sans:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
+  "bebas neue": "Bebas+Neue",
+  "montserrat": "Montserrat:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
+  "open sans": "Open+Sans:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
+  "lato": "Lato:ital,wght@0,300;0,400;0,700;1,300;1,400",
+  "raleway": "Raleway:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
+  "roboto": "Roboto:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400",
+  "poppins": "Poppins:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
+  "playfair display": "Playfair+Display:ital,wght@0,400;0,700;1,400;1,700",
+  "nunito": "Nunito:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400",
+  "merriweather": "Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400",
+  "pt sans": "PT+Sans:ital,wght@0,400;0,700;1,400;1,700",
+};
+
+// Returns a Google Fonts <link> href for any community fonts that are available
+// on Google Fonts, or null if neither font is a known Google Font.
+// Outlook ignores <link> tags in email <head>s, so no MSO conditional is needed.
+function buildGoogleFontsUrl(fontHeadline: string, fontBody: string): string | null {
+  const seen = new Set<string>();
+  const families: string[] = [];
+  for (const fontStr of [fontHeadline, fontBody]) {
+    const name = fontStr.split(",")[0].trim().replace(/['"]/g, "").toLowerCase();
+    const param = GOOGLE_FONT_PARAMS[name];
+    if (param && !seen.has(param)) {
+      seen.add(param);
+      families.push(`family=${param}`);
+    }
+  }
+  if (families.length === 0) return null;
+  return `https://fonts.googleapis.com/css2?${families.join("&")}&display=swap`;
+}
+
 // Ensures every font-family string has an email-safe generic fallback so
 // Outlook falls back to a readable system font instead of Times New Roman.
 // If the stack already ends in a generic keyword, it passes through unchanged.
@@ -180,6 +216,8 @@ export function buildEblastHtml(
   // rather than shrinking to an unreadable 10px.
   const ctaBtnFontSize = ctaDisplayText.length <= 32 ? 14 : 13;
   const ctaBtnLetterSpacing = ctaBtnFontSize >= 14 ? "2.5px" : "2px";
+
+  const googleFontsUrl = buildGoogleFontsUrl(brand.fontHeadline, brand.fontBody);
 
   // Component fragments — kept as inline HTML because email clients reward
   // redundancy and table-based layouts. CSS variables/classes don't survive Outlook.
@@ -353,7 +391,9 @@ export function buildEblastHtml(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(flyer.subject)}</title>
-</head>
+${googleFontsUrl ? `<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="${googleFontsUrl}" rel="stylesheet">` : ""}</head>
 <body style="margin:0; padding:0; background:#f5f5f5;">
 <span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(flyer.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f5f5;">

@@ -93,17 +93,17 @@ export function CommunityIntelligence({ communitySlug }: { communitySlug: string
           <p className="text-xs text-sand-500">{fetchError}</p>
         )}
 
-        {loading && <div className="h-20 rounded bg-sand-100 eb-shimmer" />}
+        {loading && <div className="h-16 rounded-lg bg-sand-100/80 eb-shimmer" />}
 
         {!loading && data?.summary && data.summary.sendCount > 0 && (
-          <div className="grid grid-cols-3 divide-x divide-sand-200 rounded-md border border-sand-200 bg-sand-50/50">
-            <div className="px-4 py-3">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg border border-sand-200/60 bg-sand-50/50 px-3 py-2.5 shadow-sm">
               <Stat label="Avg open" value={data.summary.avgOpenPct !== null ? `${data.summary.avgOpenPct}%` : "—"} />
             </div>
-            <div className="px-4 py-3">
+            <div className="rounded-lg border border-sand-200/60 bg-sand-50/50 px-3 py-2.5 shadow-sm">
               <Stat label="Avg click" value={data.summary.avgClickPct !== null ? `${data.summary.avgClickPct}%` : "—"} />
             </div>
-            <div className="px-4 py-3">
+            <div className="rounded-lg border border-sand-200/60 bg-sand-50/50 px-3 py-2.5 shadow-sm">
               <Stat
                 label="Avg list"
                 value={data.summary.avgRecipients !== null ? data.summary.avgRecipients.toLocaleString() : "—"}
@@ -113,7 +113,7 @@ export function CommunityIntelligence({ communitySlug }: { communitySlug: string
         )}
 
         {!loading && data?.summary && data.summary.sendCount === 0 && (
-          <div className="rounded-md border border-dashed border-sand-300 bg-sand-50/50 px-4 py-6 text-center">
+          <div className="rounded-xl bg-sand-50/70 py-8 text-center text-sm text-sand-400">
             <p className="text-sm text-sand-600">
               No past sends in the last 365 days for this community.
             </p>
@@ -128,7 +128,7 @@ export function CommunityIntelligence({ communitySlug }: { communitySlug: string
             <SectionLabel className="mb-2.5">Recent sends · the agents will reference these</SectionLabel>
             <ul className="divide-y divide-sand-100 rounded-md border border-sand-200">
               {data.recentSends.slice(0, 5).map((s, i) => (
-                <li key={i} className="px-3 py-2.5 text-sm leading-snug">
+                <li key={i} className="px-3 py-2.5 text-sm leading-snug hover:bg-sand-50/40 transition-colors duration-100">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-sand-900" title={s.subject}>

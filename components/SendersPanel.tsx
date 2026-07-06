@@ -143,7 +143,7 @@ export function SendersPanel({ slug, initialSenders }: Props) {
       </div>
 
       {senders.length === 0 && editingId === null && (
-        <p className="rounded-md border border-dashed border-clay-300 bg-clay-50/50 px-3 py-2.5 text-xs text-clay-700">
+        <p className="rounded-xl bg-sand-50 px-4 py-6 text-center text-xs text-sand-400">
           No senders configured. Add one — it will appear in the From: field of every eblast.
         </p>
       )}
@@ -166,7 +166,7 @@ export function SendersPanel({ slug, initialSenders }: Props) {
                 isOnly={senders.length === 1}
               />
             ) : (
-              <div className="flex items-center justify-between gap-3 rounded-md border border-sand-200 bg-sand-50/40 px-3 py-2">
+              <div className={`flex items-center justify-between gap-3 rounded-lg border border-sand-200/60 bg-white px-3 py-2.5 shadow-sm transition-colors hover:bg-sand-50/30${s.isPrimary ? " ring-1 ring-forest-200/60" : ""}`}>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-sand-900">{s.name}</p>
                   <p className="truncate text-xs text-sand-500">
@@ -251,7 +251,7 @@ function SenderForm({
             value={form.name}
             onChange={e => onChange({ ...form, name: e.target.value })}
             placeholder="Jane Smith"
-            className="w-full rounded border border-sand-200 bg-sand-50 px-2.5 py-1.5 text-sm text-sand-900 placeholder:text-sand-400 focus:border-sand-400 focus:outline-none"
+            className="w-full rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm text-sand-900 placeholder:text-sand-400 shadow-sm focus:border-forest-400 focus:ring-2 focus:ring-forest-600/20 focus:outline-none transition-all"
           />
         </div>
         <div>
@@ -261,7 +261,7 @@ function SenderForm({
             value={form.email}
             onChange={e => onChange({ ...form, email: e.target.value })}
             placeholder="jane@community.com"
-            className="w-full rounded border border-sand-200 bg-sand-50 px-2.5 py-1.5 text-sm text-sand-900 placeholder:text-sand-400 focus:border-sand-400 focus:outline-none"
+            className="w-full rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm text-sand-900 placeholder:text-sand-400 shadow-sm focus:border-forest-400 focus:ring-2 focus:ring-forest-600/20 focus:outline-none transition-all"
           />
         </div>
       </div>
@@ -292,7 +292,7 @@ function SenderForm({
           type="button"
           onClick={onSave}
           disabled={busy}
-          className="rounded bg-sand-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-sand-900 disabled:opacity-50 transition-colors"
+          className="rounded-lg bg-forest-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-forest-700 disabled:opacity-50 transition-colors"
         >
           {busy ? "Saving…" : "Save"}
         </button>

@@ -85,26 +85,31 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
 
   if (loading) {
     return (
-      <p className="rounded-md border border-dashed border-sand-300 bg-sand-50/40 px-4 py-6 text-center text-sm text-sand-500">
-        Loading drafts…
-      </p>
+      <div className="rounded-xl bg-sand-50 py-10 text-center">
+        <p className="text-sm text-sand-500">Loading drafts…</p>
+        <p className="mt-1 text-xs text-sand-400">Saved drafts will appear here.</p>
+      </div>
     );
   }
 
   if (fetchError) {
     return (
-      <p className="rounded-md border border-clay-200 bg-clay-50 px-4 py-4 text-center text-sm text-clay-700">
-        Could not load drafts: {fetchError}
-      </p>
+      <div className="rounded-xl bg-sand-50 py-10 text-center">
+        <p className="text-sm text-sand-500">Could not load drafts: {fetchError}</p>
+        <p className="mt-1 text-xs text-sand-400">Saved drafts will appear here.</p>
+      </div>
     );
   }
 
   if (drafts.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-sand-300 bg-sand-50/40 px-4 py-6 text-center text-sm text-sand-500">
-        No saved drafts for this community yet. Generate an eblast on the Drafter and click "Save draft" to keep it
-        here (up to 8 per community).
-      </p>
+      <div className="rounded-xl bg-sand-50 py-10 text-center">
+        <p className="text-sm text-sand-500">
+          No saved drafts for this community yet. Generate an eblast on the Drafter and click "Save draft" to keep it
+          here (up to 8 per community).
+        </p>
+        <p className="mt-1 text-xs text-sand-400">Saved drafts will appear here.</p>
+      </div>
     );
   }
 
@@ -115,16 +120,14 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
     )}
     <ul className="divide-y divide-sand-100 rounded-md border border-sand-200">
       {drafts.map((d) => (
-        <li key={d.id} className="flex items-start justify-between gap-3 px-4 py-3">
+        <li key={d.id} className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-sand-50/50">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-sand-900">{d.subject || "(no subject)"}</p>
             <p className="mt-0.5 text-[11px] text-sand-500">
-              {new Date(d.savedAt).toLocaleString(undefined, {
+              {new Date(d.savedAt).toLocaleDateString(undefined, {
                 month: "short",
                 day: "numeric",
                 year: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
               })}
               {d.imageCount > 0 ? ` · ${d.imageCount} image${d.imageCount === 1 ? "" : "s"}` : ""}
             </p>
@@ -133,7 +136,7 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
             <button
               onClick={() => openDraft(d.id)}
               disabled={openingId === d.id}
-              className="rounded-md border border-sand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-sand-700 hover:border-clay-300 hover:bg-clay-50/40 disabled:opacity-50"
+              className="rounded-md border border-sand-300 bg-white px-2.5 py-1.5 text-xs font-medium text-sand-700 hover:border-forest-300 hover:bg-forest-50/40 hover:text-forest-700 disabled:opacity-50"
             >
               {openingId === d.id ? "Opening…" : "Open in Drafter"}
             </button>

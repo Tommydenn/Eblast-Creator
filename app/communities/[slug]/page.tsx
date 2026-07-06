@@ -124,7 +124,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
               >
                 {c.displayName}
               </h1>
-              <p className="mt-2 text-sm text-sand-600">
+              <p className="mt-1 text-sm text-sand-500">
                 {[
                   c.address.street,
                   [c.address.city, c.address.state].filter(Boolean).join(", "),
@@ -162,7 +162,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
         {/* Performance KPIs (only if there are past sends) */}
         {aggregates.sendCount > 0 && (
           <Card className="mb-8 overflow-hidden p-0">
-            <div className="grid grid-cols-2 divide-x divide-sand-200 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-5">
               <Kpi label="Sends · 365d" value={aggregates.sendCount} />
               <Kpi
                 label="Avg open"
@@ -189,11 +189,11 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
         {/* Two-column layout: identity/brand left, sending/voice/history right */}
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Contact + identity */}
-          <Card>
+          <Card className="shadow-sm rounded-xl">
             <CardHeader>
               <CardTitle>Contact &amp; identity</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Phone (public)">
                   {c.phone ?? <span className="text-clay-600">not set</span>}
@@ -242,12 +242,12 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
           </Card>
 
           {/* Sending */}
-          <Card>
+          <Card className="shadow-sm rounded-xl">
             <CardHeader>
               <CardTitle>Sending</CardTitle>
               <CardDescription>Who appears in the From: field for this community.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               <div>
                 <SendersPanel slug={c.slug} initialSenders={c.senders} />
               </div>
@@ -268,7 +268,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                       initialExcluded={excludedSegments}
                     />
                   ) : (
-                    <p className="rounded-md border border-dashed border-clay-300 bg-clay-50/50 px-3 py-2.5 text-xs text-clay-700">
+                    <p className="rounded-xl bg-sand-50 px-4 py-8 text-center text-sm text-sand-400">
                       No HubSpot segments configured — eblasts for this community have no recipient list yet.
                     </p>
                   )}
@@ -278,7 +278,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
           </Card>
 
           {/* Brand */}
-          <Card>
+          <Card className="shadow-sm rounded-xl">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle>Brand</CardTitle>
@@ -289,7 +289,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 )}
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               {(() => {
                 const logo =
                   c.logos.find(l => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary") ??
@@ -304,7 +304,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
               })()}
               <div>
                 <SectionLabel className="mb-2">Typography</SectionLabel>
-                <div className="space-y-2 rounded-md border border-sand-200 bg-sand-50/40 p-3">
+                <div className="space-y-2 rounded-lg border border-sand-200/60 bg-sand-50/50 px-4 py-3">
                   <div>
                     <p
                       className="text-2xl text-sand-900"
@@ -333,7 +333,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                   <div className="flex flex-wrap gap-2">
                     {c.brand.supporting.map((hex) => (
                       <div key={hex} className="flex items-center gap-1.5 rounded border border-sand-200 bg-white px-2 py-1">
-                        <span className="block h-4 w-4 rounded-sm border border-black/5" style={{ backgroundColor: hex }} />
+                        <span className="block h-4 w-4 rounded-full shadow-sm ring-1 ring-black/10" style={{ backgroundColor: hex }} />
                         <span className="font-mono text-[10.5px] text-sand-600">{hex}</span>
                       </div>
                     ))}
@@ -355,12 +355,12 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
           </Card>
 
           {/* Voice */}
-          <Card>
+          <Card className="shadow-sm rounded-xl">
             <CardHeader>
               <CardTitle>Voice &amp; positioning</CardTitle>
               <CardDescription>Rules the agents read when drafting.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3">
               {c.voice?.tone && c.voice.tone.length > 0 && (
                 <div>
                   <SectionLabel className="mb-2">Tone</SectionLabel>
@@ -448,7 +448,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
           </Card>
 
           {/* Saved drafts for this community — full-width */}
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2 shadow-sm rounded-xl">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle>Saved drafts</CardTitle>
@@ -461,7 +461,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
           </Card>
 
           {/* Recent sends — full-width */}
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2 shadow-sm rounded-xl">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle>Recent sends</CardTitle>
@@ -470,20 +470,21 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
             </CardHeader>
             <CardContent>
               {recentSends.length === 0 ? (
-                <p className="rounded-md border border-dashed border-sand-300 bg-sand-50/40 px-4 py-6 text-center text-sm text-sand-500">
+                <p className="rounded-xl bg-sand-50 px-4 py-8 text-center text-sm text-sand-400">
                   No past sends in the last 365 days. Once this community sends its first eblast, the agents
                   will start using it as a reference.
                 </p>
               ) : (
+                <div className="rounded-xl overflow-hidden border border-sand-200">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-sand-100 text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500">
-                      <th className="py-2 pr-3 text-left">Subject</th>
-                      <th className="py-2 px-2 text-left">Sent</th>
-                      <th className="py-2 px-2 text-left">From</th>
-                      <th className="py-2 px-2 text-right">Recipients</th>
-                      <th className="py-2 px-2 text-right">Open</th>
-                      <th className="py-2 pl-2 text-right">Click</th>
+                    <tr className="border-b border-sand-100 bg-sand-50/60 text-[11px] font-semibold uppercase tracking-widest text-sand-400">
+                      <th className="py-2.5 pr-3 text-left pl-4">Subject</th>
+                      <th className="py-2.5 px-2 text-left">Sent</th>
+                      <th className="py-2.5 px-2 text-left">From</th>
+                      <th className="py-2.5 px-2 text-right">Recipients</th>
+                      <th className="py-2.5 px-2 text-right">Open</th>
+                      <th className="py-2.5 pl-2 pr-4 text-right">Click</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-sand-100">
@@ -497,8 +498,8 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                           ? Math.round((s.clickCount / s.recipientCount) * 1000) / 10
                           : null;
                       return (
-                        <tr key={s.hubspotEmailId}>
-                          <td className="py-2.5 pr-3">
+                        <tr key={s.hubspotEmailId} className="hover:bg-sand-50/60 transition-colors duration-100">
+                          <td className="py-2.5 pr-3 pl-4">
                             <p className="text-sand-900">{s.subject ?? "(no subject)"}</p>
                           </td>
                           <td className="py-2.5 px-2 text-xs text-sand-500 tabular-nums">{s.sentAt ?? "—"}</td>
@@ -523,7 +524,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                               <span className="text-sand-400">—</span>
                             )}
                           </td>
-                          <td className="py-2.5 pl-2 text-right tabular-nums text-sand-700">
+                          <td className="py-2.5 pl-2 pr-4 text-right tabular-nums text-sand-700">
                             {clickPct !== null ? `${clickPct}%` : "—"}
                           </td>
                         </tr>
@@ -531,6 +532,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                     })}
                   </tbody>
                 </table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -570,8 +572,8 @@ function Kpi({
   color?: "good" | "neutral";
 }) {
   return (
-    <div className="px-5 py-4">
-      <p className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500">{label}</p>
+    <div className="rounded-lg border border-sand-200/80 bg-white px-4 py-3 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-sand-500">{label}</p>
       <p
         className={`mt-1 font-serif text-2xl tabular-nums leading-none ${
           color === "good" ? "text-forest-700" : "text-sand-900"

@@ -615,7 +615,7 @@ function FormattingToolbar({
           </button>
         </div>
 
-        <div className="h-5 w-px bg-sand-200" />
+        <div className="mx-2 h-5 w-px bg-sand-200/80 self-center" />
 
         <div className="flex items-center gap-1">
           <button disabled={!enabled} onClick={() => send('bold')} className={btn} style={{ fontWeight: 700 }} title="Bold">B</button>
@@ -623,7 +623,7 @@ function FormattingToolbar({
           <button disabled={!enabled} onClick={() => send('underline')} className={btn + ' underline'} title="Underline">U</button>
         </div>
 
-        <div className="h-5 w-px bg-sand-200" />
+        <div className="mx-2 h-5 w-px bg-sand-200/80 self-center" />
 
         <select
           disabled={!enabled}
@@ -657,11 +657,11 @@ function FormattingToolbar({
           <option value="6">XX-Large</option>
         </select>
 
-        <div className="h-5 w-px bg-sand-200" />
+        <div className="mx-2 h-5 w-px bg-sand-200/80 self-center" />
 
         <ColorPickerPopover enabled={enabled} brandColors={brandColors} onColor={(color) => send('foreColor', color)} />
 
-        <div className="h-5 w-px bg-sand-200" />
+        <div className="mx-2 h-5 w-px bg-sand-200/80 self-center" />
 
         <button
           disabled={!enabled}
@@ -1132,6 +1132,7 @@ export default function Home() {
                       placeholder="What should change?"
                       rows={3}
                       disabled={stage === "refining"}
+                      className="rounded-lg"
                     />
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
@@ -1458,7 +1459,7 @@ export default function Home() {
                   loading={stage === "pushing"}
                   size="lg"
                   variant="primary"
-                  className="bg-clay-500 hover:bg-clay-600 active:bg-clay-700"
+                  className="bg-forest-600 hover:bg-forest-700 active:bg-forest-800"
                 >
                   {stage === "pushing" ? "Pushing to HubSpot…" : "Push draft to HubSpot"}
                 </Button>
@@ -1498,8 +1499,8 @@ export default function Home() {
 
               {/* Send for Approval modal */}
               {approvalModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-sand-950/40 backdrop-blur-sm">
-                  <div className="w-full max-w-md rounded-xl border border-sand-200 bg-white p-6 shadow-xl">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+                  <div className="w-full max-w-md rounded-2xl border border-sand-200/60 bg-white/95 backdrop-blur-xl p-7 shadow-float">
                     <h2 className="mb-1 font-serif text-xl text-sand-900">Send for Approval</h2>
                     <p className="mb-4 text-sm text-sand-500">
                       An email with the full draft will be sent. The recipient can approve (which pushes to HubSpot)
@@ -1524,7 +1525,7 @@ export default function Home() {
                               value={approvalRecipientEmail}
                               onChange={(e) => setApprovalRecipientEmail(e.target.value)}
                               placeholder="salesperson@example.com"
-                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-clay-400 focus:ring-1 focus:ring-clay-200"
+                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-forest-400 focus:ring-2 focus:ring-forest-600/20 focus:outline-none"
                             />
                           </div>
                           <div>
@@ -1536,7 +1537,7 @@ export default function Home() {
                               value={approvalRecipientName}
                               onChange={(e) => setApprovalRecipientName(e.target.value)}
                               placeholder="Sarah Johnson"
-                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-clay-400 focus:ring-1 focus:ring-clay-200"
+                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-forest-400 focus:ring-2 focus:ring-forest-600/20 focus:outline-none"
                             />
                             <p className="mt-1 text-[11px] text-sand-400">
                               Used to personalise the greeting in the approval email.
@@ -1551,7 +1552,7 @@ export default function Home() {
                               value={approvalNotifyEmail}
                               onChange={(e) => setApprovalNotifyEmail(e.target.value)}
                               placeholder="you@example.com"
-                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-clay-400 focus:ring-1 focus:ring-clay-200"
+                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-forest-400 focus:ring-2 focus:ring-forest-600/20 focus:outline-none"
                             />
                             <p className="mt-1 text-[11px] text-sand-400">Saved automatically for next time.</p>
                           </div>
@@ -1730,7 +1731,7 @@ export default function Home() {
                 </CardHeader>
                 <FormattingToolbar iframeRef={iframeRef} enabled={!!extracted} community={selected} />
                 <CardContent className="p-3">
-                  <p className={`mb-2 text-center text-[11px] ${htmlDirty ? "font-medium text-clay-600" : "text-sand-400"}`}>
+                  <p className={`mb-2 text-center text-xs ${htmlDirty ? "font-medium text-clay-600" : "text-sand-400"}`}>
                     {htmlDirty
                       ? "Edits are live in the preview — save draft to keep them."
                       : "Hover to identify sections · Click any text to edit it inline"}
@@ -1768,7 +1769,7 @@ export default function Home() {
                         }
                       }
                     }}
-                    className="block h-[820px] min-h-[480px] w-full resize-y overflow-auto rounded-sm border-0 bg-white transition-opacity duration-200"
+                    className="block h-[min(820px,80vh)] min-h-[480px] w-full resize-y overflow-auto rounded-sm border-0 bg-white transition-opacity duration-200"
                     style={{ opacity: stage === "refining" ? 0.55 : 1 }}
                     title="Eblast preview"
                   />
@@ -1779,7 +1780,7 @@ export default function Home() {
 
             {confirmExit && (
               <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-sand-900/40 px-4"
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4"
                 onClick={() => setConfirmExit(false)}
               >
                 <div
@@ -1814,10 +1815,10 @@ export default function Home() {
 
         {/* Push result */}
         {pushResult && (
-          <div className="mt-8">
+          <div className="mt-6">
             <div
-              className={`rounded-md border-l-4 px-4 py-3 ${
-                pushResult.ok ? "border-forest-600 bg-forest-50/60" : "border-clay-600 bg-clay-50/60"
+              className={`rounded-xl border overflow-hidden shadow-sm px-4 py-3 ${
+                pushResult.ok ? "border-forest-200 bg-forest-50" : "border-red-200 bg-red-50"
               }`}
             >
               <p className="font-medium text-sand-900">

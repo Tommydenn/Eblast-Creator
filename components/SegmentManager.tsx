@@ -66,7 +66,7 @@ export function SegmentManager({ slug, initialIncluded, initialExcluded }: Props
   return (
     <div className="space-y-3">
       {namesAreIds && (
-        <p className="rounded border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-800">
+        <p className="rounded-lg border border-amber-200/60 bg-amber-50/50 px-3 py-2 text-[11px] text-amber-800">
           Segment names need the{" "}
           <code className="font-mono font-semibold">crm.lists.read</code> scope on your HubSpot
           Private App — add it in HubSpot → Settings → Integrations → Private Apps.
@@ -135,7 +135,7 @@ function SegmentGroup({
 
   return (
     <div>
-      <p className="mb-1.5 text-[11px] font-medium text-sand-600">
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-sand-500">
         {label}
         <span className="ml-1.5 font-normal text-sand-400">· {count}</span>
       </p>
@@ -149,10 +149,10 @@ function SegmentGroup({
               type="button"
               onClick={() => onClickSegment(seg)}
               title={actionLabel}
-              className={`group/chip flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium transition-colors ${chipBase} ${chipHover} cursor-pointer`}
+              className={`group/chip flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${chipBase} ${chipHover} cursor-pointer`}
             >
               <span>{seg.name}</span>
-              <span className="opacity-0 text-[9px] group-hover/chip:opacity-50 transition-opacity">
+              <span className="opacity-0 text-[10px] group-hover/chip:opacity-70 transition-opacity">
                 {tone === "include" ? "→" : "←"}
               </span>
             </button>

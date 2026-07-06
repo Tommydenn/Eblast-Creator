@@ -82,8 +82,8 @@ export default async function CommunitiesPage() {
       <main className="mx-auto max-w-[1240px] px-6 pb-24 pt-10">
         <div className="mb-8 max-w-3xl">
           <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-clay-600">Control center</p>
-          <h1 className="mt-1 font-serif text-[40px] leading-tight text-sand-900">Communities</h1>
-          <p className="mt-3 text-sm leading-relaxed text-sand-600">
+          <h1 className="mt-1 font-serif text-[32px] font-bold leading-tight text-sand-900">Communities</h1>
+          <p className="mt-2 text-base text-sand-500">
             {totalCommunities} communities under Great Lakes Management. Click any row to open its brand guide,
             senders, tracking phone, send history, and brand voice.
           </p>
@@ -105,7 +105,7 @@ export default async function CommunitiesPage() {
             .map(([family, list]) => (
               <section key={family}>
                 <div className="mb-3 flex items-baseline justify-between">
-                  <h2 className="font-serif text-base font-medium text-sand-700">
+                  <h2 className="text-sm font-semibold text-sand-700">
                     {family}
                     <span className="ml-2 text-[11px] font-normal text-sand-500">
                       {list.length} location{list.length === 1 ? "" : "s"}
@@ -115,7 +115,7 @@ export default async function CommunitiesPage() {
                 <Card className="overflow-hidden p-0">
                   <table className="w-full table-fixed text-sm">
                     <thead>
-                      <tr className="border-b border-sand-200 bg-sand-50/60 text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500">
+                      <tr className="border-b border-sand-200 bg-sand-50/60 text-[11px] font-semibold uppercase tracking-widest text-sand-500">
                         <th className="w-[28%] px-5 py-3 text-left font-medium">Community</th>
                         <th className="w-[18%] px-3 py-3 text-left font-medium">Sender</th>
                         <th className="w-[14%] px-3 py-3 text-left font-medium">Tracking #</th>
@@ -132,7 +132,7 @@ export default async function CommunitiesPage() {
                         const openPct = stats?.avgOpenPct ?? null;
                         const barColor = FAMILY_COLORS[family] ?? DEFAULT_BAR_COLOR;
                         return (
-                          <tr key={c.slug} className="group align-middle hover:bg-sand-50/60">
+                          <tr key={c.slug} className="group align-middle hover:bg-sand-100/50 transition-colors duration-100">
                             <td className="px-5 py-3">
                               <Link href={`/communities/${c.slug}`} className="block">
                                 <div className="flex items-center gap-3">
@@ -240,8 +240,8 @@ export default async function CommunitiesPage() {
 function HealthStat({ label, description, value, pct }: { label: string; description: string; value: string; pct: number }) {
   const color = pct >= 0.85 ? "bg-forest-500" : pct >= 0.5 ? "bg-amber-500" : "bg-clay-500";
   return (
-    <Card className="px-4 py-3">
-      <p className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500">{label}</p>
+    <Card className="px-4 py-3 shadow-sm rounded-xl">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-sand-500">{label}</p>
       <p className="mt-1 font-serif text-xl text-sand-900 tabular-nums">{value}</p>
       <p className="mt-1 text-[10px] leading-snug text-sand-400">{description}</p>
       <div className="mt-2 h-1 overflow-hidden rounded-full bg-sand-100">

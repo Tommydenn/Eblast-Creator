@@ -52,13 +52,23 @@ function buildGoogleFontsUrl(fontHeadline: string, fontBody: string): string | n
 
 // Ensures every font-family string has an email-safe generic fallback so
 // Outlook falls back to a readable system font instead of Times New Roman.
-// If the stack already ends in a generic keyword, it passes through unchanged.
+// Multi-word font names are quoted so the browser/email client parses them as a
+// single family name rather than splitting on commas (e.g. "Josefin Sans" must
+// become "Josefin Sans", not Josefin, Sans as two separate tokens).
 function safeFontStack(fontFamily: string): string {
   if (/\b(serif|sans-serif|monospace|cursive|fantasy)\b/.test(fontFamily)) return fontFamily;
+  // Quote each part that contains whitespace and isn't already quoted.
+  const parts = fontFamily.split(/\s*,\s*/);
+  const quoted = parts.map(p => {
+    const t = p.trim();
+    return /\s/.test(t) && !/^['"]/.test(t) ? `"${t}"` : t;
+  });
+  const base = quoted.join(", ");
+  if (/\b(serif|sans-serif|monospace|cursive|fantasy)\b/.test(base)) return base;
   const isSerif = /garamond|caslon|minion|georgia|times|bookman|mackinac|adobe caslon|palatino/i.test(fontFamily);
   return isSerif
-    ? `${fontFamily}, Georgia, 'Times New Roman', serif`
-    : `${fontFamily}, Arial, Helvetica, sans-serif`;
+    ? `${base}, Georgia, 'Times New Roman', serif`
+    : `${base}, Arial, Helvetica, sans-serif`;
 }
 
 // Relative luminance (0 = black, 1 = white). Returns null for malformed hex.

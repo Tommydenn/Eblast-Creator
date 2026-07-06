@@ -107,6 +107,7 @@ export function SendersPanel({ slug, initialSenders }: Props) {
 
   async function setPrimary(id: string) {
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch(`/api/communities/${slug}/senders/${id}`, {
         method: "PUT",
@@ -116,9 +117,11 @@ export function SendersPanel({ slug, initialSenders }: Props) {
       if (res.ok) {
         setSenders(prev => prev.map(s => ({ ...s, isPrimary: s.id === id })).sort(sortSenders));
         router.refresh();
+      } else {
+        setError("Failed to update primary sender. Please try again.");
       }
     } catch {
-      // silent
+      setError("Failed to update primary sender. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -143,6 +146,10 @@ export function SendersPanel({ slug, initialSenders }: Props) {
         <p className="rounded-md border border-dashed border-clay-300 bg-clay-50/50 px-3 py-2.5 text-xs text-clay-700">
           No senders configured. Add one — it will appear in the From: field of every eblast.
         </p>
+      )}
+
+      {error && editingId === null && (
+        <p className="text-xs text-red-500 mt-1">{error}</p>
       )}
 
       <ul className="space-y-1.5">

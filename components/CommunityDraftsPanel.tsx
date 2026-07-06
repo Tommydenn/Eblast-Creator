@@ -21,6 +21,7 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +29,7 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
     setFetchError(null);
     fetch(`/api/saved-drafts?communitySlug=${encodeURIComponent(communitySlug)}`)
       .then(async (r) => {
-        const d = await r.json();
+        const d = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
         if (!cancelled) {
           if (d.ok) setDrafts(d.drafts);
           else setFetchError(d.error ?? `HTTP ${r.status}`);
@@ -41,15 +42,14 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
 
   async function openDraft(id: string) {
     setOpeningId(id);
+    setActionError(null);
     try {
       const [draftRes, imagesRes] = await Promise.all([
         fetch(`/api/saved-drafts/${encodeURIComponent(id)}`),
         fetch(`/api/saved-drafts/${encodeURIComponent(id)}/images`),
       ]);
-      const [draftData, imagesData] = await Promise.all([
-        draftRes.json(),
-        imagesRes.json(),
-      ]);
+      const draftData = await draftRes.json().catch(() => ({ ok: false, error: `HTTP ${draftRes.status}` }));
+      const imagesData = await imagesRes.json().catch(() => ({ ok: false }));
       if (draftData.ok && draftData.draft) {
         const draft = {
           ...draftData.draft,
@@ -59,7 +59,7 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
         router.push("/");
       }
     } catch {
-      // Silently fail — user stays on community page.
+      setActionError("Failed to open draft. Please try again.");
     } finally {
       setOpeningId(null);
     }
@@ -67,11 +67,17 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
 
   async function deleteDraft(id: string) {
     setDeletingId(id);
+    setActionError(null);
     try {
-      await fetch(`/api/saved-drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
-      setDrafts((prev) => prev.filter((d) => d.id !== id));
+      const res = await fetch(`/api/saved-drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({ ok: false }));
+      if (data.ok) {
+        setDrafts((prev) => prev.filter((d) => d.id !== id));
+      } else {
+        setActionError("Failed to delete draft. Please try again.");
+      }
     } catch {
-      // Silently fail.
+      setActionError("Failed to delete draft. Please try again.");
     } finally {
       setDeletingId(null);
     }
@@ -103,6 +109,10 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
   }
 
   return (
+    <>
+    {actionError && (
+      <p className="text-xs text-red-500 mt-1">{actionError}</p>
+    )}
     <ul className="divide-y divide-sand-100 rounded-md border border-sand-200">
       {drafts.map((d) => (
         <li key={d.id} className="flex items-start justify-between gap-3 px-4 py-3">
@@ -142,5 +152,6 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
         </li>
       ))}
     </ul>
+    </>
   );
 }

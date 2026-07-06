@@ -41,6 +41,7 @@ interface IntelligenceResponse {
 export function CommunityIntelligence({ communitySlug }: { communitySlug: string }) {
   const [data, setData] = useState<IntelligenceResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!communitySlug) {
@@ -49,13 +50,17 @@ export function CommunityIntelligence({ communitySlug }: { communitySlug: string
     }
     let cancelled = false;
     setLoading(true);
+    setFetchError(null);
     fetch(`/api/community-intelligence?slug=${encodeURIComponent(communitySlug)}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) setData(d);
       })
       .catch(() => {
-        if (!cancelled) setData({ ok: false });
+        if (!cancelled) {
+          setData(null);
+          setFetchError("Failed to load community intelligence.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -76,12 +81,18 @@ export function CommunityIntelligence({ communitySlug }: { communitySlug: string
             What the drafter and critic will read when they generate this eblast.
           </CardDescription>
         </div>
-        <Badge variant={data?.summary && data.summary.sendCount > 0 ? "success" : "warning"}>
-          {loading ? "Loading…" : data?.summary?.sendCount ? `${data.summary.sendCount} past sends` : "No history"}
-        </Badge>
+        {!fetchError && (
+          <Badge variant={data?.summary && data.summary.sendCount > 0 ? "success" : "warning"}>
+            {loading ? "Loading…" : data?.summary?.sendCount ? `${data.summary.sendCount} past sends` : "No history"}
+          </Badge>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-5">
+        {fetchError && (
+          <p className="text-xs text-sand-500">{fetchError}</p>
+        )}
+
         {loading && <div className="h-20 rounded bg-sand-100 eb-shimmer" />}
 
         {!loading && data?.summary && data.summary.sendCount > 0 && (

@@ -83,7 +83,7 @@ export interface Community {
   displayName: string;
   shortName: string;
   type: string;
-  brand: { primary: string; accent: string; background: string };
+  brand: { primary: string; accent: string; background: string; fontHeadline?: string; fontBody?: string; secondary?: string; supporting?: string[] };
   senders: Array<{ id: string; name: string; email: string; isPrimary: boolean }>;
   hubspot: { listId?: number; acronym?: string; includedListIds?: number[]; excludedListIds?: number[] };
   trackingPhone?: string | null;
@@ -316,7 +316,7 @@ export interface DraftContextValue {
   syncHtml: () => Promise<void>;
   /** Directly set the HTML from the iframe DOM (used after inline formatting). */
   updateHtml: (newHtml: string) => void;
-  saveDraft: () => void;
+  saveDraft: (htmlSnapshot?: string) => void;
   discardDraft: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
   swapImage: (slot: 'hero' | 'secondary' | 'gallery', imageUrl: string, galleryIdx?: number, focus?: string) => Promise<void>;
@@ -809,8 +809,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  function saveDraft() {
-    if (!extracted || !html) return;
+  function saveDraft(htmlSnapshot?: string) {
+    const saveHtml = htmlSnapshot ?? html;
+    if (!extracted || !saveHtml) return;
     const slug = activeCommunitySlug;
     const community = communities.find((c) => c.slug === slug);
     const communityName = community?.displayName ?? slug;
@@ -839,7 +840,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       savedAt: new Date().toISOString(),
       subject: extracted.subject,
       extracted,
-      html,
+      html: saveHtml,
       imageCount,
       review,
       agentLoop,

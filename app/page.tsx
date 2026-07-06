@@ -58,13 +58,16 @@ const EBLAST_EDIT_SCRIPT = `(function(){
     el.style.cursor='pointer';
     el.addEventListener('mouseenter',function(){ if(el.contentEditable!=='true'){ el.style.outline='1px dashed rgba(59,130,246,0.45)'; el.style.outlineOffset='3px'; } });
     el.addEventListener('mouseleave',function(){ if(el.contentEditable!=='true') el.style.outline=''; });
-    el.addEventListener('click',function(e){
-      e.stopPropagation();
+    // Activate on mousedown so the browser can place the cursor where the user clicked.
+    el.addEventListener('mousedown',function(e){
+      if(e.target&&(e.target.closest('[data-img-label]')||e.target.tagName==='IMG')) return;
       if(el.contentEditable==='true') return;
       stopAll(el);
       el.contentEditable='true'; el.style.outline='2px solid #3b82f6'; el.style.outlineOffset='2px'; el.style.cursor='text';
-      el.focus();
-      var r=document.createRange(); r.selectNodeContents(el); r.collapse(false); var s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    });
+    el.addEventListener('click',function(e){
+      if(e.target&&(e.target.closest('[data-img-label]')||e.target.tagName==='IMG')) return;
+      e.stopPropagation(); el.focus({preventScroll:true});
     });
     el.addEventListener('blur',function(){ finish(el); });
     el.addEventListener('keydown',function(e){
@@ -76,58 +79,96 @@ const EBLAST_EDIT_SCRIPT = `(function(){
     });
   });
   document.addEventListener('click',function(){ stopAll(null); });
+  // Make non-data-field text elements editable (full HTML sync on blur).
+  document.querySelectorAll('p,h1,h2,h3').forEach(function(el){
+    if(el.getAttribute('data-field')) return;
+    if(el.closest('a')) return;
+    var txt=el.textContent.trim();
+    if(!txt||el.style.maxHeight==='0px'||el.style.fontSize==='1px') return;
+    el.style.cursor='pointer';
+    el.addEventListener('mouseenter',function(){
+      if(el.contentEditable!=='true'){el.style.outline='1px dashed rgba(59,130,246,0.3)';el.style.outlineOffset='3px';}
+    });
+    el.addEventListener('mouseleave',function(){
+      if(el.contentEditable!=='true') el.style.outline='';
+    });
+    // Activate on mousedown so the browser places the cursor at the exact click position.
+    el.addEventListener('mousedown',function(e){
+      if(e.target&&(e.target.closest('[data-img-label]')||e.target.tagName==='IMG')) return;
+      if(el.contentEditable==='true') return;
+      el.contentEditable='true';
+      el.style.outline='2px solid #3b82f6';el.style.outlineOffset='2px';el.style.cursor='text';
+    });
+    el.addEventListener('click',function(e){
+      if(e.target&&(e.target.closest('[data-img-label]')||e.target.tagName==='IMG')) return;
+      e.stopPropagation(); el.focus({preventScroll:true});
+    });
+    el.addEventListener('blur',function(){
+      if(el.contentEditable!=='true') return;
+      el.contentEditable='false';el.style.outline='';el.style.cursor='pointer';
+      window.parent.postMessage({type:'eblast-html-edit'},'*');
+    });
+    el.addEventListener('keydown',function(e){
+      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();el.blur();}
+      if(e.key==='Escape'){el.contentEditable='false';el.style.outline='';el.blur();}
+    });
+  });
   // Track the last selected data-field element and range for cross-frame formatting.
-  var _fmtEl=null,_fmtRange=null;
+  var _fmtEl=null,_fmtRange=null,_undoStack=[],_redoStack=[];
   document.addEventListener('selectionchange',function(){
     var sel=window.getSelection();
     if(!sel||sel.rangeCount===0) return;
     var r=sel.getRangeAt(0);
     var n=r.commonAncestorContainer;
     var el=n.nodeType===1?n:n.parentElement;
-    while(el&&!el.getAttribute('data-field')) el=el.parentElement;
+    // Walk up to find any editable element (data-field OR catch-all contenteditable).
+    while(el&&el.contentEditable!=='true'&&!el.getAttribute('data-field')) el=el.parentElement;
     if(el){_fmtEl=el;try{_fmtRange=r.cloneRange();}catch(ex){}}
   });
   // Receive position-control messages from the parent frame.
   window.addEventListener('message',function(e){
     if(!e.data) return;
     if(e.data.type==='eblast-format'){
-      if(_fmtEl&&_fmtEl.contentEditable!=='true'){_fmtEl.contentEditable='true';_fmtEl.focus();}
-      if(_fmtRange){var sel=window.getSelection();sel.removeAllRanges();try{sel.addRange(_fmtRange);}catch(ex){}}
-      document.execCommand(e.data.command,false,e.data.value||null);
-      var s2=window.getSelection();
-      if(s2&&s2.rangeCount>0){try{_fmtRange=s2.getRangeAt(0).cloneRange();}catch(ex){}}
-      window.parent.postMessage({type:'eblast-format-done'},'*');
+      var cmd=e.data.command;
+      // Custom undo/redo — avoids execCommand('undo') reverting contentEditable mutations.
+      if(cmd==='undo'){
+        if(_undoStack.length>0){var su=_undoStack.pop();if(su.el.isConnected){_redoStack.push({el:su.el,html:su.el.innerHTML});su.el.innerHTML=su.html;}}
+        window.parent.postMessage({type:'eblast-format-done'},'*');
+      } else if(cmd==='redo'){
+        if(_redoStack.length>0){var sr=_redoStack.pop();if(sr.el.isConnected){_undoStack.push({el:sr.el,html:sr.el.innerHTML});sr.el.innerHTML=sr.html;}}
+        window.parent.postMessage({type:'eblast-format-done'},'*');
+      } else {
+        // Save snapshot before applying format so undo can restore it.
+        if(_fmtEl){_undoStack.push({el:_fmtEl,html:_fmtEl.innerHTML});if(_undoStack.length>50)_undoStack.shift();_redoStack=[];}
+        if(_fmtEl&&_fmtEl.contentEditable!=='true'){_fmtEl.contentEditable='true';_fmtEl.focus({preventScroll:true});}
+        if(_fmtRange){var sel=window.getSelection();sel.removeAllRanges();try{sel.addRange(_fmtRange);}catch(ex){}}
+        document.execCommand(cmd,false,e.data.value||null);
+        var s2=window.getSelection();
+        if(s2&&s2.rangeCount>0){try{_fmtRange=s2.getRangeAt(0).cloneRange();}catch(ex){}}
+        window.parent.postMessage({type:'eblast-format-done'},'*');
+      }
     }
     if(e.data.type==='eblast-show-original'){
       var imgEl=document.querySelector('[data-img-label="'+e.data.label+'"]');
       if(!imgEl) return;
-      var cw=parseInt(imgEl.getAttribute('width'))||imgEl.offsetWidth;
-      var ch=parseInt(imgEl.getAttribute('height'))||imgEl.offsetHeight;
+      var cw=parseInt(imgEl.getAttribute('width'))||imgEl.offsetWidth||600;
+      var ch=parseInt(imgEl.getAttribute('height'))||imgEl.offsetHeight||400;
       var lbl=e.data.label, xPos=e.data.x, yPos=e.data.y, src=e.data.src;
-      // Load original into a temp image to get natural size and normalize colors
-      // via Canvas (Canvas compositor converts any color profile to sRGB).
+      // Load image to get natural dimensions for correct background-size scaling.
+      // CSS background-image can load cross-origin images without CORS — do NOT use
+      // Canvas here (canvas.toDataURL throws SecurityError on cross-origin images).
       var tmp=new Image();
       tmp.onload=function(){
-        var nw=tmp.naturalWidth, nh=tmp.naturalHeight;
-        // Ensure BOTH axes have at least 12% panning room, regardless of aspect ratio.
+        var nw=tmp.naturalWidth||800, nh=tmp.naturalHeight||600;
         var MARGIN=0.12;
-        // Normalize colors: draw through Canvas → export as sRGB JPEG.
-        var maxSide=1600;
-        var nrmW=nw>maxSide?maxSide:nw, nrmH=Math.round(nh*(nrmW/nw));
-        var canvas=document.createElement('canvas');
-        canvas.width=nrmW; canvas.height=nrmH;
-        canvas.getContext('2d').drawImage(tmp,0,0,nrmW,nrmH);
-        var normSrc=canvas.toDataURL('image/jpeg',0.92);
-        // Scale the normalized image to fill the container with panning room.
-        // Must use nrmW/nrmH (not nw/nh) — they differ when the image was downsampled.
-        var scaleX=(cw/nrmW)*(1+MARGIN), scaleY=(ch/nrmH)*(1+MARGIN);
+        var scaleX=(cw/nw)*(1+MARGIN), scaleY=(ch/nh)*(1+MARGIN);
         var scale=Math.max(scaleX,scaleY);
-        var bgWn=Math.round(nrmW*scale), bgHn=Math.round(nrmH*scale);
+        var bgWn=Math.round(nw*scale), bgHn=Math.round(nh*scale);
         var div=document.createElement('div');
         div.setAttribute('data-img-label',lbl);
         div.setAttribute('data-repo-div','1');
         div.style.cssText='display:inline-block;width:'+cw+'px;height:'+ch+'px;'+
-          'background-image:url("'+normSrc+'");'+
+          'background-image:url("'+src+'");'+
           'background-size:'+bgWn+'px '+bgHn+'px;'+
           'background-repeat:no-repeat;'+
           'background-position:'+xPos+'% '+yPos+'%;'+
@@ -139,6 +180,14 @@ const EBLAST_EDIT_SCRIPT = `(function(){
         });
       };
       tmp.src=src;
+    }
+    if(e.data.type==='eblast-restore-fields'){
+      var flds=e.data.fields;
+      if(flds) Object.keys(flds).forEach(function(k){
+        var fe=document.querySelector('[data-field="'+k+'"]');
+        if(fe) fe.innerHTML=flds[k];
+      });
+      return;
     }
     if(e.data.type==='eblast-reposition'){
       var el=document.querySelector('[data-img-label="'+e.data.label+'"][data-repo-div]');
@@ -367,12 +416,131 @@ function ImageBankPanel({
 
 // ─── Formatting Toolbar ───────────────────────────────────────────────────────
 
+type BrandColor = { label: string; color: string };
+
+function ColorPickerPopover({
+  enabled,
+  brandColors,
+  onColor,
+}: {
+  enabled: boolean;
+  brandColors: BrandColor[];
+  onColor: (color: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<'brand' | 'custom'>('brand');
+  const [selectedColor, setSelectedColor] = useState('#000000');
+  const [hasEyeDropper, setHasEyeDropper] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setHasEyeDropper('EyeDropper' in window);
+    function handleOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
+  function applyColor(color: string) {
+    setSelectedColor(color);
+    onColor(color);
+    setOpen(false);
+  }
+
+  async function pickFromScreen() {
+    setOpen(false);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await new (window as any).EyeDropper().open();
+      applyColor(result.sRGBHex);
+    } catch { /* user cancelled */ }
+  }
+
+  const btnBase = 'rounded border border-sand-200 bg-white px-2.5 py-1.5 text-xs font-medium text-sand-700 transition-colors hover:border-sand-300 hover:bg-sand-50 disabled:cursor-not-allowed disabled:opacity-40';
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        disabled={!enabled}
+        onClick={() => setOpen((o) => !o)}
+        className={`${btnBase} flex items-center gap-1.5`}
+        title="Text color"
+      >
+        <span>Color</span>
+        <span className="h-4 w-4 rounded border border-sand-300" style={{ background: selectedColor }} />
+        <svg viewBox="0 0 8 5" className="h-2 w-2 fill-sand-400"><path d="M0 0l4 5 4-5z" /></svg>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-md border border-sand-200 bg-white p-3 shadow-lg">
+          <div className="mb-2.5 flex gap-3 border-b border-sand-100 pb-2">
+            <button type="button" onClick={() => setTab('brand')} className={`text-[11px] font-medium transition-colors ${tab === 'brand' ? 'text-sand-900' : 'text-sand-400 hover:text-sand-600'}`}>Brand colors</button>
+            <button type="button" onClick={() => setTab('custom')} className={`text-[11px] font-medium transition-colors ${tab === 'custom' ? 'text-sand-900' : 'text-sand-400 hover:text-sand-600'}`}>Custom</button>
+          </div>
+
+          {tab === 'brand' && (
+            brandColors.length === 0
+              ? <p className="text-[11px] text-sand-400">Select a community to see its colors.</p>
+              : (
+                <div className="flex flex-wrap gap-2">
+                  {brandColors.map((bc) => (
+                    <button
+                      key={bc.color + bc.label}
+                      type="button"
+                      title={`${bc.label}: ${bc.color}`}
+                      onClick={() => applyColor(bc.color)}
+                      className="group relative h-8 w-8 rounded border-2 border-transparent transition-all hover:scale-110 hover:border-sand-400"
+                      style={{ background: bc.color }}
+                    >
+                      <span className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-sand-900 px-1.5 py-0.5 text-[9px] text-white opacity-0 group-hover:opacity-100 transition-opacity">{bc.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )
+          )}
+
+          {tab === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={selectedColor}
+                onChange={(e) => setSelectedColor(e.target.value)}
+                className="h-8 w-12 cursor-pointer rounded border border-sand-200 p-0.5"
+              />
+              <button type="button" onClick={() => applyColor(selectedColor)} className={btnBase}>Apply</button>
+            </div>
+          )}
+
+          {hasEyeDropper && (
+            <button
+              type="button"
+              onClick={pickFromScreen}
+              className="mt-2.5 flex w-full items-center gap-2 rounded border border-sand-200 px-2.5 py-1.5 text-[11px] text-sand-600 transition-colors hover:border-sand-300 hover:bg-sand-50"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+                <path d="M11.5 1.5l3 3L7 12l-1.5.5.5-1.5 6-9z" />
+                <path d="M9.5 3.5l3 3" />
+                <path d="M2 14l2-2 1 1-2 2-1-1z" />
+              </svg>
+              Pick color from email
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FormattingToolbar({
   iframeRef,
   enabled,
+  community,
 }: {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   enabled: boolean;
+  community?: { brand: { primary: string; accent: string; background: string; fontHeadline?: string; fontBody?: string; secondary?: string; supporting?: string[] } } | null;
 }) {
   function send(command: string, value?: string) {
     iframeRef.current?.contentWindow?.postMessage(
@@ -381,45 +549,76 @@ function FormattingToolbar({
     );
   }
 
-  const btn = `rounded border border-sand-200 bg-white px-2.5 py-1.5 text-sm font-medium
-    text-sand-700 transition-colors hover:border-sand-300 hover:bg-sand-50
-    disabled:cursor-not-allowed disabled:opacity-40`;
+  const btn = 'rounded border border-sand-200 bg-white px-2.5 py-1.5 text-sm font-medium text-sand-700 transition-colors hover:border-sand-300 hover:bg-sand-50 disabled:cursor-not-allowed disabled:opacity-40';
+
+  // Community fonts first, then email-safe fallbacks.
+  const communityFonts: Array<{ label: string; value: string }> = [];
+  if (community?.brand.fontHeadline) communityFonts.push({ label: `${community.brand.fontHeadline} — Headline`, value: community.brand.fontHeadline });
+  if (community?.brand.fontBody && community.brand.fontBody !== community.brand.fontHeadline) communityFonts.push({ label: `${community.brand.fontBody} — Body`, value: community.brand.fontBody });
+
+  const standardFonts = [
+    { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
+    { label: 'Georgia', value: 'Georgia, serif' },
+    { label: "Times New Roman", value: "'Times New Roman', Times, serif" },
+    { label: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
+    { label: 'Trebuchet MS', value: "'Trebuchet MS', sans-serif" },
+    { label: 'Courier New', value: "'Courier New', monospace" },
+  ];
+
+  // Brand color palette from selected community.
+  const brandColors: BrandColor[] = [];
+  if (community?.brand) {
+    const b = community.brand;
+    if (b.primary) brandColors.push({ label: 'Primary', color: b.primary });
+    if (b.accent) brandColors.push({ label: 'Accent', color: b.accent });
+    if (b.background) brandColors.push({ label: 'Background', color: b.background });
+    if (b.secondary) brandColors.push({ label: 'Secondary', color: b.secondary });
+    (b.supporting ?? []).forEach((c, i) => brandColors.push({ label: `Supporting ${i + 1}`, color: c }));
+  }
 
   return (
-    <div className="rounded-md border border-sand-200 bg-white p-4">
-      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sand-500">
-        Text formatting
-      </p>
-      <p className="mb-3 text-[11px] text-sand-400">
-        Click a field in the preview to select it, highlight text, then apply formatting here.
+    <div className="border-t border-sand-200 bg-sand-50/50 px-4 py-3">
+      <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sand-500">
+        Text formatting — click any text in the preview, select it, then apply
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        {/* Weight / style */}
+        {/* Undo / Redo */}
+        <div className="flex items-center gap-1">
+          <button disabled={!enabled} onClick={() => send('undo')} className={btn} title="Undo (Ctrl+Z)">
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7H10a3 3 0 0 1 0 6H7"/><path d="M3 7l3-3-3-3"/></svg>
+          </button>
+          <button disabled={!enabled} onClick={() => send('redo')} className={btn} title="Redo (Ctrl+Y)">
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M13 7H6a3 3 0 0 0 0 6h3"/><path d="M13 7l-3-3 3-3"/></svg>
+          </button>
+        </div>
+
+        <div className="h-5 w-px bg-sand-200" />
+
         <div className="flex items-center gap-1">
           <button disabled={!enabled} onClick={() => send('bold')} className={btn} style={{ fontWeight: 700 }} title="Bold">B</button>
           <button disabled={!enabled} onClick={() => send('italic')} className={btn} style={{ fontStyle: 'italic' }} title="Italic">I</button>
           <button disabled={!enabled} onClick={() => send('underline')} className={btn + ' underline'} title="Underline">U</button>
         </div>
 
-        <div className="h-6 w-px bg-sand-200" />
+        <div className="h-5 w-px bg-sand-200" />
 
-        {/* Font family */}
         <select
           disabled={!enabled}
           defaultValue=""
           onChange={(e) => { if (e.target.value) { send('fontName', e.target.value); e.target.value = ''; } }}
           className="rounded border border-sand-200 bg-white px-2 py-1.5 text-xs text-sand-700 focus:outline-none disabled:opacity-40 cursor-pointer"
         >
-          <option value="">Font family…</option>
-          <option value="Arial, Helvetica, sans-serif">Arial</option>
-          <option value="Georgia, serif">Georgia</option>
-          <option value="'Times New Roman', Times, serif">Times New Roman</option>
-          <option value="Verdana, Geneva, sans-serif">Verdana</option>
-          <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
-          <option value="'Courier New', monospace">Courier New</option>
+          <option value="">Font…</option>
+          {communityFonts.length > 0 && (
+            <optgroup label="Community fonts">
+              {communityFonts.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </optgroup>
+          )}
+          <optgroup label="Standard">
+            {standardFonts.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </optgroup>
         </select>
 
-        {/* Font size */}
         <select
           disabled={!enabled}
           defaultValue=""
@@ -435,24 +634,12 @@ function FormattingToolbar({
           <option value="6">XX-Large</option>
         </select>
 
-        <div className="h-6 w-px bg-sand-200" />
+        <div className="h-5 w-px bg-sand-200" />
 
-        {/* Text color */}
-        <label className={`flex items-center gap-1.5 ${!enabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
-          <span className="text-xs text-sand-600">Color</span>
-          <input
-            type="color"
-            disabled={!enabled}
-            defaultValue="#000000"
-            onChange={(e) => send('foreColor', e.target.value)}
-            className="h-7 w-10 rounded border border-sand-200 p-0.5 cursor-pointer disabled:cursor-not-allowed"
-            title="Text color"
-          />
-        </label>
+        <ColorPickerPopover enabled={enabled} brandColors={brandColors} onColor={(color) => send('foreColor', color)} />
 
-        <div className="h-6 w-px bg-sand-200" />
+        <div className="h-5 w-px bg-sand-200" />
 
-        {/* Clear */}
         <button
           disabled={!enabled}
           onClick={() => send('removeFormat')}
@@ -494,6 +681,18 @@ export default function Home() {
   } = useDraft();
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Read current iframe HTML then save — avoids stale `html` state from context.
+  function handleSaveDraft() {
+    const iframeHtml = iframeRef.current?.contentDocument?.documentElement.outerHTML;
+    saveDraft(iframeHtml);
+  }
+
+  // Capture iframe DOM as the new baseline — preserves all inline edits and formatting.
+  function handleSyncPreview() {
+    const iframeHtml = iframeRef.current?.contentDocument?.documentElement.outerHTML;
+    if (iframeHtml) updateHtml(iframeHtml);
+  }
   const [reviewerOpen, setReviewerOpen] = useState(true);
   const [confirmExit, setConfirmExit] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ slot: 'hero' | 'secondary' | 'gallery'; galleryIdx?: number; label: string } | null>(null);
@@ -504,6 +703,7 @@ export default function Home() {
   const [repositioning, setRepositioning] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingTextEditsRef = useRef<Record<string, string> | null>(null);
 
   // ── Send for Approval state ──────────────────────────────────────────────
   const [approvalModalOpen, setApprovalModalOpen] = useState(false);
@@ -615,6 +815,17 @@ export default function Home() {
     if (holdIntervalRef.current) { clearInterval(holdIntervalRef.current); holdIntervalRef.current = null; }
   }
 
+  function captureTextEdits(): Record<string, string> {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return {};
+    const fields: Record<string, string> = {};
+    doc.querySelectorAll<HTMLElement>('[data-field]').forEach((el) => {
+      const k = el.getAttribute('data-field');
+      if (k) fields[k] = el.innerHTML;
+    });
+    return fields;
+  }
+
   async function commitReposition() {
     const si = selectedImageRef.current;
     if (!si || !imageOffsetChangedRef.current) return;
@@ -627,9 +838,10 @@ export default function Home() {
   useEffect(() => {
     function handler(e: MessageEvent) {
       if (!e.data) return;
-      if (e.data.type === 'eblast-format-done') {
-        const doc = iframeRef.current?.contentDocument;
-        if (doc) updateHtml(doc.documentElement.outerHTML);
+      if (e.data.type === 'eblast-format-done' || e.data.type === 'eblast-html-edit') {
+        // Changes already applied to iframe DOM — don't update srcDoc (that reloads
+        // the iframe and loses scroll position + focus). HTML is captured from the
+        // iframe DOM at save time via handleSaveDraft().
         return;
       }
       if (e.data.type !== 'eblast-image-select') return;
@@ -968,6 +1180,27 @@ export default function Home() {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Image panels — placed images and image bank */}
+                <PlacedImagesPanel
+                  heroImageUrl={heroImageUrl}
+                  secondaryImageUrl={secondaryImageUrl}
+                  galleryImageUrls={galleryImageUrls}
+                  onRemove={async (slot, galleryIdx) => {
+                    const edits = captureTextEdits();
+                    if (Object.keys(edits).length) pendingTextEditsRef.current = edits;
+                    await removeImage(slot, galleryIdx);
+                  }}
+                />
+                <ImageBankPanel
+                  imageUrls={allExtractedImageUrls}
+                  onSwap={(slot, url) => {
+                    const edits = captureTextEdits();
+                    if (Object.keys(edits).length) pendingTextEditsRef.current = edits;
+                    swapImage(slot, url, undefined, 'center');
+                  }}
+                  onAddImage={addToImageBank}
+                />
 
                 {/* Reviewer — collapsible, open by default */}
                 <div className="rounded-lg border border-sand-200 bg-white shadow-card">
@@ -1317,13 +1550,13 @@ export default function Home() {
                         </p>
                       )}
                       {htmlDirty && (
-                        <Button size="sm" variant="secondary" onClick={syncHtml}>
+                        <Button size="sm" variant="secondary" onClick={handleSyncPreview}>
                           Sync preview
                         </Button>
                       )}
                       {!currentDraftSaved && (
                         <>
-                          <Button size="sm" variant="secondary" onClick={saveDraft}>
+                          <Button size="sm" variant="secondary" onClick={handleSaveDraft}>
                             Save draft
                           </Button>
                           <Button size="sm" variant="destructive" onClick={discardDraft}>
@@ -1433,10 +1666,11 @@ export default function Home() {
                     </div>
                   )}
                 </CardHeader>
+                <FormattingToolbar iframeRef={iframeRef} enabled={!!extracted} community={selected} />
                 <CardContent className="p-3">
                   <p className={`mb-2 text-center text-[11px] ${htmlDirty ? "font-medium text-clay-600" : "text-sand-400"}`}>
                     {htmlDirty
-                      ? "Unsaved edits — click Sync preview to apply them."
+                      ? "Edits are live in the preview — save draft to keep them."
                       : "Hover to identify sections · Click any text to edit it inline"}
                   </p>
                   <iframe
@@ -1448,6 +1682,15 @@ export default function Home() {
                       const s = doc.createElement("script");
                       s.textContent = EBLAST_EDIT_SCRIPT;
                       doc.body.appendChild(s);
+                      // Restore text field edits captured before an image-triggered reload.
+                      if (pendingTextEditsRef.current) {
+                        const edits = pendingTextEditsRef.current;
+                        pendingTextEditsRef.current = null;
+                        iframeRef.current?.contentWindow?.postMessage(
+                          { type: 'eblast-restore-fields', fields: edits },
+                          '*',
+                        );
+                      }
                       // If a reposition overlay is open, re-activate the original view.
                       const si = selectedImageRef.current;
                       if (si) {
@@ -1471,25 +1714,6 @@ export default function Home() {
               </Card>
             </div>
 
-            {/* Formatting toolbar + image sections — below the main grid */}
-            <div className="mt-6 grid items-start gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
-              {/* Left: image sections aligned under controls column */}
-              <div className="flex flex-col gap-4">
-                <PlacedImagesPanel
-                  heroImageUrl={heroImageUrl}
-                  secondaryImageUrl={secondaryImageUrl}
-                  galleryImageUrls={galleryImageUrls}
-                  onRemove={removeImage}
-                />
-                <ImageBankPanel
-                  imageUrls={allExtractedImageUrls}
-                  onSwap={(slot, url) => swapImage(slot, url, undefined, 'center')}
-                  onAddImage={addToImageBank}
-                />
-              </div>
-              {/* Right: formatting toolbar aligned under preview */}
-              <FormattingToolbar iframeRef={iframeRef} enabled={!!extracted} />
-            </div>
 
             {confirmExit && (
               <div

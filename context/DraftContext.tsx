@@ -312,8 +312,8 @@ export interface DraftContextValue {
   pushDraft: () => Promise<void>;
   /** Directly swap subject + preview text without any AI call. */
   swapSubjectLine: (subject: string, previewText: string) => void;
-  /** Re-render HTML from current `extracted` without calling any AI. */
-  syncHtml: () => Promise<void>;
+  /** Re-render HTML from current `extracted` without calling any AI. Returns the new HTML string on success, null on failure. */
+  syncHtml: () => Promise<string | null>;
   /** Directly set the HTML from the iframe DOM (used after inline formatting). */
   updateHtml: (newHtml: string) => void;
   saveDraft: (htmlSnapshot?: string) => void;
@@ -756,10 +756,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setCurrentDraftSaved(false);
   }
 
-  async function syncHtml() {
+  async function syncHtml(): Promise<string | null> {
     const current = extractedRef.current;
     const slug = activeCommunitySlugRef.current;
-    if (!current || !slug) return;
+    if (!current || !slug) return null;
     try {
       const res = await fetch("/api/render-email", {
         method: "POST",
@@ -774,15 +774,19 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (data.ok) {
-        setHtml(injectImages(data.html, {
+        const newHtml = injectImages(data.html, {
           hero: heroImageUrlRef.current,
           secondary: secondaryImageUrlRef.current,
           gallery: galleryImageUrlsRef.current,
-        }));
+        });
+        setHtml(newHtml);
         setHtmlDirty(false);
+        return newHtml;
       }
+      return null;
     } catch (e) {
       console.error("[DraftProvider] syncHtml failed:", e);
+      return null;
     }
   }
 
@@ -791,9 +795,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     // Re-render from extracted so inline edits are captured in the pushed HTML.
     let pushHtml = html;
     if (htmlDirty) {
-      await syncHtml();
-      // syncHtml updates state async, so read from ref after awaiting
-      pushHtml = html; // will still use latest after state settles; good enough
+      const synced = await syncHtml();
+      if (synced) pushHtml = synced;
     }
     setStage("pushing");
     setError(null);
@@ -826,7 +829,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const community = communities.find((c) => c.slug === slug);
     const communityName = community?.displayName ?? slug;
     const draftId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setCurrentDraftId(draftId);
 
     // Cache originals in localStorage for repositioning on the same device.
     // (Originals are not uploaded to Postgres — they're only needed locally.)
@@ -900,6 +902,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        setCurrentDraftId(draftId);
         setCurrentDraftSaved(true);
         setSaveNotice({ id: Date.now(), text: `Saved — find it on the ${communityName} community page.` });
         saveNoticeTimerRef.current = setTimeout(() => setSaveNotice(null), 4500);

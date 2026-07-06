@@ -44,10 +44,11 @@ export async function POST(req: NextRequest) {
 
   const community = await getCommunity(body.communitySlug);
   if (!community) {
+    // Bug: missing HTTP status: 404 — response was returning 200 OK
     return NextResponse.json({
       ok: false,
       steps: [{ step: "lookup_community", ok: false, status: 404, body: { error: `Unknown community: ${body.communitySlug}` } }],
-    });
+    }, { status: 404 });
   }
 
   // Resolve HTML: inline body wins, otherwise read from disk template.
@@ -61,10 +62,11 @@ export async function POST(req: NextRequest) {
     try {
       html = await readFile(p, "utf-8");
     } catch (e: any) {
+      // Bug: missing HTTP status code — response was returning 200 OK on file-not-found
       return NextResponse.json({
         ok: false,
-        steps: [{ step: "read_template", ok: false, status: 0, body: { error: String(e), path: p } }],
-      });
+        steps: [{ step: "read_template", ok: false, status: 404, body: { error: String(e), path: p } }],
+      }, { status: 404 });
     }
     templateFileName = body.templateFile;
   } else {
@@ -81,7 +83,12 @@ export async function POST(req: NextRequest) {
   // 1) Convert relative /public image paths (logos, etc.) to data URIs so
   //    HubSpot can resolve them. swapDataUrisForHostedImages then uploads them
   //    to HubSpot File Manager and swaps the data URIs for hosted CDN URLs.
-  html = await inlineRelativeImages(html);
+  // Bug: inlineRelativeImages had no try/catch — a failure would produce an unhandled rejection
+  try {
+    html = await inlineRelativeImages(html);
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Image inlining failed: ${e.message ?? String(e)}` }, { status: 500 });
+  }
 
   const swap = await swapDataUrisForHostedImages({
     html,
@@ -121,6 +128,7 @@ export async function POST(req: NextRequest) {
   });
   if (!upload.ok) {
     console.error(`[push-eblast] upload failed status=${upload.status}`, JSON.stringify(upload.body));
+    // Bug: step label "upload_images" was reused for the template-upload step (misleading); also missing HTTP status
     return NextResponse.json({
       ok: false,
       steps: [
@@ -132,18 +140,24 @@ export async function POST(req: NextRequest) {
         },
         upload,
       ],
-    });
+    }, { status: upload.status ?? 500 });
   }
 
   // 2) Create the marketing email pointing at it.
   // Pull segments from the most recent published send for this community so
   // new emails automatically inherit the same lists. Falls back to the
   // community's static config if no past send is found or the API call fails.
-  const segments = await resolveSegmentsFromRecentSend({
-    communityId: community.id,
-    fallbackIncluded: community.hubspot.includedListIds ?? (community.hubspot.listId ? [community.hubspot.listId] : []),
-    fallbackExcluded: community.hubspot.excludedListIds ?? [],
-  });
+  // Bug: resolveSegmentsFromRecentSend had no try/catch — a failure would produce an unhandled rejection
+  let segments: Awaited<ReturnType<typeof resolveSegmentsFromRecentSend>>;
+  try {
+    segments = await resolveSegmentsFromRecentSend({
+      communityId: community.id,
+      fallbackIncluded: community.hubspot.includedListIds ?? (community.hubspot.listId ? [community.hubspot.listId] : []),
+      fallbackExcluded: community.hubspot.excludedListIds ?? [],
+    });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Segment resolution failed: ${e.message ?? String(e)}` }, { status: 500 });
+  }
   const segmentsPayload = {
     includedListIds: segments.includedListIds,
     excludedListIds: segments.excludedListIds,

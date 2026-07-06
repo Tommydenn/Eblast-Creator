@@ -721,20 +721,27 @@ export default function Home() {
   const pendingTextEditsRef = useRef<Record<string, string> | null>(null);
 
   // ── Send for Approval state ──────────────────────────────────────────────
+  type ApprovalSendState =
+    | { status: 'idle' }
+    | { status: 'sending' }
+    | { status: 'sent'; token: string; to: string }
+    | { status: 'error'; message: string };
+
   const [approvalModalOpen, setApprovalModalOpen] = useState(false);
   const [approvalRecipientEmail, setApprovalRecipientEmail] = useState("");
+  const [approvalRecipientName, setApprovalRecipientName] = useState("");
   const [approvalNotifyEmail, setApprovalNotifyEmail] = useState("");
-  const [approvalSending, setApprovalSending] = useState(false);
-  const [approvalSent, setApprovalSent] = useState<{ token: string; to: string } | null>(null);
-  const [approvalSendError, setApprovalSendError] = useState<string | null>(null);
+  const [approvalSendState, setApprovalSendState] = useState<ApprovalSendState>({ status: 'idle' });
   const [approvalStatus, setApprovalStatus] = useState<{ decision: string; editNotes: string | null; recipientName: string | null } | null>(null);
 
   // Load persisted emails from localStorage on mount.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const re = localStorage.getItem("approvalRecipientEmail");
+    const rn = localStorage.getItem("approvalRecipientName");
     const ne = localStorage.getItem("approvalNotifyEmail");
     if (re) setApprovalRecipientEmail(re);
+    if (rn) setApprovalRecipientName(rn);
     if (ne) setApprovalNotifyEmail(ne);
   }, []);
 
@@ -761,12 +768,16 @@ export default function Home() {
 
   async function sendForApproval() {
     if (!currentDraftId || !selected || !approvalRecipientEmail) return;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(approvalRecipientEmail)) {
+      setApprovalSendState({ status: 'error', message: 'Please enter a valid email address.' });
+      return;
+    }
     localStorage.setItem("approvalRecipientEmail", approvalRecipientEmail);
+    localStorage.setItem("approvalRecipientName", approvalRecipientName);
     localStorage.setItem("approvalNotifyEmail", approvalNotifyEmail);
-    setApprovalSending(true);
-    setApprovalSendError(null);
+    setApprovalSendState({ status: 'sending' });
     try {
-      const sender = selected.senders[0];
       const res = await fetch("/api/draft-approval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -774,21 +785,19 @@ export default function Home() {
           savedDraftId: currentDraftId,
           communitySlug: selected.slug,
           recipientEmail: approvalRecipientEmail,
-          recipientName: sender?.name ?? null,
+          recipientName: approvalRecipientName.trim() || null,
           notifyEmail: approvalNotifyEmail || null,
         }),
       });
       const data = await res.json();
       if (data.ok) {
-        setApprovalSent({ token: data.token, to: approvalRecipientEmail });
-        setApprovalStatus({ decision: "pending", editNotes: null, recipientName: sender?.name ?? null });
+        setApprovalSendState({ status: 'sent', token: data.token, to: approvalRecipientEmail });
+        setApprovalStatus({ decision: "pending", editNotes: null, recipientName: approvalRecipientName.trim() || null });
       } else {
-        setApprovalSendError(data.error ?? "Unknown error");
+        setApprovalSendState({ status: 'error', message: data.error ?? 'Unknown error' });
       }
-    } catch (e: any) {
-      setApprovalSendError(String(e));
-    } finally {
-      setApprovalSending(false);
+    } catch (e: unknown) {
+      setApprovalSendState({ status: 'error', message: String(e) });
     }
   }
 
@@ -1416,6 +1425,9 @@ export default function Home() {
                 {/* Subject specialist */}
                 {subjectSpecialist && (
                   <SubjectSpecialistPanel
+                    // SubjectSpecialistResult in DraftContext uses SubjectAlternative (score/reasoning)
+                    // while SubjectSpecialistPanel expects SubjectCandidate (approach/charCount/rationale).
+                    // The shapes differ — cast is required until the panel prop type is unified.
                     specialist={subjectSpecialist as any}
                     currentSubject={extracted.subject}
                     onPickAlternative={swapSubjectLine}
@@ -1425,8 +1437,10 @@ export default function Home() {
                 {/* Intelligence applied */}
                 <IntelligenceApplied
                   drafterRationale={extracted.drafterRationale}
+                  // PastSendForContext (openRate/clickRate) differs from the panel's PastSend shape
+                  // (openRatePct/clickRatePct/recipientCount/fromName) — cast required until unified.
                   pastSends={pastSendsContext as any}
-                  findings={review?.findings as any}
+                  findings={review?.findings}
                 />
 
                 {/* Push */}
@@ -1443,7 +1457,7 @@ export default function Home() {
 
                 {/* Send for Approval */}
                 <Button
-                  onClick={() => { setApprovalSent(null); setApprovalSendError(null); setApprovalModalOpen(true); }}
+                  onClick={() => { setApprovalSendState({ status: 'idle' }); setApprovalModalOpen(true); }}
                   disabled={!currentDraftId || stage === "pushing"}
                   size="lg"
                   variant="secondary"
@@ -1484,10 +1498,10 @@ export default function Home() {
                       or submit edit notes.
                     </p>
 
-                    {approvalSent ? (
+                    {approvalSendState.status === 'sent' ? (
                       <div className="rounded-md border border-forest-200 bg-forest-50 p-4 text-sm text-forest-800">
                         <p className="font-medium">Approval email sent!</p>
-                        <p className="mt-1 text-forest-700">Sent to {approvalSent.to}</p>
+                        <p className="mt-1 text-forest-700">Sent to {approvalSendState.to}</p>
                       </div>
                     ) : (
                       <>
@@ -1498,15 +1512,26 @@ export default function Home() {
                             </label>
                             <input
                               type="email"
+                              pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
                               value={approvalRecipientEmail}
                               onChange={(e) => setApprovalRecipientEmail(e.target.value)}
                               placeholder="salesperson@example.com"
                               className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-clay-400 focus:ring-1 focus:ring-clay-200"
                             />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-sand-600">
+                              Recipient name (optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={approvalRecipientName}
+                              onChange={(e) => setApprovalRecipientName(e.target.value)}
+                              placeholder="Sarah Johnson"
+                              className="w-full rounded-md border border-sand-300 px-3 py-2 text-sm text-sand-900 outline-none focus:border-clay-400 focus:ring-1 focus:ring-clay-200"
+                            />
                             <p className="mt-1 text-[11px] text-sand-400">
-                              {selected?.senders[0]?.name
-                                ? `Greeting will address ${selected.senders[0].name.split(" ")[0]} by name.`
-                                : ""}
+                              Used to personalise the greeting in the approval email.
                             </p>
                           </div>
                           <div>
@@ -1524,20 +1549,20 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {approvalSendError && (
-                          <p className="mt-3 text-xs text-clay-600">{approvalSendError}</p>
+                        {approvalSendState.status === 'error' && (
+                          <p className="mt-3 text-xs text-clay-600">{approvalSendState.message}</p>
                         )}
 
                         <div className="mt-5 flex gap-3">
                           <Button
                             onClick={sendForApproval}
-                            disabled={approvalSending || !approvalRecipientEmail}
-                            loading={approvalSending}
+                            disabled={approvalSendState.status === 'sending' || !approvalRecipientEmail}
+                            loading={approvalSendState.status === 'sending'}
                             size="sm"
                             variant="primary"
                             className="bg-clay-500 hover:bg-clay-600"
                           >
-                            {approvalSending ? "Sending…" : "Send Approval Email"}
+                            {approvalSendState.status === 'sending' ? "Sending…" : "Send Approval Email"}
                           </Button>
                           <Button
                             onClick={() => setApprovalModalOpen(false)}
@@ -1551,7 +1576,7 @@ export default function Home() {
                       </>
                     )}
 
-                    {approvalSent && (
+                    {approvalSendState.status === 'sent' && (
                       <div className="mt-4">
                         <Button
                           onClick={() => setApprovalModalOpen(false)}

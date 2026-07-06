@@ -19,30 +19,50 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "Missing slug" }, { status: 400 });
   }
 
-  const community = await getCommunity(slug);
+  // Bug: getCommunity had no try/catch — a DB failure would produce an unhandled rejection
+  let community: Awaited<ReturnType<typeof getCommunity>>;
+  try {
+    community = await getCommunity(slug);
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });
+  }
   if (!community) {
     return NextResponse.json({ ok: false, error: `Unknown community: ${slug}` }, { status: 404 });
   }
 
-  const recentSends = await getRecentSendsForCommunity({ communityId: community.id, limit: 6 });
-
-  // Aggregate over ALL published sends for this community (not just last 6) for accurate averages.
-  const aggRows = await db
-    .select({
-      sendCount: sql<number>`COUNT(*)::int`,
-      avgOpenPct: sql<string | null>`ROUND(AVG((${pastSends.openCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 1)`,
-      avgClickPct: sql<string | null>`ROUND(AVG((${pastSends.clickCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 2)`,
-      avgRecipients: sql<string | null>`ROUND(AVG(${pastSends.recipientCount})::numeric)`,
-      lastSentAt: sql<string | null>`MAX(${pastSends.publishedAt})::text`,
-    })
-    .from(pastSends)
-    .where(
-      and(
-        eq(pastSends.communityId, community.id),
-        eq(pastSends.state, "PUBLISHED"),
-        sql`${pastSends.recipientCount} > 0`,
-      ),
-    );
+  // Bug: getRecentSendsForCommunity and the aggregate query had no try/catch —
+  // either throwing would produce an unhandled rejection with no { ok: false, error } shape
+  let recentSends: Awaited<ReturnType<typeof getRecentSendsForCommunity>>;
+  let aggRows: Array<{
+    sendCount: number;
+    avgOpenPct: string | null;
+    avgClickPct: string | null;
+    avgRecipients: string | null;
+    lastSentAt: string | null;
+  }>;
+  try {
+    [recentSends, aggRows] = await Promise.all([
+      getRecentSendsForCommunity({ communityId: community.id, limit: 6 }),
+      db
+        .select({
+          sendCount: sql<number>`COUNT(*)::int`,
+          avgOpenPct: sql<string | null>`ROUND(AVG((${pastSends.openCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 1)`,
+          avgClickPct: sql<string | null>`ROUND(AVG((${pastSends.clickCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 2)`,
+          avgRecipients: sql<string | null>`ROUND(AVG(${pastSends.recipientCount})::numeric)`,
+          lastSentAt: sql<string | null>`MAX(${pastSends.publishedAt})::text`,
+        })
+        .from(pastSends)
+        .where(
+          and(
+            eq(pastSends.communityId, community.id),
+            eq(pastSends.state, "PUBLISHED"),
+            sql`${pastSends.recipientCount} > 0`,
+          ),
+        ),
+    ]);
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });
+  }
 
   const a = aggRows[0];
   const summary = {

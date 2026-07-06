@@ -25,10 +25,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Missing or invalid fields" }, { status: 400 });
   }
 
-  await db
-    .insert(pdfChunks)
-    .values({ uploadId, chunkIndex, totalChunks, data })
-    .onConflictDoNothing();
+  // Bug: DB insert had no try/catch — a failure would throw an unhandled rejection returning a raw 500
+  try {
+    await db
+      .insert(pdfChunks)
+      .values({ uploadId, chunkIndex, totalChunks, data })
+      .onConflictDoNothing();
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });
+  }
 
   // Opportunistically purge chunks older than 1 hour to prevent DB bloat.
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);

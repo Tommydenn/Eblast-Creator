@@ -30,11 +30,18 @@ export async function POST(req: NextRequest) {
   }
 
   // Load the saved draft to get HTML and subject.
-  const [draftRow] = await db
-    .select()
-    .from(savedDrafts)
-    .where(eq(savedDrafts.id, savedDraftId))
-    .limit(1);
+  // Bug: DB select had no try/catch — a failure would produce an unhandled rejection
+  let draftRow: typeof savedDrafts.$inferSelect | undefined;
+  try {
+    const rows = await db
+      .select()
+      .from(savedDrafts)
+      .where(eq(savedDrafts.id, savedDraftId))
+      .limit(1);
+    draftRow = rows[0];
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });
+  }
 
   if (!draftRow) {
     return NextResponse.json({ ok: false, error: "Draft not found" }, { status: 404 });
@@ -44,7 +51,13 @@ export async function POST(req: NextRequest) {
   const draftHtml: string = draftData?.html ?? "";
   const draftSubject: string = draftRow.subject ?? draftData?.subject ?? "(no subject)";
 
-  const community = await getCommunity(communitySlug);
+  // Bug: getCommunity had no try/catch — a failure would produce an unhandled rejection
+  let community: Awaited<ReturnType<typeof getCommunity>>;
+  try {
+    community = await getCommunity(communitySlug);
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });
+  }
   if (!community) {
     return NextResponse.json({ ok: false, error: "Community not found" }, { status: 404 });
   }
@@ -52,16 +65,21 @@ export async function POST(req: NextRequest) {
   // Generate a random opaque token for the magic link.
   const token = randomBytes(24).toString("base64url");
 
-  await db.insert(savedDraftApprovals).values({
-    token,
-    savedDraftId,
-    communitySlug,
-    recipientName: recipientName ?? null,
-    recipientEmail,
-    notifyEmail: notifyEmail ?? null,
-    draftSubject,
-    decision: "pending",
-  });
+  // Bug: DB insert had no try/catch — a failure here would throw an unhandled rejection
+  try {
+    await db.insert(savedDraftApprovals).values({
+      token,
+      savedDraftId,
+      communitySlug,
+      recipientName: recipientName ?? null,
+      recipientEmail,
+      notifyEmail: notifyEmail ?? null,
+      draftSubject,
+      decision: "pending",
+    });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });
+  }
 
   // Upload embedded base64 images to HubSpot so they render in email clients.
   // Base64 data URIs are stripped by Gmail/Outlook — hosted CDN URLs work everywhere.
@@ -102,11 +120,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Missing savedDraftId" }, { status: 400 });
   }
 
-  const rows = await db
-    .select()
-    .from(savedDraftApprovals)
-    .where(eq(savedDraftApprovals.savedDraftId, savedDraftId))
-    .orderBy(savedDraftApprovals.sentAt);
-
-  return NextResponse.json({ ok: true, approvals: rows });
+  // Bug: DB select had no try/catch — a failure would produce an unhandled rejection
+  try {
+    const rows = await db
+      .select()
+      .from(savedDraftApprovals)
+      .where(eq(savedDraftApprovals.savedDraftId, savedDraftId))
+      .orderBy(savedDraftApprovals.sentAt);
+    return NextResponse.json({ ok: true, approvals: rows });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });
+  }
 }

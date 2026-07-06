@@ -11,7 +11,14 @@ export const dynamic = "force-dynamic";
  * templates available under data/communities/{slug}/templates/.
  */
 export async function GET() {
-  const communities = await listCommunities();
+  // Bug: listCommunities() had no try/catch — a DB failure would produce an unhandled rejection
+  let communities: Awaited<ReturnType<typeof listCommunities>>;
+  try {
+    communities = await listCommunities();
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });
+  }
+
   const enriched = await Promise.all(
     communities.map(async (c) => {
       let templates: string[] = [];

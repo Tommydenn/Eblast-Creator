@@ -1,19 +1,16 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
-function createTransport() {
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!user || !pass) throw new Error("SMTP_USER and SMTP_PASS must be set");
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST ?? "smtp.office365.com",
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: false,
-    auth: { user, pass },
-    tls: { ciphers: "SSLv3" },
-  });
+let _resend: Resend | null = null;
+function resend(): Resend {
+  if (!_resend) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error("RESEND_API_KEY must be set");
+    _resend = new Resend(key);
+  }
+  return _resend;
 }
 
-const FROM = process.env.SMTP_FROM ?? process.env.SMTP_USER ?? "Eblast Drafter";
+const FROM = process.env.RESEND_FROM ?? "Eblast Drafter <onboarding@resend.dev>";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL
   ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
@@ -167,7 +164,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 </body>
 </html>`;
 
-  return createTransport().sendMail({
+  return resend().emails.send({
     from: FROM,
     to,
     subject: `Draft review: ${draftSubject} — ${communityName}`,
@@ -221,7 +218,7 @@ export async function sendEditNotificationEmail(params: SendEditNotificationPara
 </body>
 </html>`;
 
-  return createTransport().sendMail({
+  return resend().emails.send({
     from: FROM,
     to,
     subject: `Edit request from ${senderFirst}: ${draftSubject} — ${communityName}`,

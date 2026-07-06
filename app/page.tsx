@@ -183,9 +183,24 @@ const EBLAST_EDIT_SCRIPT = `(function(){
     }
     if(e.data.type==='eblast-restore-fields'){
       var flds=e.data.fields;
-      if(flds) Object.keys(flds).forEach(function(k){
-        var fe=document.querySelector('[data-field="'+k+'"]');
-        if(fe) fe.innerHTML=flds[k];
+      if(!flds) return;
+      // Build catch-all element list (same filter as captureTextEdits).
+      var caEls=[];
+      document.querySelectorAll('p,h1,h2,h3').forEach(function(el){
+        if(el.getAttribute('data-field')) return;
+        if(el.closest('a')) return;
+        var txt=el.textContent&&el.textContent.trim();
+        if(!txt||el.style.maxHeight==='0px'||el.style.fontSize==='1px') return;
+        caEls.push(el);
+      });
+      Object.keys(flds).forEach(function(k){
+        if(k.indexOf('field:')===0){
+          var fe=document.querySelector('[data-field="'+k.slice(6)+'"]');
+          if(fe) fe.innerHTML=flds[k];
+        } else if(k.indexOf('catchall:')===0){
+          var ci=parseInt(k.slice(9),10);
+          if(caEls[ci]) caEls[ci].innerHTML=flds[k];
+        }
       });
       return;
     }
@@ -819,9 +834,20 @@ export default function Home() {
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return {};
     const fields: Record<string, string> = {};
+    // Capture named data-field elements.
     doc.querySelectorAll<HTMLElement>('[data-field]').forEach((el) => {
       const k = el.getAttribute('data-field');
-      if (k) fields[k] = el.innerHTML;
+      if (k) fields[`field:${k}`] = el.innerHTML;
+    });
+    // Capture catch-all text elements by position index.
+    let catchallIdx = 0;
+    doc.querySelectorAll<HTMLElement>('p,h1,h2,h3').forEach((el) => {
+      if (el.getAttribute('data-field')) return;
+      if (el.closest('a')) return;
+      const txt = el.textContent?.trim();
+      if (!txt || el.style.maxHeight === '0px' || el.style.fontSize === '1px') return;
+      fields[`catchall:${catchallIdx}`] = el.innerHTML;
+      catchallIdx++;
     });
     return fields;
   }
@@ -862,10 +888,15 @@ export default function Home() {
       setImageOffset({ x: 50, y: 50 });
       setSelectedImage(next);
       // Show the original in the iframe for live CSS positioning.
+      // Fall back to the current placed <img> src if the unmodified original
+      // isn't stored locally (e.g. different device, cleared localStorage).
       const original = getOriginalForSlot(next.slot, next.galleryIdx);
-      if (original && iframeRef.current?.contentWindow) {
+      const fallbackSrc = iframeRef.current?.contentDocument
+        ?.querySelector<HTMLImageElement>(`img[data-img-label="${label}"]`)?.src;
+      const srcToSend = original || fallbackSrc;
+      if (srcToSend && iframeRef.current?.contentWindow) {
         iframeRef.current.contentWindow.postMessage(
-          { type: 'eblast-show-original', label, src: original, x: 50, y: 50 },
+          { type: 'eblast-show-original', label, src: srcToSend, x: 50, y: 50 },
           '*',
         );
       }
@@ -1644,6 +1675,8 @@ export default function Home() {
                         disabled={repositioning}
                         onClick={async () => {
                           stopHold();
+                          const edits = captureTextEdits();
+                          if (Object.keys(edits).length) pendingTextEditsRef.current = edits;
                           await commitReposition();
                           setSelectedImage(null);
                         }}

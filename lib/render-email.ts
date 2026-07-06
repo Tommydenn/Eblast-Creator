@@ -14,6 +14,17 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// Ensures every font-family string has an email-safe generic fallback so
+// Outlook falls back to a readable system font instead of Times New Roman.
+// If the stack already ends in a generic keyword, it passes through unchanged.
+function safeFontStack(fontFamily: string): string {
+  if (/\b(serif|sans-serif|monospace|cursive|fantasy)\b/.test(fontFamily)) return fontFamily;
+  const isSerif = /garamond|caslon|minion|georgia|times|bookman|mackinac|adobe caslon|palatino/i.test(fontFamily);
+  return isSerif
+    ? `${fontFamily}, Georgia, 'Times New Roman', serif`
+    : `${fontFamily}, Arial, Helvetica, sans-serif`;
+}
+
 // Relative luminance (0 = black, 1 = white). Returns null for malformed hex.
 function relLuminance(hex: string): number | null {
   const h = hex.replace("#", "");
@@ -138,7 +149,7 @@ export function buildEblastHtml(
 
   // Text fallback when no logo asset is available.
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();
-  const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "rgba(255,255,255,0.7)" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
+  const textFallback = `<span style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "#cccccc" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
   // Keep logo URLs as-is. Relative paths (e.g. /logos/slug/primary.png) are
   // intentionally left relative so callers can embed them as base64 data URIs
@@ -194,8 +205,8 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
-            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
-            <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
+            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
+            <p data-field="headline" style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
               const len = flyer.scriptSubheadline.length;
               const fontSize = len <= 18 ? 44 : len <= 28 ? 36 : len <= 38 ? 28 : 22;
@@ -204,13 +215,19 @@ export function buildEblastHtml(
             ${eventDateLine ? `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto;">
               <tr>
-                <td style="border-top: 1px solid rgba(255,255,255,0.3); border-bottom: 1px solid rgba(255,255,255,0.3); padding: 14px 26px;" align="center">
-                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>
-                  ${communityAddressLine ? `<p style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 1px; color: #E8DDC4; margin: 0;">${escapeHtml(communityAddressLine)}</p>` : ""}
+                <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
+                  <p style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>
+                  ${communityAddressLine ? `<p style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 12px; letter-spacing: 1px; color: #E8DDC4; margin: 0;">${escapeHtml(communityAddressLine)}</p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
-            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; max-width:280px; text-align:center; background:${brand.accent}; color:${buttonTextColor("#FFFFFF", brand.accent)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: ${ctaBtnFontSize}px; letter-spacing: ${ctaBtnLetterSpacing}; text-transform: uppercase; font-weight: 700; padding: 16px 36px; line-height:1.4;">${escapeHtml(ctaDisplayText)}</a>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+              <tr>
+                <td align="center" style="background:${brand.accent};">
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; max-width:280px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${safeFontStack(brand.fontBody)}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4; white-space:nowrap;">${escapeHtml(ctaDisplayText)}</a>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
       </table>
@@ -220,19 +237,19 @@ export function buildEblastHtml(
   const story = `
   <tr data-section="Story">
     <td style="padding: 44px 36px 12px 36px;">
-      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow)}</p>
+      <p data-field="storyEyebrow" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow)}</p>
       ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${escapeHtml(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
   <tr data-section="Story">
     <td style="padding: 0 36px 28px 36px;">
-      <p data-field="bodyParagraphs" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => escapeHtml(p)).join("<br><br>")}</p>
+      <p data-field="bodyParagraphs" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => escapeHtml(p)).join("<br><br>")}</p>
     </td>
   </tr>
   ${secondaryImg ? `
   <tr data-section="Secondary Image">
     <td style="padding: 0 36px 28px 36px;">
-      <img src="${secondaryImg}" data-img-label="Secondary image" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:100%; max-width:528px; height:auto; border:0;">
+      <img src="${secondaryImg}" data-img-label="Secondary image" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:528px; max-width:100%; height:auto; border:0;">
     </td>
   </tr>` : ""}
   `;
@@ -260,12 +277,12 @@ export function buildEblastHtml(
     return `
   <tr data-section="Photo Gallery">
     <td style="padding: 44px 36px 12px 36px;" align="center">
-      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${escapeHtml(flyer.galleryLabel ?? `A Look Around ${community.shortName}`)}</p>
+      <p data-field="galleryLabel" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${escapeHtml(flyer.galleryLabel ?? `A Look Around ${community.shortName}`)}</p>
     </td>
   </tr>
   <tr data-section="Photo Gallery">
     <td style="padding: 16px 36px 32px 36px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: separate; border-spacing: 6px;">
+      <table role="presentation" cellpadding="0" cellspacing="6" border="0" width="100%" style="border-collapse:separate; border-spacing:6px;">
         ${rows
           .map(
             (row) => `
@@ -273,8 +290,8 @@ export function buildEblastHtml(
           ${row
             .map(
               (tile) => `
-          <td valign="top" width="${tileW}" height="${tileH}" style="padding: 0; overflow:hidden; width:${tileW}px; height:${tileH}px; max-height:${tileH}px;">
-            <img src="${tile.src}" data-img-label="${tile.label}" width="${tileW}" height="${tileH}" alt="${escapeHtml(community.displayName)}" style="display:block; width:${tileW}px; height:${tileH}px; object-fit:cover; border:0;">
+          <td valign="top" width="${tileW}" style="padding:0; overflow:hidden;">
+            <img src="${tile.src}" data-img-label="${tile.label}" width="${tileW}" height="${tileH}" alt="${escapeHtml(community.displayName)}" style="display:block; width:${tileW}px; height:${tileH}px; border:0;">
           </td>`,
             )
             .join("")}
@@ -292,9 +309,15 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${brand.accent};">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${rsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
-            ${eventDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>` : ""}
-            <a href="${escapeHtml(ctaHref)}" style="display:inline-block; max-width:280px; text-align:center; background:${brand.primary}; color:${buttonTextColor("#FFFFFF", brand.primary)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: ${ctaBtnFontSize}px; letter-spacing: ${ctaBtnLetterSpacing}; text-transform: uppercase; font-weight: 700; padding: 16px 36px; line-height:1.4;">${escapeHtml(ctaDisplayText)}</a>
+            ${rsvpLabel ? `<p style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
+            ${eventDateLine ? `<p style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>` : ""}
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+              <tr>
+                <td align="center" style="background:${brand.primary};">
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; max-width:280px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${safeFontStack(brand.fontBody)}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4; white-space:nowrap;">${escapeHtml(ctaDisplayText)}</a>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
       </table>
@@ -309,11 +332,18 @@ export function buildEblastHtml(
   const footer = `
   <tr data-section="Footer">
     <td style="padding: 40px 36px 32px 36px; background: #FFFFFF;" align="center">
-      ${websiteHref ? `<a href="${escapeHtml(websiteHref)}" style="display:inline-block; background:${brand.primary}; color:${buttonTextColor("#FFFFFF", brand.primary)} !important; text-decoration:none; font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; padding: 13px 28px; margin-bottom: 28px;">Visit Website</a><br>` : ""}
-      <p style="font-family: ${brand.fontHeadline}; font-size: 26px; color: ${brand.primary}; margin: 0 0 10px 0;">Thank You!</p>
-      ${primarySender?.name ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 2px 0;">${escapeHtml(primarySender.name)}</p>` : ""}
-      <p data-field="footerName" style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${escapeHtml(flyer.footerName ?? community.displayName)}</p>
-      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" style="font-family: ${brand.fontBody}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${escapeHtml(primarySender.email)}</a>` : ""}
+      ${websiteHref ? `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin-bottom:28px;">
+        <tr>
+          <td align="center" style="background:${brand.primary};">
+            <a href="${escapeHtml(websiteHref)}" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${safeFontStack(brand.fontBody)}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700; white-space:nowrap;">Visit Website</a>
+          </td>
+        </tr>
+      </table>` : ""}
+      <p style="font-family: ${safeFontStack(brand.fontHeadline)}; font-size: 26px; color: ${brand.primary}; margin: 0 0 10px 0;">Thank You!</p>
+      ${primarySender?.name ? `<p style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 14px; color: #3A3A3A; margin: 0 0 2px 0;">${escapeHtml(primarySender.name)}</p>` : ""}
+      <p data-field="footerName" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${escapeHtml(flyer.footerName ?? community.displayName)}</p>
+      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" style="font-family: ${safeFontStack(brand.fontBody)}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${escapeHtml(primarySender.email)}</a>` : ""}
     </td>
   </tr>`;
 
@@ -324,10 +354,10 @@ export function buildEblastHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(flyer.subject)}</title>
 </head>
-<body style="margin:0; padding:0; background:#f5f5f5; font-family: ${brand.fontHeadline};">
+<body style="margin:0; padding:0; background:#f5f5f5;">
 <span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(flyer.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f5f5; padding: 32px 0;">
-  <tr><td align="center">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f5f5f5;">
+  <tr><td align="center" style="padding:32px 0;">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px; max-width:100%; margin:0 auto; background:#ffffff;">
       ${header}
       ${hero}

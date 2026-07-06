@@ -165,10 +165,13 @@ export function buildEblastHtml(
     ? rawLabel.replace(/\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/, formattedTracking).toUpperCase()
     : rawLabel.toUpperCase();
 
-  // Two font sizes only. Long labels wrap to a second line (max-width on the button)
-  // rather than shrinking to an unreadable 10px.
+  // Two font sizes only. Long labels wrap to a second line rather than shrinking.
   const ctaBtnFontSize = ctaDisplayText.length <= 32 ? 14 : 13;
   const ctaBtnLetterSpacing = ctaBtnFontSize >= 14 ? "2.5px" : "2px";
+  // Explicit pixel width for CTA button tables. Outlook/Word auto-sizes tables with
+  // no width attribute, and white-space:nowrap causes the cell to grow wider on
+  // each forward/reply cycle. A fixed width prevents this accumulation.
+  const ctaBtnWidth = ctaDisplayText.length <= 24 ? 240 : ctaDisplayText.length <= 36 ? 300 : 340;
 
   // Component fragments — kept as inline HTML because email clients reward
   // redundancy and table-based layouts. CSS variables/classes don't survive Outlook.
@@ -194,7 +197,7 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
-            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
+            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel.toUpperCase())}</p>` : ""}
             <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
               const len = flyer.scriptSubheadline.length;
@@ -210,10 +213,10 @@ export function buildEblastHtml(
                 </td>
               </tr>
             </table>` : ""}
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
-                <td align="center" style="background:${brand.accent};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; max-width:280px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4; white-space:nowrap;">${escapeHtml(ctaDisplayText)}</a>
+                <td width="${ctaBtnWidth}" align="center" style="background:${brand.accent};">
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${escapeHtml(ctaDisplayText)}</a>
                 </td>
               </tr>
             </table>
@@ -226,7 +229,7 @@ export function buildEblastHtml(
   const story = `
   <tr data-section="Story">
     <td style="padding: 44px 36px 12px 36px;">
-      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow)}</p>
+      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow.toUpperCase())}</p>
       ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${escapeHtml(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
@@ -266,7 +269,7 @@ export function buildEblastHtml(
     return `
   <tr data-section="Photo Gallery">
     <td style="padding: 44px 36px 12px 36px;" align="center">
-      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${escapeHtml(flyer.galleryLabel ?? `A Look Around ${community.shortName}`)}</p>
+      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${escapeHtml((flyer.galleryLabel ?? `A Look Around ${community.shortName}`).toUpperCase())}</p>
     </td>
   </tr>
   <tr data-section="Photo Gallery">
@@ -298,12 +301,12 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${brand.accent};">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${rsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel)}</p>` : ""}
+            ${rsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel.toUpperCase())}</p>` : ""}
             ${eventDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>` : ""}
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
-                <td align="center" style="background:${brand.primary};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; max-width:280px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4; white-space:nowrap;">${escapeHtml(ctaDisplayText)}</a>
+                <td width="${ctaBtnWidth}" align="center" style="background:${brand.primary};">
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${escapeHtml(ctaDisplayText)}</a>
                 </td>
               </tr>
             </table>
@@ -322,10 +325,10 @@ export function buildEblastHtml(
   <tr data-section="Footer">
     <td style="padding: 40px 36px 32px 36px; background: #FFFFFF;" align="center">
       ${websiteHref ? `
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin-bottom:28px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
-          <td align="center" style="background:${brand.primary};">
-            <a href="${escapeHtml(websiteHref)}" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700; white-space:nowrap;">Visit Website</a>
+          <td width="220" align="center" style="background:${brand.primary};">
+            <a href="${escapeHtml(websiteHref)}" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">VISIT WEBSITE</a>
           </td>
         </tr>
       </table>` : ""}

@@ -424,7 +424,16 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Uses refs so this effect never needs to re-subscribe.
   useEffect(() => {
     function handler(e: MessageEvent) {
-      if (!e.data || e.data.type !== "eblast-field-edit") return;
+      if (!e.data) return;
+      // Catch-all text edits and formatting toolbar actions update the iframe DOM
+      // directly (not React state). Mark unsaved so Save/Discard buttons appear,
+      // but don't set htmlDirty — syncHtml would lose those edits since extracted
+      // hasn't changed. HTML is captured from the iframe DOM at save time.
+      if (e.data.type === "eblast-html-edit" || e.data.type === "eblast-format-done") {
+        setCurrentDraftSaved(false);
+        return;
+      }
+      if (e.data.type !== "eblast-field-edit") return;
       const { field, value } = e.data as { field: string; value: string };
       const current = extractedRef.current;
       if (!current) return;

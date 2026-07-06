@@ -426,10 +426,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     function handler(e: MessageEvent) {
       if (!e.data) return;
       // Catch-all text edits and formatting toolbar actions update the iframe DOM
-      // directly (not React state). Mark unsaved so Save/Discard buttons appear,
-      // but don't set htmlDirty — syncHtml would lose those edits since extracted
-      // hasn't changed. HTML is captured from the iframe DOM at save time.
+      // directly (not React state). Mark dirty and unsaved so Sync Preview and
+      // Save/Discard buttons appear. Sync Preview reads the iframe DOM directly
+      // (not extracted), so it safely captures these changes.
       if (e.data.type === "eblast-html-edit" || e.data.type === "eblast-format-done") {
+        setHtmlDirty(true);
         setCurrentDraftSaved(false);
         return;
       }

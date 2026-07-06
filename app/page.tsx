@@ -1585,16 +1585,12 @@ export default function Home() {
                           Sync preview
                         </Button>
                       )}
-                      {!currentDraftSaved && (
-                        <>
-                          <Button size="sm" variant="secondary" onClick={handleSaveDraft}>
-                            Save draft
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={discardDraft}>
-                            Discard
-                          </Button>
-                        </>
-                      )}
+                      <Button size="sm" variant="secondary" onClick={handleSaveDraft}>
+                        Save draft
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={discardDraft}>
+                        Discard
+                      </Button>
                       <button
                         type="button"
                         onClick={() => {

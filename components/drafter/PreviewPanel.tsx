@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useMemo, useState } from "react";
+import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
 import { buildEblastHtml } from "@/lib/render-email";
@@ -76,9 +76,6 @@ export default function PreviewPanel() {
     });
   }, [fields, images, community]);
 
-  const htmlRef = useRef(html);
-  htmlRef.current = html;
-
   // srcDoc is set once when the draft first loads, then never changed via React.
   // Subsequent updates go directly into the iframe DOM to avoid reload flicker.
   const [initSrc, setInitSrc] = useState("");
@@ -91,24 +88,30 @@ export default function PreviewPanel() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!html]);
 
-  // Every 5 seconds: patch the iframe body in-place (no reload, no flicker).
-  useEffect(() => {
-    const id = setInterval(() => {
-      const iframe = iframeRef.current;
-      const doc = iframe?.contentDocument;
-      const newHtml = htmlRef.current;
-      if (!doc?.body || !newHtml) return;
-      if (!iframe) return;
-      try {
-        const parser = new DOMParser();
-        const parsed = parser.parseFromString(newHtml, "text/html");
-        doc.body.innerHTML = parsed.body.innerHTML;
-        injectScript(doc);
-        resizeIframe(iframe);
-      } catch {}
-    }, 5000);
-    return () => clearInterval(id);
+  // Patch the iframe body in-place whenever html changes (debounced 150ms so
+  // fast typing doesn't thrash, but changes appear nearly instantly).
+  const updateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const patchIframe = useCallback((newHtml: string) => {
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc?.body || !iframe || !newHtml) return;
+    try {
+      const parser = new DOMParser();
+      const parsed = parser.parseFromString(newHtml, "text/html");
+      doc.body.innerHTML = parsed.body.innerHTML;
+      injectScript(doc);
+      resizeIframe(iframe);
+    } catch {}
   }, []);
+
+  useEffect(() => {
+    if (!initDone.current) return; // don't patch before first load
+    if (updateTimerRef.current) clearTimeout(updateTimerRef.current);
+    updateTimerRef.current = setTimeout(() => patchIframe(html), 150);
+    return () => {
+      if (updateTimerRef.current) clearTimeout(updateTimerRef.current);
+    };
+  }, [html, patchIframe]);
 
   // Handle section-click messages from the iframe
   useEffect(() => {

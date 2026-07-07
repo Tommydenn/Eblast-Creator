@@ -95,19 +95,13 @@ interface ToolbarProps {
 export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, className }: ToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
   const [fontOpen, setFontOpen] = useState(false);
-  const [fontSizeOpen, setFontSizeOpen] = useState(false);
-  const [hasEyeDropper, setHasEyeDropper] = useState(false);
   const [customColors, setCustomColors] = useState<string[]>([]);
-  const [currentFontSizePx, setCurrentFontSizePx] = useState<number | null>(null);
+  const [fontSizeInput, setFontSizeInput] = useState("");
   const [hexInput, setHexInput] = useState("");
   const colorPanelRef = useRef<HTMLDivElement>(null);
   const fontPanelRef = useRef<HTMLDivElement>(null);
-  const fontSizePanelRef = useRef<HTMLDivElement>(null);
-  // Saved selection range so eyedropper can restore it after picking
-  const savedRangeRef = useRef<Range | null>(null);
 
   useEffect(() => {
-    setHasEyeDropper("EyeDropper" in window);
     try {
       const saved = localStorage.getItem("eblast_custom_colors");
       if (saved) setCustomColors(JSON.parse(saved));
@@ -118,11 +112,30 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
     function close(e: MouseEvent) {
       if (colorPanelRef.current && !colorPanelRef.current.contains(e.target as Node)) setColorOpen(false);
       if (fontPanelRef.current && !fontPanelRef.current.contains(e.target as Node)) setFontOpen(false);
-      if (fontSizePanelRef.current && !fontSizePanelRef.current.contains(e.target as Node)) setFontSizeOpen(false);
     }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+
+  // Detect current font size whenever the selection changes
+  useEffect(() => {
+    function onSelectionChange() {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      let node: Node | null = sel.anchorNode;
+      while (node) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const fs = (node as HTMLElement).style.fontSize;
+          if (fs && fs.endsWith("px")) { setFontSizeInput(parseInt(fs, 10).toString()); return; }
+        }
+        if (node === editorRef.current) break;
+        node = node.parentNode;
+      }
+      setFontSizeInput("");
+    }
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [editorRef]);
 
   function exec(cmd: string, val?: string) {
     if (!editorRef.current) return;
@@ -132,45 +145,12 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
     onInput();
   }
 
-  function saveSelectionRange() {
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
-    }
-  }
-
   function addCustomColor(hex: string) {
     setCustomColors(prev => {
       const next = [hex, ...prev.filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 10);
       try { localStorage.setItem("eblast_custom_colors", JSON.stringify(next)); } catch {}
       return next;
     });
-  }
-
-  async function eyedrop() {
-    // Snapshot the range BEFORE opening the picker (selection is lost after)
-    const savedRange = savedRangeRef.current;
-    try {
-      const result = await new (window as any).EyeDropper().open();
-      const pickedColor: string = result.sRGBHex;
-      addCustomColor(pickedColor);
-      setColorOpen(false);
-      // Chrome on Windows freezes the browser during post-eyedropper teardown.
-      // A 1-second delay ensures teardown is fully complete before DOM mutation.
-      setTimeout(() => {
-        if (!savedRange || savedRange.collapsed) return;
-        const span = document.createElement("span");
-        span.style.color = pickedColor;
-        try {
-          savedRange.surroundContents(span);
-        } catch {
-          const frag = savedRange.extractContents();
-          span.appendChild(frag);
-          savedRange.insertNode(span);
-        }
-        onInput();
-      }, 1000);
-    } catch { /* cancelled or unsupported */ }
   }
 
   function applyHexColor() {
@@ -183,47 +163,16 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
     setHexInput("");
   }
 
-  function detectCurrentFontSize(): number | null {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return null;
-    let node: Node | null = sel.anchorNode;
-    while (node) {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const fs = (node as HTMLElement).style.fontSize;
-        if (fs && fs.endsWith("px")) return parseInt(fs, 10);
-      }
-      if (node === editorRef.current) break;
-      node = node.parentNode;
-    }
-    return null;
-  }
-
-  // Font size — absolute px so sizes are consistent across all fields
-  const fontSizeOptions = [
-    { label: "10px", px: 10 },
-    { label: "12px", px: 12 },
-    { label: "14px", px: 14 },
-    { label: "16px", px: 16 },
-    { label: "18px", px: 18 },
-    { label: "20px", px: 20 },
-    { label: "24px", px: 24 },
-    { label: "28px", px: 28 },
-    { label: "32px", px: 32 },
-    { label: "36px", px: 36 },
-    { label: "48px", px: 48 },
-  ];
 
   function applyFontSize(px: number) {
-    // Selection is still alive because onMouseDown+preventDefault preserved focus in the editor
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { setFontSizeOpen(false); return; }
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
     const range = sel.getRangeAt(0);
     const span = document.createElement("span");
     span.style.fontSize = `${px}px`;
     try {
       range.surroundContents(span);
     } catch {
-      // Selection spans multiple block elements
       const frag = range.extractContents();
       span.appendChild(frag);
       range.insertNode(span);
@@ -233,7 +182,6 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
       sel.addRange(newRange);
     }
     onInput();
-    setFontSizeOpen(false);
   }
 
   // All brand colors — primary, accent, background, secondary, plus supporting[]
@@ -303,11 +251,9 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
         <button
           type="button"
           onMouseDown={(e) => {
-            saveSelectionRange();
             e.preventDefault();
             setColorOpen((v) => !v);
             setFontOpen(false);
-            setFontSizeOpen(false);
           }}
           className="w-7 h-6 rounded text-[13px] font-bold text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center justify-center"
           title="Font color"
@@ -387,21 +333,6 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
               >Apply</button>
             </div>
 
-            {hasEyeDropper && (
-              <button
-                type="button"
-                onClick={eyedrop}
-                className="w-full flex items-center gap-1.5 text-[10px] text-[#7a8c85] hover:text-[#1F4538] px-1 py-1.5 rounded hover:bg-[#f0f5f2] transition-colors mt-1"
-                title="Pick color from screen"
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M2 22l10-10M20.5 3.5a2.121 2.121 0 0 0-3 0l-1 1-3-3 1-1a2.121 2.121 0 0 1 3 0z"/>
-                  <path d="M15 8l-9 9 3 3 9-9"/>
-                </svg>
-                Eyedropper (picks from screen)
-              </button>
-            )}
-
             <button
               type="button"
               onMouseDown={(e) => { e.preventDefault(); exec("foreColor", "#3A3A3A"); setColorOpen(false); }}
@@ -421,7 +352,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
       <div className="relative" ref={fontPanelRef}>
         <button
           type="button"
-          onMouseDown={(e) => { e.preventDefault(); setFontOpen((v) => !v); setColorOpen(false); setFontSizeOpen(false); }}
+          onMouseDown={(e) => { e.preventDefault(); setFontOpen((v) => !v); setColorOpen(false); }}
           className="h-6 px-2 rounded text-[10px] font-medium text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center gap-1"
           title="Font family"
         >
@@ -457,46 +388,29 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
         )}
       </div>
 
-      {/* Font size picker */}
-      <div className="relative" ref={fontSizePanelRef}>
-        <button
-          type="button"
-          onMouseDown={(e) => {
+      {/* Font size input — shows current selection's size, allows typing a custom px value */}
+      <input
+        type="number"
+        min={6}
+        max={120}
+        value={fontSizeInput}
+        placeholder="px"
+        onChange={(e) => setFontSizeInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
             e.preventDefault();
-            const opening = !fontSizeOpen;
-            setFontSizeOpen(opening);
-            setColorOpen(false);
-            setFontOpen(false);
-            if (opening) setCurrentFontSizePx(detectCurrentFontSize());
-          }}
-          className="h-6 px-2 rounded text-[10px] font-medium text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center gap-1"
-          title="Font size"
-        >
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <text x="3" y="18" fontSize="14" fill="currentColor" stroke="none" style={{ fontFamily: "inherit" }}>A</text>
-            <text x="13" y="22" fontSize="9" fill="currentColor" stroke="none" style={{ fontFamily: "inherit" }}>A</text>
-          </svg>
-          {currentFontSizePx ? `${currentFontSizePx}px` : "Size"}
-          <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-
-        {fontSizeOpen && (
-          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 overflow-hidden w-28">
-            {fontSizeOptions.map((opt) => (
-              <button
-                key={opt.px}
-                type="button"
-                onMouseDown={(e) => { e.preventDefault(); applyFontSize(opt.px); setCurrentFontSizePx(opt.px); }}
-                className={`w-full text-left px-3 py-1.5 transition-colors border-b border-[#f5f3ef] last:border-0 ${
-                  currentFontSizePx === opt.px ? "bg-[#f0f5f2] text-[#1F4538] font-semibold" : "hover:bg-[#f0f5f2]"
-                }`}
-              >
-                <span style={{ fontSize: `${Math.min(opt.px, 16)}px` }}>{opt.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+            const px = parseInt(fontSizeInput, 10);
+            if (!isNaN(px) && px >= 6 && px <= 120) applyFontSize(px);
+          }
+        }}
+        onBlur={() => {
+          const px = parseInt(fontSizeInput, 10);
+          if (!isNaN(px) && px >= 6 && px <= 120) applyFontSize(px);
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="w-14 h-6 text-center text-[11px] border border-[#ddd8d0] rounded bg-white text-[#1a1a1a] outline-none focus:border-[#1F4538] focus:ring-1 focus:ring-[#1F4538]/20"
+        title="Font size (px) — shows current selection size; type to change"
+      />
 
       <div className="w-px h-4 bg-[#ddd8d0] mx-0.5" />
 

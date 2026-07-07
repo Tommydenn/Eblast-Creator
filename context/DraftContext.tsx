@@ -465,24 +465,26 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ draft: initDraft }),
         })
           .then(async () => {
-            // Save slot images first (hero/secondary/gallery) — must always persist
-            const slotEntries: Array<{ idx: number; url: string }> = [];
-            if (newImages.hero?.url) slotEntries.push({ idx: -1, url: newImages.hero.url });
-            if (newImages.hero?.originalUrl) slotEntries.push({ idx: -2, url: newImages.hero.originalUrl });
-            if (newImages.secondary?.url) slotEntries.push({ idx: -3, url: newImages.secondary.url });
-            if (newImages.secondary?.originalUrl) slotEntries.push({ idx: -4, url: newImages.secondary.originalUrl });
+            // Send each slot image individually — cropped data URIs are ~100-200KB each.
+            // Skip originalUrl when it's a data URI (raw PDF pages are 2-5MB).
+            const isDataUri = (u: string) => u.startsWith("data:");
+            const slotItems: Array<{ idx: number; url: string }> = [];
+            if (newImages.hero?.url) slotItems.push({ idx: -1, url: newImages.hero.url });
+            if (newImages.hero?.originalUrl && !isDataUri(newImages.hero.originalUrl)) slotItems.push({ idx: -2, url: newImages.hero.originalUrl });
+            if (newImages.secondary?.url) slotItems.push({ idx: -3, url: newImages.secondary.url });
+            if (newImages.secondary?.originalUrl && !isDataUri(newImages.secondary.originalUrl)) slotItems.push({ idx: -4, url: newImages.secondary.originalUrl });
             newImages.gallery.forEach((g, i) => {
-              if (g.url) slotEntries.push({ idx: -(10 + i * 2), url: g.url });
-              if (g.originalUrl) slotEntries.push({ idx: -(11 + i * 2), url: g.originalUrl });
+              if (g.url) slotItems.push({ idx: -(10 + i * 2), url: g.url });
+              if (g.originalUrl && !isDataUri(g.originalUrl)) slotItems.push({ idx: -(11 + i * 2), url: g.originalUrl });
             });
-            if (slotEntries.length > 0) {
+            for (const item of slotItems) {
               await fetch(`/api/saved-drafts/${newDraftId}/images`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ images: slotEntries }),
+                body: JSON.stringify({ images: [item] }),
               }).catch(() => null);
             }
-            // Save imageBank HTTPS URLs only — skip data URIs (too large for 4.5 MB Vercel limit)
+            // imageBank — HTTPS URLs only (skip data URIs)
             const bankEntries: Array<{ idx: number; url: string }> = [];
             bank.forEach((url, i) => {
               if (url && url.startsWith("http")) bankEntries.push({ idx: i, url });
@@ -649,25 +651,28 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const imgs = imagesRef.current;
     const bank = imageBankRef.current;
 
-    // Save slot images first (hero/secondary/gallery) — small HTTPS URLs, must always persist
-    const slotEntries: Array<{ idx: number; url: string }> = [];
-    if (imgs.hero?.url) slotEntries.push({ idx: -1, url: imgs.hero.url });
-    if (imgs.hero?.originalUrl) slotEntries.push({ idx: -2, url: imgs.hero.originalUrl });
-    if (imgs.secondary?.url) slotEntries.push({ idx: -3, url: imgs.secondary.url });
-    if (imgs.secondary?.originalUrl) slotEntries.push({ idx: -4, url: imgs.secondary.originalUrl });
+    // Send each slot image in its own POST — cropped data URIs are ~100-200KB each,
+    // well under the 4.5 MB Vercel limit when sent individually.
+    // Skip originalUrl when it's a data URI (raw PDF pages are 2-5MB each).
+    const isDataUri = (u: string) => u.startsWith("data:");
+    const slotItems: Array<{ idx: number; url: string }> = [];
+    if (imgs.hero?.url) slotItems.push({ idx: -1, url: imgs.hero.url });
+    if (imgs.hero?.originalUrl && !isDataUri(imgs.hero.originalUrl)) slotItems.push({ idx: -2, url: imgs.hero.originalUrl });
+    if (imgs.secondary?.url) slotItems.push({ idx: -3, url: imgs.secondary.url });
+    if (imgs.secondary?.originalUrl && !isDataUri(imgs.secondary.originalUrl)) slotItems.push({ idx: -4, url: imgs.secondary.originalUrl });
     imgs.gallery.forEach((g, i) => {
-      if (g.url) slotEntries.push({ idx: -(10 + i * 2), url: g.url });
-      if (g.originalUrl) slotEntries.push({ idx: -(11 + i * 2), url: g.originalUrl });
+      if (g.url) slotItems.push({ idx: -(10 + i * 2), url: g.url });
+      if (g.originalUrl && !isDataUri(g.originalUrl)) slotItems.push({ idx: -(11 + i * 2), url: g.originalUrl });
     });
-    if (slotEntries.length > 0) {
+    for (const item of slotItems) {
       await fetch(`/api/saved-drafts/${draftId}/images`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: slotEntries }),
+        body: JSON.stringify({ images: [item] }),
       }).catch(() => null);
     }
 
-    // Save imageBank — skip data URIs (too large for 4.5 MB Vercel limit), HTTPS only
+    // Save imageBank HTTPS URLs only — skip data URIs (too large for 4.5 MB limit)
     const bankEntries: Array<{ idx: number; url: string }> = [];
     bank.forEach((url, i) => {
       if (url && url.startsWith("http")) bankEntries.push({ idx: i, url });

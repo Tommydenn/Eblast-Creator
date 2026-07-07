@@ -98,6 +98,7 @@ export default function PreviewPanel() {
       const doc = iframe?.contentDocument;
       const newHtml = htmlRef.current;
       if (!doc?.body || !newHtml) return;
+      if (!iframe) return;
       try {
         const parser = new DOMParser();
         const parsed = parser.parseFromString(newHtml, "text/html");

@@ -100,6 +100,8 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
   const [hexInput, setHexInput] = useState("");
   const colorPanelRef = useRef<HTMLDivElement>(null);
   const fontPanelRef = useRef<HTMLDivElement>(null);
+  const fontSizeInputRef = useRef<HTMLInputElement>(null);
+  const savedSelectionRef = useRef<Range | null>(null);
 
   useEffect(() => {
     try {
@@ -117,25 +119,31 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  // Detect current font size whenever the selection changes
+  // Detect current font size whenever the selection changes.
+  // Guard: if the font size input itself has focus, don't update (would wipe typed value).
+  // Also save the range so applyFontSize can restore it after input takes focus.
   useEffect(() => {
     function onSelectionChange() {
+      if (document.activeElement === fontSizeInputRef.current) return;
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return;
+      // Save a non-collapsed range so we can restore it when applying from the input
+      if (!sel.isCollapsed) {
+        savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
+      }
       let node: Node | null = sel.anchorNode;
       while (node) {
         if (node.nodeType === Node.ELEMENT_NODE) {
           const fs = (node as HTMLElement).style.fontSize;
           if (fs && fs.endsWith("px")) { setFontSizeInput(parseInt(fs, 10).toString()); return; }
         }
-        if (node === editorRef.current) break;
         node = node.parentNode;
       }
       setFontSizeInput("");
     }
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, [editorRef]);
+  }, []);
 
   function exec(cmd: string, val?: string) {
     if (!editorRef.current) return;
@@ -165,9 +173,17 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
 
 
   function applyFontSize(px: number) {
+    // Restore saved selection if the editor no longer has focus (e.g. after clicking the input)
     const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
-    const range = sel.getRangeAt(0);
+    let range: Range | null = null;
+    if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+      range = sel.getRangeAt(0);
+    } else if (savedSelectionRef.current) {
+      range = savedSelectionRef.current;
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+    if (!range || range.collapsed) return;
     const span = document.createElement("span");
     span.style.fontSize = `${px}px`;
     try {
@@ -178,8 +194,8 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
       range.insertNode(span);
       const newRange = document.createRange();
       newRange.selectNodeContents(span);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(newRange);
     }
     onInput();
   }
@@ -390,6 +406,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
 
       {/* Font size input — shows current selection's size, allows typing a custom px value */}
       <input
+        ref={fontSizeInputRef}
         type="number"
         min={6}
         max={120}
@@ -407,7 +424,14 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
           const px = parseInt(fontSizeInput, 10);
           if (!isNaN(px) && px >= 6 && px <= 120) applyFontSize(px);
         }}
-        onMouseDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => {
+          // Capture the editor selection NOW, before mousedown moves focus and collapses it
+          const sel = window.getSelection();
+          if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+            savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
+          }
+          e.stopPropagation();
+        }}
         className="w-14 h-6 text-center text-[11px] border border-[#ddd8d0] rounded bg-white text-[#1a1a1a] outline-none focus:border-[#1F4538] focus:ring-1 focus:ring-[#1F4538]/20"
         title="Font size (px) — shows current selection size; type to change"
       />

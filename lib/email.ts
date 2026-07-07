@@ -1,30 +1,82 @@
-import { Resend } from "resend";
+// Email via Microsoft Graph (app-only / client-credentials).
+// No SDK or npm package required — just fetch (built into Node 18+).
 
-let _resend: Resend | null = null;
-function resend(): Resend {
-  if (!_resend) {
-    const key = process.env.RESEND_API_KEY;
-    if (!key) throw new Error("RESEND_API_KEY must be set");
-    _resend = new Resend(key);
+const GRAPH = "https://graph.microsoft.com/v1.0";
+
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+async function getGraphToken(): Promise<string> {
+  const { GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET } = process.env;
+  if (!GRAPH_TENANT_ID || !GRAPH_CLIENT_ID || !GRAPH_CLIENT_SECRET) {
+    throw new Error("GRAPH_TENANT_ID, GRAPH_CLIENT_ID, and GRAPH_CLIENT_SECRET must all be set");
   }
-  return _resend;
+  const res = await fetch(
+    `https://login.microsoftonline.com/${GRAPH_TENANT_ID}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: GRAPH_CLIENT_ID,
+        client_secret: GRAPH_CLIENT_SECRET,
+        scope: "https://graph.microsoft.com/.default",
+        grant_type: "client_credentials",
+      }),
+    }
+  );
+  if (!res.ok) throw new Error(`Graph auth failed: ${res.status} ${await res.text()}`);
+  return ((await res.json()) as { access_token: string }).access_token;
 }
 
-const FROM = process.env.RESEND_FROM ?? "Eblast Drafter <onboarding@resend.dev>";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL
-  ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+async function sendMail(opts: {
+  to: string | string[];
+  subject: string;
+  html: string;
+}): Promise<void> {
+  const from = process.env.MAIL_FROM;
+  if (!from) throw new Error("MAIL_FROM must be set");
 
-/** Extract the HTML between <body> tags, or return full html if not found. */
+  const fromName = process.env.MAIL_FROM_NAME;
+  const toAddresses = (Array.isArray(opts.to) ? opts.to : [opts.to]).map((address) => ({
+    emailAddress: { address },
+  }));
+
+  const token = await getGraphToken();
+  const res = await fetch(`${GRAPH}/users/${encodeURIComponent(from)}/sendMail`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message: {
+        subject: opts.subject,
+        body: { contentType: "HTML", content: opts.html },
+        from: fromName ? { emailAddress: { name: fromName, address: from } } : undefined,
+        toRecipients: toAddresses,
+      },
+      saveToSentItems: true,
+    }),
+  });
+  if (!res.ok) throw new Error(`Graph sendMail failed: ${res.status} ${await res.text()}`);
+}
+
+// ── Shared utilities ──────────────────────────────────────────────────────────
+
 function extractBody(html: string): string {
   const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
   return m ? m[1].trim() : html;
 }
 
-/** First name from a full name string. */
 function firstName(name: string | null | undefined): string {
   if (!name) return "there";
   return name.trim().split(/\s+/)[0];
 }
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 export interface SendApprovalEmailParams {
   to: string;
@@ -37,7 +89,6 @@ export interface SendApprovalEmailParams {
 
 export async function sendApprovalEmail(params: SendApprovalEmailParams) {
   const { to, recipientName, communityName, draftSubject, draftHtml, token } = params;
-  // Quick-approve route processes the push and returns a minimal confirmation page.
   const approveUrl = `${APP_URL}/api/quick-approve/${token}`;
   const editsUrl = `${APP_URL}/approve/${token}/edits`;
   const greeting = firstName(recipientName);
@@ -94,14 +145,13 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
               </tr>
             </table>
 
-            <!-- Subject line below buttons — envelope icon signals it belongs to the eblast -->
+            <!-- Subject line box -->
             <table cellpadding="0" cellspacing="0" role="presentation" width="100%">
               <tr>
                 <td style="background:#f7f5f0;border:1px solid #e0ddd7;border-radius:6px;padding:12px 16px;">
                   <table cellpadding="0" cellspacing="0" role="presentation" width="100%">
                     <tr>
                       <td width="28" valign="middle" style="padding-right:10px;">
-                        <!-- Envelope icon -->
                         <svg width="18" height="14" viewBox="0 0 18 14" xmlns="http://www.w3.org/2000/svg" style="display:block;">
                           <rect x="0" y="0" width="18" height="14" rx="2" fill="none" stroke="#9e8c7a" stroke-width="1.5"/>
                           <polyline points="0,0 9,8 18,0" fill="none" stroke="#9e8c7a" stroke-width="1.5"/>
@@ -164,8 +214,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 </body>
 </html>`;
 
-  return resend().emails.send({
-    from: FROM,
+  return sendMail({
     to,
     subject: `Draft review: ${draftSubject} — ${communityName}`,
     html,
@@ -218,8 +267,7 @@ export async function sendEditNotificationEmail(params: SendEditNotificationPara
 </body>
 </html>`;
 
-  return resend().emails.send({
-    from: FROM,
+  return sendMail({
     to,
     subject: `Edit request from ${senderFirst}: ${draftSubject} — ${communityName}`,
     html,

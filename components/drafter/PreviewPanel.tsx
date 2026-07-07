@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useMemo } from "react";
+import React, { useEffect, useRef, useMemo, useState } from "react";
 import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
 import { buildEblastHtml } from "@/lib/render-email";
@@ -64,9 +64,6 @@ export default function PreviewPanel() {
   const { setActiveSection, fields, images, community } = useDraft();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Call buildEblastHtml directly with state values — NOT via buildHtml() which
-  // reads from refs. Refs are synced by useEffect (post-render), so they are
-  // always one render behind and would always return "" here.
   const html = useMemo(() => {
     if (!fields || !community) return "";
     return buildEblastHtml(fields, community as any, {
@@ -75,6 +72,15 @@ export default function PreviewPanel() {
       galleryImageUrls: images.gallery.map((g) => g.url),
     });
   }, [fields, images, community]);
+
+  // Debounce the srcDoc update so fast typing doesn't cause constant iframe reloads/flicker.
+  // The iframe only refreshes 400ms after the user stops making changes.
+  const [srcDoc, setSrcDoc] = useState(html);
+  useEffect(() => {
+    if (!html) { setSrcDoc(""); return; }
+    const t = setTimeout(() => setSrcDoc(html), 400);
+    return () => clearTimeout(t);
+  }, [html]);
 
   // Handle section-click messages from the preview iframe
   useEffect(() => {
@@ -107,7 +113,7 @@ export default function PreviewPanel() {
     doc.body.appendChild(s);
   }
 
-  if (!html) {
+  if (!srcDoc) {
     return (
       <div className="flex items-center justify-center py-20 text-sm text-[#9aaba4]">
         Preview will appear here
@@ -118,7 +124,7 @@ export default function PreviewPanel() {
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={html}
+      srcDoc={srcDoc}
       title="Email preview"
       className="w-full bg-white"
       style={{ minHeight: 600, height: "1200px", display: "block" }}

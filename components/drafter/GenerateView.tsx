@@ -17,7 +17,7 @@ interface DraftMeta {
   isNewFormat: boolean;
 }
 
-function DraftCard({
+function DraftRow({
   draft,
   isOpening,
   isDeleting,
@@ -30,66 +30,57 @@ function DraftCard({
   onOpen: () => void;
   onDelete: () => void;
 }) {
+  const isLegacy = !draft.isNewFormat;
   const date = new Date(draft.savedAt).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
-  const isLegacy = !draft.isNewFormat;
 
   return (
     <div className={[
-      "group relative bg-white rounded-xl border p-4 flex flex-col gap-2.5 transition-all duration-150",
-      isLegacy
-        ? "border-[#e8e3dc] opacity-60"
-        : "border-[#e8e3dc] hover:border-[#1F4538]/30 hover:shadow-md",
+      "group flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-100",
+      isLegacy ? "opacity-50" : "hover:bg-[#f0ede7]",
     ].join(" ")}>
-      <button
-        onClick={onDelete}
-        disabled={isDeleting || isOpening}
-        title="Delete draft"
-        className="absolute top-3 right-3 p-1 rounded text-[#c9c0b8] hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
-      >
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-
-      <p className="text-sm font-medium text-[#1a1a1a] leading-snug pr-6 line-clamp-2">
-        {draft.subject || "(no subject)"}
-      </p>
-
-      <div className="flex items-center gap-1.5 mt-auto">
-        <span className="text-[11px] text-[#9aaba4]">{date}</span>
-        {draft.imageCount > 0 && (
-          <>
-            <span className="text-[#ddd8d0]">·</span>
-            <span className="text-[11px] text-[#9aaba4]">
-              {draft.imageCount} {draft.imageCount === 1 ? "image" : "images"}
-            </span>
-          </>
-        )}
-        {isLegacy && (
-          <>
-            <span className="text-[#ddd8d0]">·</span>
-            <span className="text-[10px] font-medium text-[#b0a89f] uppercase tracking-wide">Outdated</span>
-          </>
-        )}
+      {/* Subject + meta */}
+      <div className="flex-1 min-w-0">
+        <p className={[
+          "text-sm font-medium leading-snug truncate",
+          isLegacy ? "text-[#7a8c85]" : "text-[#1a1a1a]",
+        ].join(" ")}>
+          {draft.subject || "(no subject)"}
+        </p>
+        <p className="mt-0.5 text-[11px] text-[#9aaba4]">
+          {date}
+          {draft.imageCount > 0 ? ` · ${draft.imageCount} image${draft.imageCount === 1 ? "" : "s"}` : ""}
+          {isLegacy ? " · outdated" : ""}
+        </p>
       </div>
 
-      {isLegacy ? (
-        <div className="w-full rounded-lg border border-dashed border-[#e0dbd3] text-[#b0a89f] text-[11px] text-center py-2">
-          Regenerate to edit
-        </div>
-      ) : (
+      {/* Actions */}
+      <div className="flex items-center gap-2 shrink-0">
+        {isLegacy ? (
+          <span className="text-[11px] text-[#b0a89f] italic">Regenerate to edit</span>
+        ) : (
+          <button
+            onClick={onOpen}
+            disabled={isOpening || isDeleting}
+            className="text-[11px] font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1.5 transition-all duration-150 disabled:opacity-40"
+          >
+            {isOpening ? "Opening…" : "Open"}
+          </button>
+        )}
         <button
-          onClick={onOpen}
-          disabled={isOpening || isDeleting}
-          className="w-full rounded-lg border border-[#e0dbd3] bg-[#f9f7f3] hover:bg-[#1F4538] hover:border-[#1F4538] hover:text-white text-[#5a6b63] text-[11px] font-semibold py-2 transition-all duration-150 disabled:opacity-40"
+          onClick={onDelete}
+          disabled={isDeleting || isOpening}
+          title="Delete draft"
+          className="p-1.5 rounded-lg text-[#c9c0b8] hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
         >
-          {isOpening ? "Opening…" : "Open draft"}
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
-      )}
+      </div>
     </div>
   );
 }
@@ -144,9 +135,22 @@ function SavedDraftsView() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-32 rounded-xl bg-[#f0ede7] animate-pulse" />
+      <div className="max-w-3xl mx-auto space-y-6">
+        {[5, 2, 3].map((count, si) => (
+          <div key={si}>
+            <div className="h-3 w-40 bg-[#e8e3dc] rounded animate-pulse mb-3 mx-4" />
+            <div className="bg-white rounded-xl border border-[#e8e3dc] overflow-hidden divide-y divide-[#f0ede7]">
+              {Array.from({ length: count }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4 px-4 py-3.5">
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3.5 bg-[#f0ede7] rounded animate-pulse w-3/4" />
+                    <div className="h-2.5 bg-[#f5f3ef] rounded animate-pulse w-1/3" />
+                  </div>
+                  <div className="h-7 w-16 bg-[#f0ede7] rounded-lg animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -189,23 +193,26 @@ function SavedDraftsView() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6 max-w-3xl mx-auto">
       {communityOrder.map((slug) => {
         const group = bySlug.get(slug)!;
         return (
           <section key={slug}>
-            <div className="flex items-center gap-3 mb-4">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#7a8c85] shrink-0">
+            {/* Community header */}
+            <div className="flex items-center gap-3 mb-1 px-4">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#7a8c85]">
                 {group.name}
               </p>
               <div className="flex-1 h-px bg-[#e8e3dc]" />
-              <p className="text-[10px] text-[#b0a89f] shrink-0">
+              <p className="text-[10px] text-[#b0a89f]">
                 {group.drafts.length} {group.drafts.length === 1 ? "draft" : "drafts"}
               </p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+            {/* Draft rows */}
+            <div className="bg-white rounded-xl border border-[#e8e3dc] divide-y divide-[#f0ede7] overflow-hidden">
               {group.drafts.map((d) => (
-                <DraftCard
+                <DraftRow
                   key={d.id}
                   draft={d}
                   isOpening={openingId === d.id}

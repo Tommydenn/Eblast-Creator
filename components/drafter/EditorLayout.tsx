@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useDraft } from "@/context/DraftContext";
 import EditorPanel from "./EditorPanel";
@@ -103,6 +103,14 @@ function TopBar() {
 
 export default function EditorLayout() {
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
+  const { isSaved, isSaving, fields, save } = useDraft();
+
+  // Auto-save 5 seconds after any unsaved change, silently
+  useEffect(() => {
+    if (isSaved || isSaving || !fields) return;
+    const timer = setTimeout(() => { save(); }, 5000);
+    return () => clearTimeout(timer);
+  }, [isSaved, isSaving, fields, save]);
 
   return (
     <div className="h-screen flex flex-col bg-[#f5f3ef]">
@@ -142,9 +150,9 @@ export default function EditorLayout() {
             </button>
           </div>
 
-          {/* Preview iframe container */}
-          <div className="flex-1 overflow-y-auto bg-[#e8e3dc] flex justify-center py-6 px-4">
-            <div className="w-full max-w-[640px] shadow-xl rounded-lg overflow-hidden">
+          {/* Preview iframe container — block layout so iframe can grow to full height */}
+          <div className="flex-1 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
+            <div className="w-full max-w-[640px] mx-auto shadow-xl rounded-lg overflow-hidden">
               <PreviewPanel />
             </div>
           </div>

@@ -17,14 +17,16 @@ interface DraftMeta {
   isNewFormat: boolean;
 }
 
-function DraftRow({
+function DraftCard({
   draft,
+  accentColor,
   isOpening,
   isDeleting,
   onOpen,
   onDelete,
 }: {
   draft: DraftMeta;
+  accentColor: string;
   isOpening: boolean;
   isDeleting: boolean;
   onOpen: () => void;
@@ -36,62 +38,92 @@ function DraftRow({
     day: "numeric",
     year: "numeric",
   });
+  const now = Date.now();
+  const ageMs = now - new Date(draft.savedAt).getTime();
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  const relTime = ageDays === 0 ? "Today" : ageDays === 1 ? "Yesterday" : ageDays < 7 ? `${ageDays}d ago` : date;
 
   return (
-    <div className={[
-      "group flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-100",
-      isLegacy ? "opacity-50" : "hover:bg-[#f0ede7]",
-    ].join(" ")}>
-      {/* Subject + meta */}
-      <div className="flex-1 min-w-0">
-        <p className={[
-          "text-sm font-medium leading-snug truncate",
-          isLegacy ? "text-[#7a8c85]" : "text-[#1a1a1a]",
-        ].join(" ")}>
+    <div
+      className={[
+        "group relative flex bg-white rounded-xl border overflow-hidden transition-all duration-150",
+        isLegacy
+          ? "border-[#e8e3dc] opacity-60"
+          : "border-[#e8e3dc] hover:border-[#c8d8d0] hover:shadow-md cursor-pointer",
+      ].join(" ")}
+    >
+      {/* Brand accent stripe */}
+      <div className="w-1 shrink-0" style={{ backgroundColor: isLegacy ? "#ddd8d0" : accentColor }} />
+
+      <div className="flex-1 min-w-0 p-4">
+        {/* Community + date row */}
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4] truncate">
+            {draft.communityName}
+          </p>
+          <p className="text-[10px] text-[#b0a89f] shrink-0">{relTime}</p>
+        </div>
+
+        {/* Subject */}
+        <p className={`text-sm font-medium leading-snug line-clamp-2 ${isLegacy ? "text-[#7a8c85]" : "text-[#1a1a1a]"}`}>
           {draft.subject || "(no subject)"}
         </p>
-        <p className="mt-0.5 text-[11px] text-[#9aaba4]">
-          {date}
-          {draft.imageCount > 0 ? ` · ${draft.imageCount} image${draft.imageCount === 1 ? "" : "s"}` : ""}
-          {isLegacy ? " · outdated" : ""}
-        </p>
-      </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 shrink-0">
-        {isLegacy ? (
-          <span className="text-[11px] text-[#b0a89f] italic">Regenerate to edit</span>
-        ) : (
-          <button
-            onClick={onOpen}
-            disabled={isOpening || isDeleting}
-            className="text-[11px] font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1.5 transition-all duration-150 disabled:opacity-40"
-          >
-            {isOpening ? "Opening…" : "Open"}
-          </button>
-        )}
-        <button
-          onClick={onDelete}
-          disabled={isDeleting || isOpening}
-          title="Delete draft"
-          className="p-1.5 rounded-lg text-[#c9c0b8] hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
-        >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+        {/* Footer row */}
+        <div className="mt-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {draft.imageCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-[#9aaba4]">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21,15 16,10 5,21"/>
+                </svg>
+                {draft.imageCount}
+              </span>
+            )}
+            {isLegacy && (
+              <span className="text-[10px] text-[#b0a89f] italic">Outdated</span>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-1.5">
+            {!isLegacy && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpen(); }}
+                disabled={isOpening || isDeleting}
+                className="text-[11px] font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1 transition-all disabled:opacity-40"
+              >
+                {isOpening ? "Opening…" : "Open"}
+              </button>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              disabled={isDeleting || isOpening}
+              title="Delete"
+              className="p-1 rounded-lg text-[#c9c0b8] hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-30"
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 function SavedDraftsView() {
-  const { loadSavedDraft } = useDraft();
+  const { loadSavedDraft, communities } = useDraft();
   const [drafts, setDrafts] = useState<DraftMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterSlug, setFilterSlug] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,9 +146,7 @@ function SavedDraftsView() {
     try {
       const res = await fetch(`/api/saved-drafts/${encodeURIComponent(id)}`);
       const data = await res.json();
-      if (data.ok && data.draft) {
-        loadSavedDraft(data.draft as SavedDraft);
-      }
+      if (data.ok && data.draft) loadSavedDraft(data.draft as SavedDraft);
     } finally {
       setOpeningId(null);
     }
@@ -133,25 +163,44 @@ function SavedDraftsView() {
     }
   }, []);
 
+  // Community accent color lookup
+  const accentBySlug = new Map(communities.map((c) => [c.slug, c.brand.accent]));
+
+  // Build community list from drafts (preserves order of most-recent activity)
+  const communityOrder: string[] = [];
+  const bySlug = new Map<string, { name: string; drafts: DraftMeta[] }>();
+  for (const d of drafts) {
+    if (!bySlug.has(d.communitySlug)) {
+      communityOrder.push(d.communitySlug);
+      bySlug.set(d.communitySlug, { name: d.communityName, drafts: [] });
+    }
+    bySlug.get(d.communitySlug)!.drafts.push(d);
+  }
+
+  // Filter
+  const filtered = drafts.filter((d) => {
+    if (filterSlug && d.communitySlug !== filterSlug) return false;
+    if (search && !d.subject.toLowerCase().includes(search.toLowerCase()) &&
+        !d.communityName.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6">
-        {[5, 2, 3].map((count, si) => (
-          <div key={si}>
-            <div className="h-3 w-40 bg-[#e8e3dc] rounded animate-pulse mb-3 mx-4" />
-            <div className="bg-white rounded-xl border border-[#e8e3dc] overflow-hidden divide-y divide-[#f0ede7]">
-              {Array.from({ length: count }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4 px-4 py-3.5">
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3.5 bg-[#f0ede7] rounded animate-pulse w-3/4" />
-                    <div className="h-2.5 bg-[#f5f3ef] rounded animate-pulse w-1/3" />
-                  </div>
-                  <div className="h-7 w-16 bg-[#f0ede7] rounded-lg animate-pulse" />
-                </div>
-              ))}
+      <div className="space-y-4">
+        <div className="h-9 bg-[#f0ede7] rounded-xl animate-pulse" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex bg-white rounded-xl border border-[#e8e3dc] overflow-hidden h-24 animate-pulse">
+              <div className="w-1 bg-[#e8e3dc]" />
+              <div className="flex-1 p-4 space-y-2">
+                <div className="h-2.5 bg-[#f0ede7] rounded w-2/5" />
+                <div className="h-3.5 bg-[#f0ede7] rounded w-4/5" />
+                <div className="h-2.5 bg-[#f5f3ef] rounded w-1/3" />
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   }
@@ -170,8 +219,8 @@ function SavedDraftsView() {
       <div className="rounded-2xl border border-dashed border-[#ddd8d0] px-8 py-20 text-center">
         <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#f0ede7] mb-4">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9aaba4" strokeWidth="1.8">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14,2 14,8 20,8" />
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14,2 14,8 20,8"/>
           </svg>
         </div>
         <p className="text-sm font-medium text-[#5a6b63]">No saved drafts yet</p>
@@ -180,51 +229,91 @@ function SavedDraftsView() {
     );
   }
 
-  // Group by community — drafts are already sorted by savedAt desc, so first occurrence
-  // of each community slug is the most recently active community.
-  const communityOrder: string[] = [];
-  const bySlug = new Map<string, { name: string; drafts: DraftMeta[] }>();
-  for (const d of drafts) {
-    if (!bySlug.has(d.communitySlug)) {
-      communityOrder.push(d.communitySlug);
-      bySlug.set(d.communitySlug, { name: d.communityName, drafts: [] });
-    }
-    bySlug.get(d.communitySlug)!.drafts.push(d);
-  }
-
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      {communityOrder.map((slug) => {
-        const group = bySlug.get(slug)!;
-        return (
-          <section key={slug}>
-            {/* Community header */}
-            <div className="flex items-center gap-3 mb-1 px-4">
-              <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#7a8c85]">
-                {group.name}
-              </p>
-              <div className="flex-1 h-px bg-[#e8e3dc]" />
-              <p className="text-[10px] text-[#b0a89f]">
-                {group.drafts.length} {group.drafts.length === 1 ? "draft" : "drafts"}
-              </p>
-            </div>
+    <div className="space-y-4">
+      {/* Search + filter bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        {/* Search */}
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9aaba4]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search drafts…"
+            className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#ddd8d0] bg-white text-sm text-[#1a1a1a] placeholder-[#b0a89f] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/20 focus:border-[#1F4538]"
+          />
+        </div>
 
-            {/* Draft rows */}
-            <div className="bg-white rounded-xl border border-[#e8e3dc] divide-y divide-[#f0ede7] overflow-hidden">
-              {group.drafts.map((d) => (
-                <DraftRow
-                  key={d.id}
-                  draft={d}
-                  isOpening={openingId === d.id}
-                  isDeleting={deletingId === d.id}
-                  onOpen={() => openDraft(d.id)}
-                  onDelete={() => deleteDraft(d.id)}
-                />
-              ))}
-            </div>
-          </section>
-        );
-      })}
+        {/* Community filter chips (only if multiple communities) */}
+        {communityOrder.length > 1 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => setFilterSlug(null)}
+              className={[
+                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                filterSlug === null
+                  ? "bg-[#1F4538] text-white"
+                  : "bg-white border border-[#ddd8d0] text-[#7a8c85] hover:border-[#1F4538]/40",
+              ].join(" ")}
+            >
+              All
+            </button>
+            {communityOrder.map((slug) => {
+              const g = bySlug.get(slug)!;
+              const accent = accentBySlug.get(slug) ?? "#1F4538";
+              return (
+                <button
+                  key={slug}
+                  onClick={() => setFilterSlug(filterSlug === slug ? null : slug)}
+                  className={[
+                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
+                    filterSlug === slug
+                      ? "text-white border-transparent"
+                      : "bg-white border-[#ddd8d0] text-[#7a8c85] hover:border-[#c8d8d0]",
+                  ].join(" ")}
+                  style={filterSlug === slug ? { backgroundColor: accent, borderColor: accent } : {}}
+                >
+                  {g.name}
+                  <span className={`ml-1.5 ${filterSlug === slug ? "opacity-70" : "text-[#b0a89f]"}`}>
+                    {g.drafts.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Count line */}
+      {(search || filterSlug) && (
+        <p className="text-xs text-[#9aaba4]">
+          {filtered.length} {filtered.length === 1 ? "draft" : "drafts"} found
+        </p>
+      )}
+
+      {/* Cards grid */}
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#ddd8d0] py-12 text-center">
+          <p className="text-sm text-[#9aaba4]">No drafts match your search.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {filtered.map((d) => (
+            <DraftCard
+              key={d.id}
+              draft={d}
+              accentColor={accentBySlug.get(d.communitySlug) ?? "#1F4538"}
+              isOpening={openingId === d.id}
+              isDeleting={deletingId === d.id}
+              onOpen={() => openDraft(d.id)}
+              onDelete={() => deleteDraft(d.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -246,6 +335,16 @@ export default function GenerateView() {
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [tab, setTab] = useState<"new" | "drafts">("new");
+
+  // Pre-select community from URL query param (e.g. from the communities page CTA)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get("community");
+    if (slug && communities.some((c) => c.slug === slug)) {
+      selectCommunity(slug);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [communities.length]);
 
   const selectedCommunity = communities.find((c) => c.slug === selectedCommunitySlug) ?? null;
 
@@ -279,9 +378,7 @@ export default function GenerateView() {
               onClick={() => setTab("new")}
               className={[
                 "px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                tab === "new"
-                  ? "bg-white text-[#1F4538] shadow-sm"
-                  : "text-[#7a8c85] hover:text-[#3d5249]",
+                tab === "new" ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
               ].join(" ")}
             >
               New Draft
@@ -290,9 +387,7 @@ export default function GenerateView() {
               onClick={() => setTab("drafts")}
               className={[
                 "px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                tab === "drafts"
-                  ? "bg-white text-[#1F4538] shadow-sm"
-                  : "text-[#7a8c85] hover:text-[#3d5249]",
+                tab === "drafts" ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
               ].join(" ")}
             >
               Saved Drafts
@@ -330,26 +425,20 @@ export default function GenerateView() {
                     onClick={() => fileRef.current?.click()}
                     onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDragOver(false);
-                      handleFile(e.dataTransfer.files[0] ?? null);
-                    }}
+                    onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0] ?? null); }}
                     disabled={isGenerating}
                     className={[
                       "w-full rounded-xl border-2 border-dashed transition-colors py-10 flex flex-col items-center gap-2 text-sm",
-                      dragOver
-                        ? "border-[#1F4538] bg-[#1F4538]/5"
-                        : file
-                        ? "border-[#1F4538]/40 bg-[#f0f5f2]"
+                      dragOver ? "border-[#1F4538] bg-[#1F4538]/5"
+                        : file ? "border-[#1F4538]/40 bg-[#f0f5f2]"
                         : "border-[#ddd8d0] bg-[#faf9f6] hover:border-[#1F4538]/40 hover:bg-[#f5f3ef]",
                     ].join(" ")}
                   >
                     {file ? (
                       <>
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1F4538" strokeWidth="1.8">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14,2 14,8 20,8" />
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                          <polyline points="14,2 14,8 20,8"/>
                         </svg>
                         <span className="font-medium text-[#1F4538]">{file.name}</span>
                         <span className="text-[#7a8c85] text-xs">{(file.size / 1024 / 1024).toFixed(1)} MB · Click to change</span>
@@ -357,22 +446,17 @@ export default function GenerateView() {
                     ) : (
                       <>
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9aaba4" strokeWidth="1.8">
-                          <polyline points="16,16 12,12 8,16" />
-                          <line x1="12" y1="12" x2="12" y2="21" />
-                          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+                          <polyline points="16,16 12,12 8,16"/>
+                          <line x1="12" y1="12" x2="12" y2="21"/>
+                          <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
                         </svg>
                         <span className="font-medium text-[#5a6b63]">Drop PDF here or click to browse</span>
                         <span className="text-[#9aaba4] text-xs">PDF files only</span>
                       </>
                     )}
                   </button>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="application/pdf"
-                    className="hidden"
-                    onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-                  />
+                  <input ref={fileRef} type="file" accept="application/pdf" className="hidden"
+                    onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
                 </div>
 
                 <button
@@ -386,10 +470,7 @@ export default function GenerateView() {
                 {isGenerating && (
                   <div className="mt-4 flex items-center justify-between text-sm text-[#5a6b63]">
                     <span>This takes 30–90 seconds.</span>
-                    <button
-                      onClick={cancelGenerate}
-                      className="text-xs text-[#9aaba4] hover:text-[#1F4538] underline underline-offset-2 ml-4 shrink-0"
-                    >
+                    <button onClick={cancelGenerate} className="text-xs text-[#9aaba4] hover:text-[#1F4538] underline underline-offset-2 ml-4 shrink-0">
                       Cancel
                     </button>
                   </div>
@@ -399,8 +480,8 @@ export default function GenerateView() {
                   <div className="mt-4 rounded-lg bg-[#f0f5f2] p-3 flex items-center gap-3">
                     <div className="w-5 h-5 shrink-0">
                       <svg className="animate-spin" viewBox="0 0 24 24" fill="none" stroke="#1F4538" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-                        <path d="M12 2a10 10 0 0 1 10 10" stroke="#1F4538" />
+                        <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="#1F4538"/>
                       </svg>
                     </div>
                     <p className="text-xs text-[#3d5249] leading-relaxed">

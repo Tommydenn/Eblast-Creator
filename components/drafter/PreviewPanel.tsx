@@ -73,14 +73,22 @@ export default function PreviewPanel() {
     });
   }, [fields, images, community]);
 
-  // Debounce the srcDoc update so fast typing doesn't cause constant iframe reloads/flicker.
-  // The iframe only refreshes 400ms after the user stops making changes.
+  // Keep a ref so the interval always reads the latest html without depending on it.
+  const htmlRef = useRef(html);
+  htmlRef.current = html;
+
   const [srcDoc, setSrcDoc] = useState(html);
+
+  // Immediately show the preview when a draft first loads (html transitions from "" to a value).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (html) setSrcDoc(html); }, [!!html]);
+
+  // Silently refresh the preview every 5 seconds — same cadence as auto-save.
+  // No flicker on each keystroke; edits appear on the next 5s tick.
   useEffect(() => {
-    if (!html) { setSrcDoc(""); return; }
-    const t = setTimeout(() => setSrcDoc(html), 400);
-    return () => clearTimeout(t);
-  }, [html]);
+    const id = setInterval(() => { if (htmlRef.current) setSrcDoc(htmlRef.current); }, 5000);
+    return () => clearInterval(id);
+  }, []);
 
   // Handle section-click messages from the preview iframe
   useEffect(() => {

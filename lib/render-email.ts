@@ -14,6 +14,17 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// Body paragraph content may include editor-generated formatting (strong, em, span color,
+// underline). Strip only dangerous constructs; leave safe inline HTML intact.
+function renderBodyParagraph(p: string): string {
+  return p
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "");
+}
+
 // Relative luminance (0 = black, 1 = white). Returns null for malformed hex.
 function relLuminance(hex: string): number | null {
   const h = hex.replace("#", "");
@@ -235,7 +246,7 @@ export function buildEblastHtml(
   </tr>
   <tr data-section="Story">
     <td style="padding: 0 36px 28px 36px;">
-      <p data-field="bodyParagraphs" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => escapeHtml(p)).join("<br><br>")}</p>
+      <p data-field="bodyParagraphs" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => renderBodyParagraph(p)).join("<br><br>")}</p>
     </td>
   </tr>
   ${secondaryImg ? `

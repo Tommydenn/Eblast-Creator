@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useDraft } from "@/context/DraftContext";
 import EditorPanel from "./EditorPanel";
@@ -105,12 +105,21 @@ export default function EditorLayout() {
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
   const { isSaved, isSaving, fields, save } = useDraft();
 
-  // Auto-save 5 seconds after any unsaved change, silently
+  // Auto-save on a fixed 5-second interval — same cadence as the preview refresh.
+  // Silently checks whether a save is needed; no visual interruption.
+  const isSavedRef = useRef(isSaved);
+  const isSavingRef = useRef(isSaving);
+  const fieldsRef2 = useRef(fields);
+  isSavedRef.current = isSaved;
+  isSavingRef.current = isSaving;
+  fieldsRef2.current = fields;
   useEffect(() => {
-    if (isSaved || isSaving || !fields) return;
-    const timer = setTimeout(() => { save(); }, 5000);
-    return () => clearTimeout(timer);
-  }, [isSaved, isSaving, fields, save]);
+    const id = setInterval(() => {
+      if (!isSavedRef.current && !isSavingRef.current && fieldsRef2.current) save();
+    }, 5000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="h-screen flex flex-col bg-[#f5f3ef]">

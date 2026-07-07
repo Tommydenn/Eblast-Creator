@@ -1,5 +1,5 @@
-// Per-community detail page — the polished "what does the agent know about
-// this place" view. Server-rendered against Postgres.
+// Per-community detail page — complete redesign.
+// Server-rendered against Postgres; uses community brand colors for visual identity.
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,11 +8,7 @@ import { getCommunity } from "@/lib/db/queries";
 import { db } from "@/lib/db";
 import { pastSends } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
-import { Card, CardContent, CardHeader, CardTitle, SectionLabel, CardDescription } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { SegmentManager } from "@/components/SegmentManager";
 import { SendersPanel } from "@/components/SendersPanel";
-import { fetchListNames } from "@/lib/hubspot";
 
 export const dynamic = "force-dynamic";
 
@@ -62,9 +58,7 @@ async function loadAggregates(communityId: string) {
       bestOpenPct: sql<string | null>`ROUND(MAX((${pastSends.openCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 1)`,
     })
     .from(pastSends)
-    .where(
-      and(eq(pastSends.communityId, communityId), eq(pastSends.state, "PUBLISHED"), sql`${pastSends.recipientCount} > 0`),
-    );
+    .where(and(eq(pastSends.communityId, communityId), eq(pastSends.state, "PUBLISHED"), sql`${pastSends.recipientCount} > 0`));
   const r = rows[0];
   return {
     sendCount: r?.sendCount ?? 0,
@@ -79,120 +73,296 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
   const community = await getCommunity(params.slug);
   if (!community) notFound();
 
-  const allSegmentIds = [
-    ...(community.hubspot.includedListIds ?? []),
-    ...(community.hubspot.excludedListIds ?? []),
-  ];
-  const [recentSends, aggregates, segmentNames] = await Promise.all([
-    loadRecentSends(community.id, 10),
+  const [recentSends, aggregates] = await Promise.all([
+    loadRecentSends(community.id, 12),
     loadAggregates(community.id),
-    fetchListNames(allSegmentIds),
   ]);
-  const toSegment = (id: number) => ({ id, name: segmentNames.get(id) ?? String(id) });
-  const includedSegments = (community.hubspot.includedListIds ?? []).map(toSegment);
-  const excludedSegments = (community.hubspot.excludedListIds ?? []).map(toSegment);
 
   const c = community;
-  const hasBrand =
-    (c.brandGuideExtracted != null) || c.brand.paletteSource === "brand-guide-extracted";
+
+  const websiteHref = c.websiteUrl
+    ? (/^https?:\/\//.test(c.websiteUrl) ? c.websiteUrl : `https://${c.websiteUrl}`)
+    : "";
+
+  const addressLine = [
+    c.address.street,
+    [c.address.city, c.address.state].filter(Boolean).join(", "),
+    c.address.zip,
+  ].filter(Boolean).join(" · ");
+
+  // Hero logo: prefer primary on light, fall back to any
+  const heroLogo =
+    c.logos.find((l) => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary") ??
+    c.logos.find((l) => l.onColor === "light" || l.onColor === "any") ??
+    c.logos[0] ??
+    null;
+
+  const hasBrand = c.brandGuideExtracted != null || c.brand.paletteSource === "brand-guide-extracted";
+
+  // All palette entries
+  const palette = [
+    { color: c.brand.primary, label: "Primary" },
+    { color: c.brand.accent, label: "Accent" },
+    { color: c.brand.background, label: "Surface" },
+    ...(c.brand.secondary ? [{ color: c.brand.secondary, label: "Secondary" }] : []),
+    ...(c.brand.supporting ?? []).map((hex, i) => ({ color: hex, label: `Support ${i + 1}` })),
+  ];
 
   return (
     <>
       <Header active="communities" />
-      <main className="mx-auto max-w-[1240px] px-6 pb-24 pt-10">
-        <Link
-          href="/communities"
-          className="inline-block text-[11px] font-medium uppercase tracking-[0.12em] text-sand-500 hover:text-sand-700"
-        >
-          ← All communities
-        </Link>
 
-        {/* Hero */}
-        <header className="mt-3 mb-8">
-          <div className="flex items-start justify-between gap-8 border-b border-sand-200 pb-6">
+      {/* ── Brand hero ───────────────────────────────────────────────────────── */}
+      <div className="relative" style={{ borderTop: `4px solid ${c.brand.accent}` }}>
+        {/* Subtle brand color wash */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: `linear-gradient(135deg, ${c.brand.primary}08 0%, transparent 60%)` }}
+        />
+        <div className="relative mx-auto max-w-[1240px] px-6 py-10">
+          <Link
+            href="/communities"
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-sand-500 hover:text-sand-700 mb-6"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            All communities
+          </Link>
+
+          <div className="flex items-start justify-between gap-8 flex-wrap">
             <div>
-              <p className="text-[10.5px] font-medium uppercase tracking-[0.16em]" style={{ color: c.brand.accent }}>
+              {/* Type + brand family */}
+              <p
+                className="text-[10.5px] font-semibold uppercase tracking-[0.16em]"
+                style={{ color: c.brand.accent, fontFamily: c.brand.fontBody }}
+              >
                 {c.brandFamily ?? c.shortName}
                 {c.careTypes && c.careTypes.length > 0 && (
                   <span className="text-sand-400"> · {c.careTypes.join(" · ")}</span>
                 )}
               </p>
+
+              {/* Community name */}
               <h1
-                className="mt-1 font-serif text-[40px] leading-tight"
-                style={{ color: c.brand.primary }}
+                className="mt-1 text-[40px] leading-tight"
+                style={{ color: c.brand.primary, fontFamily: c.brand.fontHeadline }}
               >
                 {c.displayName}
               </h1>
-              <p className="mt-1 text-sm text-sand-500">
-                {[
-                  c.address.street,
-                  [c.address.city, c.address.state].filter(Boolean).join(", "),
-                  c.address.zip,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || (
-                  <span className="text-clay-600">Address not set</span>
+
+              {/* Address */}
+              {addressLine && (
+                <p className="mt-1.5 text-sm text-sand-500">{addressLine}</p>
+              )}
+
+              {/* Action buttons */}
+              <div className="mt-5 flex items-center gap-3 flex-wrap">
+                <Link
+                  href={`/drafter?community=${c.slug}`}
+                  className="inline-flex items-center gap-2 text-xs font-semibold text-white rounded-lg px-4 py-2.5 transition-all hover:opacity-90 active:scale-[0.98]"
+                  style={{ backgroundColor: c.brand.primary }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                  </svg>
+                  Create Eblast
+                </Link>
+                {websiteHref && (
+                  <a
+                    href={websiteHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-sand-600 hover:text-sand-800 border border-sand-200 rounded-lg px-3 py-2.5 bg-white/80 transition-colors"
+                  >
+                    Website
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                      <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                  </a>
                 )}
-              </p>
+              </div>
             </div>
 
-            {/* Color swatches — show real brand palette if extracted */}
-            <div className="flex shrink-0 items-end gap-2">
-              {[
-                { color: c.brand.primary, label: "Primary" },
-                { color: c.brand.accent, label: "Accent" },
-                { color: c.brand.background, label: "Surface" },
-                ...(c.brand.secondary ? [{ color: c.brand.secondary, label: "Secondary" }] : []),
-              ].map((s) => (
-                <div key={s.color} className="text-center">
-                  <div
-                    className="h-12 w-12 rounded border border-black/5"
-                    style={{ backgroundColor: s.color }}
-                    title={s.color}
-                  />
-                  <p className="mt-1 text-[9.5px] font-medium uppercase tracking-wider text-sand-500">{s.label}</p>
-                  <p className="font-mono text-[9.5px] text-sand-400">{s.color}</p>
-                </div>
-              ))}
-            </div>
+            {/* Logo */}
+            {heroLogo && (
+              <div className="shrink-0 flex items-center justify-center bg-white/90 rounded-2xl border border-sand-200/60 shadow-sm px-6 py-5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={heroLogo.url}
+                  alt={c.displayName}
+                  className="h-16 w-auto max-w-[200px] object-contain"
+                />
+              </div>
+            )}
           </div>
-        </header>
+        </div>
+      </div>
 
-        {/* Performance KPIs (only if there are past sends) */}
-        {aggregates.sendCount > 0 && (
-          <Card className="mb-8 overflow-hidden p-0">
-            <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-5">
-              <Kpi label="Sends · 365d" value={aggregates.sendCount} />
+      {/* ── Performance KPIs ─────────────────────────────────────────────────── */}
+      {aggregates.sendCount > 0 && (
+        <div className="border-b border-sand-200 bg-white">
+          <div className="mx-auto max-w-[1240px] px-6 py-4">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <Kpi label="Sends · 365d" value={aggregates.sendCount} accentColor={c.brand.accent} />
               <Kpi
-                label="Avg open"
+                label="Avg open rate"
                 value={aggregates.avgOpenPct !== null ? `${aggregates.avgOpenPct}%` : "—"}
                 color={aggregates.avgOpenPct !== null && aggregates.avgOpenPct >= 40 ? "good" : "neutral"}
+                accentColor={c.brand.accent}
               />
               <Kpi
-                label="Avg click"
+                label="Avg click rate"
                 value={aggregates.avgClickPct !== null ? `${aggregates.avgClickPct}%` : "—"}
+                accentColor={c.brand.accent}
               />
               <Kpi
-                label="Avg list"
+                label="Avg list size"
                 value={aggregates.avgRecipients !== null ? aggregates.avgRecipients.toLocaleString() : "—"}
+                accentColor={c.brand.accent}
               />
               <Kpi
-                label="Best open"
+                label="Best open rate"
                 value={aggregates.bestOpenPct !== null ? `${aggregates.bestOpenPct}%` : "—"}
                 color="good"
+                accentColor={c.brand.accent}
               />
             </div>
-          </Card>
-        )}
+          </div>
+        </div>
+      )}
 
-        {/* Two-column layout: identity/brand left, sending/voice/history right */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Contact + identity */}
-          <Card className="shadow-sm rounded-xl">
-            <CardHeader>
-              <CardTitle>Contact &amp; identity</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+      {/* ── Main content ─────────────────────────────────────────────────────── */}
+      <main className="mx-auto max-w-[1240px] px-6 pb-24 pt-8">
+        <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+
+          {/* ── LEFT COLUMN: Brand & Identity ─────────────────────────────── */}
+          <div className="space-y-6">
+
+            {/* Brand card */}
+            <Section title="Brand" badge={hasBrand ? "From guide" : "Placeholder"} badgeVariant={hasBrand ? "success" : "warning"}>
+
+              {/* Color palette */}
+              <div>
+                <SectionLabel>Color palette</SectionLabel>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {palette.map((s) => (
+                    <div key={s.label + s.color} className="flex flex-col items-center gap-1">
+                      <div
+                        className="h-10 w-10 rounded-lg border border-black/8 shadow-sm"
+                        style={{ backgroundColor: s.color }}
+                        title={s.color}
+                      />
+                      <p className="text-[9px] font-medium uppercase tracking-wider text-sand-500 text-center">{s.label}</p>
+                      <p className="font-mono text-[8.5px] text-sand-400">{s.color}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Typography */}
+              <div>
+                <SectionLabel>Typography</SectionLabel>
+                <div className="mt-2 rounded-xl border border-sand-200/60 bg-sand-50/50 px-4 py-3.5 space-y-3">
+                  <div>
+                    <p className="text-2xl text-sand-900 leading-snug" style={{ fontFamily: c.brand.fontHeadline }}>
+                      The quick brown fox
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10px] text-sand-500">
+                      Display · {c.brand.fontHeadline}
+                    </p>
+                  </div>
+                  <div className="border-t border-sand-200/60 pt-3">
+                    <p className="text-base text-sand-800 leading-relaxed" style={{ fontFamily: c.brand.fontBody }}>
+                      Warm, hospitality-forward copy goes here.
+                    </p>
+                    <p className="mt-0.5 font-mono text-[10px] text-sand-500">
+                      Body · {c.brand.fontBody}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* All logos */}
+              {c.logos.length > 0 && (
+                <div>
+                  <SectionLabel>Logos ({c.logos.length})</SectionLabel>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {c.logos.map((logo, i) => (
+                      <div key={i} className="flex flex-col items-center gap-1">
+                        <div
+                          className={`flex items-center justify-center rounded-xl border p-3 ${
+                            logo.onColor === "dark" ? "bg-gray-900 border-gray-700" : "bg-sand-50 border-sand-200"
+                          }`}
+                          style={{ minWidth: 72, minHeight: 56 }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={logo.url}
+                            alt={`${c.displayName} ${logo.variant}`}
+                            className="max-h-10 max-w-[88px] w-auto object-contain"
+                          />
+                        </div>
+                        <p className="text-[9px] text-sand-500 capitalize text-center leading-tight">
+                          {logo.variant}
+                          {logo.onColor ? ` · ${logo.onColor}` : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Brand guide link */}
+              {c.brandGuideUrl && (
+                <a
+                  href={c.brandGuideUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-sand-200 px-3 py-1.5 text-xs font-medium text-sand-700 hover:border-sand-300 hover:bg-sand-50 transition-colors"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14,2 14,8 20,8"/>
+                  </svg>
+                  View brand guide PDF
+                </a>
+              )}
+
+              {/* Photo library */}
+              {c.photoLibrary && c.photoLibrary.length > 0 && (
+                <div>
+                  <SectionLabel>Photo library</SectionLabel>
+                  <p className="mt-1 text-sm text-sand-700">
+                    {c.photoLibrary.length} asset{c.photoLibrary.length === 1 ? "" : "s"} on file
+                  </p>
+                </div>
+              )}
+            </Section>
+
+            {/* Marketing director */}
+            {c.marketingDirector && (
+              <Section title="Marketing director">
+                <Field label="Name">{c.marketingDirector.name}</Field>
+                <Field label="Email">
+                  <a
+                    href={`mailto:${c.marketingDirector.email}`}
+                    className="hover:underline"
+                    style={{ color: c.brand.accent }}
+                  >
+                    {c.marketingDirector.email}
+                  </a>
+                </Field>
+              </Section>
+            )}
+          </div>
+
+          {/* ── RIGHT COLUMN: Contact, Voice, Sending ─────────────────────── */}
+          <div className="space-y-6">
+
+            {/* Contact & Identity */}
+            <Section title="Contact &amp; identity">
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Phone (public)">
                   {c.phone ?? <span className="text-clay-600">not set</span>}
@@ -203,171 +373,47 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
               </div>
               <Field label="Email">{c.email ?? <span className="text-clay-600">not set</span>}</Field>
               <Field label="Website">
-                {c.websiteUrl ? (
-                  <a
-                    href={/^https?:\/\//.test(c.websiteUrl) ? c.websiteUrl : `https://${c.websiteUrl}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:underline"
-                    style={{ color: c.brand.accent }}
-                  >
-                    {c.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                {websiteHref ? (
+                  <a href={websiteHref} target="_blank" rel="noreferrer" className="hover:underline" style={{ color: c.brand.accent }}>
+                    {c.websiteUrl!.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                   </a>
                 ) : (
                   <span className="text-clay-600">not set</span>
                 )}
               </Field>
+              {c.nameAbbreviation && (
+                <Field label="Abbreviation">{c.nameAbbreviation}</Field>
+              )}
+              {c.hubspot?.acronym && (
+                <Field label="HubSpot acronym">
+                  <span className="font-mono text-sm">{c.hubspot.acronym}</span>
+                </Field>
+              )}
               {c.socials && Object.values(c.socials).some(Boolean) && (
-                <Field label="Social">
+                <Field label="Social media">
                   <span className="flex flex-wrap gap-3 text-sm">
                     {Object.entries(c.socials)
                       .filter(([, v]) => v)
                       .map(([k, v]) => (
-                        <a
-                          key={k}
-                          href={v as string}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="capitalize hover:underline"
-                          style={{ color: c.brand.accent }}
-                        >
+                        <a key={k} href={v as string} target="_blank" rel="noreferrer" className="capitalize hover:underline" style={{ color: c.brand.accent }}>
                           {k}
                         </a>
                       ))}
                   </span>
                 </Field>
               )}
-            </CardContent>
-          </Card>
+            </Section>
 
-          {/* Sending */}
-          <Card className="shadow-sm rounded-xl">
-            <CardHeader>
-              <CardTitle>Sending</CardTitle>
-              <CardDescription>Who appears in the From: field for this community.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <SendersPanel slug={c.slug} initialSenders={c.senders} />
-              </div>
-              <div className="space-y-4 pt-2">
-                <div>
-                  <SectionLabel className="mb-2">
-                    Recipient segments (HubSpot)
-                    {c.hubspot.acronym ? (
-                      <span className="ml-1.5 font-mono text-[10px] normal-case tracking-normal text-sand-400">
-                        {c.hubspot.acronym}
-                      </span>
-                    ) : null}
-                  </SectionLabel>
-                  {includedSegments.length > 0 || excludedSegments.length > 0 ? (
-                    <SegmentManager
-                      slug={c.slug}
-                      initialIncluded={includedSegments}
-                      initialExcluded={excludedSegments}
-                    />
-                  ) : (
-                    <p className="rounded-xl bg-sand-50 px-4 py-8 text-center text-sm text-sand-400">
-                      No HubSpot segments configured — eblasts for this community have no recipient list yet.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Brand */}
-          <Card className="shadow-sm rounded-xl">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>Brand</CardTitle>
-                {hasBrand ? (
-                  <Badge variant="success">Extracted from guide</Badge>
-                ) : (
-                  <Badge variant="warning">Placeholder</Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {(() => {
-                const logo =
-                  c.logos.find(l => (l.onColor === "light" || l.onColor === "any") && l.variant === "primary") ??
-                  c.logos.find(l => l.onColor === "light" || l.onColor === "any") ??
-                  c.logos[0];
-                return logo ? (
-                  <div className="flex items-center justify-center rounded-md border border-sand-200 bg-sand-50/40 p-4">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={logo.url} alt={c.displayName} className="h-12 w-auto max-w-[200px] object-contain" />
-                  </div>
-                ) : null;
-              })()}
-              <div>
-                <SectionLabel className="mb-2">Typography</SectionLabel>
-                <div className="space-y-2 rounded-lg border border-sand-200/60 bg-sand-50/50 px-4 py-3">
-                  <div>
-                    <p
-                      className="text-2xl text-sand-900"
-                      style={{ fontFamily: c.brand.fontHeadline }}
-                    >
-                      The quick brown fox
-                    </p>
-                    <p className="mt-0.5 font-mono text-[10.5px] text-sand-500">
-                      Display · {c.brand.fontHeadline}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-base text-sand-800" style={{ fontFamily: c.brand.fontBody }}>
-                      Warm, hospitality-forward copy goes here.
-                    </p>
-                    <p className="mt-0.5 font-mono text-[10.5px] text-sand-500">
-                      Body · {c.brand.fontBody}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {c.brand.supporting && c.brand.supporting.length > 0 && (
-                <div>
-                  <SectionLabel className="mb-2">Supporting palette</SectionLabel>
-                  <div className="flex flex-wrap gap-2">
-                    {c.brand.supporting.map((hex) => (
-                      <div key={hex} className="flex items-center gap-1.5 rounded border border-sand-200 bg-white px-2 py-1">
-                        <span className="block h-4 w-4 rounded-full shadow-sm ring-1 ring-black/10" style={{ backgroundColor: hex }} />
-                        <span className="font-mono text-[10.5px] text-sand-600">{hex}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {c.brandGuideUrl && (
-                <a
-                  href={c.brandGuideUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block rounded border border-sand-200 px-3 py-1.5 text-xs font-medium text-sand-700 hover:border-sand-300 hover:bg-sand-50"
-                >
-                  View brand guide PDF →
-                </a>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Voice */}
-          <Card className="shadow-sm rounded-xl">
-            <CardHeader>
-              <CardTitle>Voice &amp; positioning</CardTitle>
-              <CardDescription>Rules the agents read when drafting.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+            {/* Voice & Positioning */}
+            <Section title="Voice &amp; positioning" description="Rules the agents read when drafting.">
               {c.voice?.tone && c.voice.tone.length > 0 && (
                 <div>
                   <SectionLabel className="mb-2">Tone</SectionLabel>
                   <div className="flex flex-wrap gap-1.5">
                     {c.voice.tone.map((t) => (
-                      <Badge key={t} variant="outline">
+                      <span key={t} className="inline-flex items-center rounded-full border border-sand-200 bg-sand-50 px-3 py-0.5 text-xs font-medium text-sand-700">
                         {t}
-                      </Badge>
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -378,11 +424,8 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                   <SectionLabel className="mb-2">Taglines</SectionLabel>
                   <ul className="space-y-1.5">
                     {c.taglines.map((t, i) => (
-                      <li
-                        key={i}
-                        className="rounded-md border border-sand-200 bg-sand-50/40 px-3 py-2 text-sm italic text-sand-800"
-                      >
-                        “{t}”
+                      <li key={i} className="rounded-lg border border-sand-200 bg-sand-50/40 px-3 py-2 text-sm italic text-sand-800">
+                        "{t}"
                       </li>
                     ))}
                   </ul>
@@ -409,7 +452,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                   <ul className="space-y-1 text-sm text-sand-800">
                     {c.voice.dos.map((d, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="mt-1 text-forest-600">✓</span>
+                        <span className="mt-1 text-forest-600 font-bold">✓</span>
                         <span>{d}</span>
                       </li>
                     ))}
@@ -423,7 +466,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                   <ul className="space-y-1 text-sm text-sand-800">
                     {c.voice.donts.map((d, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="mt-1 text-clay-600">×</span>
+                        <span className="mt-1 text-clay-600 font-bold">×</span>
                         <span>{d}</span>
                       </li>
                     ))}
@@ -431,10 +474,38 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 </div>
               )}
 
-              {!c.voice?.tone && !c.taglines?.length && !c.amenities?.length && (
-                <p className="text-sm text-sand-500">
-                  No structured voice rules yet. Upload the brand guide to populate this automatically.
-                </p>
+              {c.voice?.prohibited && c.voice.prohibited.length > 0 && (
+                <div>
+                  <SectionLabel className="mb-2">Prohibited words</SectionLabel>
+                  <div className="flex flex-wrap gap-1.5">
+                    {c.voice.prohibited.map((w) => (
+                      <span key={w} className="inline-flex items-center rounded-full border border-clay-200 bg-clay-50 px-2.5 py-0.5 text-xs text-clay-700 line-through">
+                        {w}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {c.voice?.approvedClaims && c.voice.approvedClaims.length > 0 && (
+                <div>
+                  <SectionLabel className="mb-2">Approved claims</SectionLabel>
+                  <ul className="space-y-1 text-sm text-sand-800">
+                    {c.voice.approvedClaims.map((claim, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="mt-1 shrink-0 text-sand-400">·</span>
+                        <span>{claim}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {c.voice?.photoStyleNotes && (
+                <div>
+                  <SectionLabel className="mb-2">Photo style</SectionLabel>
+                  <p className="text-sm text-sand-700 leading-relaxed">{c.voice.photoStyleNotes}</p>
+                </div>
               )}
 
               {c.voiceNotes && (
@@ -443,25 +514,36 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                   <p className="text-sm leading-relaxed text-sand-700">{c.voiceNotes}</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
 
-          {/* Recent sends — full-width */}
-          <Card className="lg:col-span-2 shadow-sm rounded-xl">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>Recent sends</CardTitle>
-                <CardDescription>What the drafter and critic reference.</CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {recentSends.length === 0 ? (
-                <p className="rounded-xl bg-sand-50 px-4 py-8 text-center text-sm text-sand-400">
+              {!c.voice?.tone && !c.taglines?.length && !c.amenities?.length && !c.voiceNotes && (
+                <p className="text-sm text-sand-500">
+                  No structured voice rules yet. Upload the brand guide to populate this automatically.
+                </p>
+              )}
+            </Section>
+
+            {/* Sending */}
+            <Section title="Sending" description="Who appears in the From: field for this community.">
+              <SendersPanel slug={c.slug} initialSenders={c.senders} />
+            </Section>
+          </div>
+        </div>
+
+        {/* ── Recent sends — full width ─────────────────────────────────────── */}
+        <div className="mt-6">
+          <Section
+            title="Recent sends"
+            description="What the drafter and critic reference to match voice, format, and send cadence."
+          >
+            {recentSends.length === 0 ? (
+              <div className="rounded-xl bg-sand-50 px-4 py-10 text-center">
+                <p className="text-sm text-sand-400">
                   No past sends in the last 365 days. Once this community sends its first eblast, the agents
                   will start using it as a reference.
                 </p>
-              ) : (
-                <div className="rounded-xl overflow-hidden border border-sand-200">
+              </div>
+            ) : (
+              <div className="rounded-xl overflow-hidden border border-sand-200">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-sand-100 bg-sand-50/60 text-[11px] font-semibold uppercase tracking-widest text-sand-400">
@@ -477,12 +559,10 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                     {recentSends.map((s) => {
                       const openPct =
                         s.openCount !== null && s.recipientCount && s.recipientCount > 0
-                          ? Math.round((s.openCount / s.recipientCount) * 1000) / 10
-                          : null;
+                          ? Math.round((s.openCount / s.recipientCount) * 1000) / 10 : null;
                       const clickPct =
                         s.clickCount !== null && s.recipientCount && s.recipientCount > 0
-                          ? Math.round((s.clickCount / s.recipientCount) * 1000) / 10
-                          : null;
+                          ? Math.round((s.clickCount / s.recipientCount) * 1000) / 10 : null;
                       return (
                         <tr key={s.hubspotEmailId} className="hover:bg-sand-50/60 transition-colors duration-100">
                           <td className="py-2.5 pr-3 pl-4">
@@ -495,20 +575,10 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                           </td>
                           <td className="py-2.5 px-2 text-right tabular-nums">
                             {openPct !== null ? (
-                              <span
-                                className={
-                                  openPct >= 40
-                                    ? "text-forest-700 font-medium"
-                                    : openPct >= 25
-                                    ? "text-sand-800"
-                                    : "text-clay-700"
-                                }
-                              >
+                              <span className={openPct >= 40 ? "text-forest-700 font-medium" : openPct >= 25 ? "text-sand-800" : "text-clay-700"}>
                                 {openPct}%
                               </span>
-                            ) : (
-                              <span className="text-sand-400">—</span>
-                            )}
+                            ) : <span className="text-sand-400">—</span>}
                           </td>
                           <td className="py-2.5 pl-2 pr-4 text-right tabular-nums text-sand-700">
                             {clickPct !== null ? `${clickPct}%` : "—"}
@@ -518,17 +588,67 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                     })}
                   </tbody>
                 </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </Section>
         </div>
       </main>
     </>
   );
 }
 
-// Great Lakes Management HubSpot account — used to deep-link each segment chip.
+// ── Design primitives ─────────────────────────────────────────────────────────
+
+function Section({
+  title,
+  description,
+  badge,
+  badgeVariant,
+  children,
+}: {
+  title: string;
+  description?: string;
+  badge?: string;
+  badgeVariant?: "success" | "warning";
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-sand-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-6 pt-5 pb-4 border-b border-sand-100">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2
+              className="text-sm font-semibold text-sand-900"
+              dangerouslySetInnerHTML={{ __html: title }}
+            />
+            {description && <p className="mt-0.5 text-xs text-sand-500">{description}</p>}
+          </div>
+          {badge && (
+            <span
+              className={`text-[10px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                badgeVariant === "success"
+                  ? "text-forest-700 bg-forest-50 border-forest-200"
+                  : "text-clay-600 bg-clay-50 border-clay-200"
+              }`}
+            >
+              {badge}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="px-6 py-5 space-y-4">{children}</div>
+    </div>
+  );
+}
+
+function SectionLabel({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <p className={`text-[10.5px] font-semibold uppercase tracking-[0.14em] text-sand-500 ${className}`}>
+      {children}
+    </p>
+  );
+}
+
 function Field({
   label,
   children,
@@ -552,18 +672,19 @@ function Kpi({
   label,
   value,
   color = "neutral",
+  accentColor,
 }: {
   label: string;
   value: React.ReactNode;
   color?: "good" | "neutral";
+  accentColor: string;
 }) {
   return (
-    <div className="rounded-lg border border-sand-200/80 bg-white px-4 py-3 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-sand-500">{label}</p>
+    <div className="rounded-xl border border-sand-200/80 bg-white px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-sand-500">{label}</p>
       <p
-        className={`mt-1 font-serif text-2xl tabular-nums leading-none ${
-          color === "good" ? "text-forest-700" : "text-sand-900"
-        }`}
+        className="mt-1 text-2xl tabular-nums leading-none font-semibold"
+        style={{ color: color === "good" ? accentColor : "#1a1a1a", fontFamily: "inherit" }}
       >
         {value}
       </p>

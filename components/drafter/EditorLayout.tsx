@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useDraft } from "@/context/DraftContext";
 import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
@@ -11,12 +12,20 @@ function TopBar() {
   return (
     <div className="h-14 flex items-center justify-between px-5 bg-white border-b border-[#e8e3dc] shrink-0">
       <div className="flex items-center gap-3 min-w-0">
+        {/* Brand */}
+        <Link href="/" className="flex items-center gap-2 mr-1">
+          <span className="grid h-7 w-7 place-items-center rounded-md bg-[#1F4538] text-[10px] font-bold uppercase tracking-wider text-white">E</span>
+          <span className="text-xs font-semibold text-[#1a1a1a] hidden sm:inline">Eblast Drafter</span>
+        </Link>
+
+        <span className="text-[#e0dbd3] text-xs">|</span>
+
         <button
           onClick={discard}
           className="text-xs text-[#9aaba4] hover:text-[#5a6b63] transition-colors flex items-center gap-1.5"
           title="Start over"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
           New draft
@@ -38,6 +47,14 @@ function TopBar() {
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        <Link
+          href="/communities"
+          className="text-xs text-[#9aaba4] hover:text-[#1F4538] transition-colors px-2 py-1 rounded"
+        >
+          Communities
+        </Link>
+        <span className="text-[#e0dbd3] text-xs">|</span>
+
         {pushResult && !pushError && (
           <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>

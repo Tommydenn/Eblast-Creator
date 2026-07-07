@@ -80,10 +80,19 @@ export default function PreviewPanel() {
     return () => window.removeEventListener("message", handler);
   }, [setActiveSection]);
 
-  // Inject the hover/click script after each load
+  // After each load: auto-size the iframe to its content height, then inject script
   function handleLoad() {
-    const doc = iframeRef.current?.contentDocument;
-    if (!doc?.body) return;
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc?.body || !iframe) return;
+
+    // Auto-size: read the full rendered height of the email document
+    const contentHeight = doc.documentElement.scrollHeight || doc.body.scrollHeight;
+    if (contentHeight > 0) {
+      iframe.style.height = contentHeight + "px";
+    }
+
+    // Inject hover/click script (guard against double-inject)
     if (doc.body.querySelector('script[data-preview-script]')) return;
     const s = doc.createElement("script");
     s.setAttribute("data-preview-script", "1");
@@ -105,7 +114,7 @@ export default function PreviewPanel() {
       srcDoc={html}
       title="Email preview"
       className="w-full bg-white"
-      style={{ minHeight: 800, height: "auto", display: "block" }}
+      style={{ minHeight: 600, height: "1200px", display: "block" }}
       sandbox="allow-same-origin allow-scripts"
       onLoad={handleLoad}
       scrolling="no"

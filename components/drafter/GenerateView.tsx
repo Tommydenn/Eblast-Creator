@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import { useDraft } from "@/context/DraftContext";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
+import { Header } from "@/components/Header";
 
 export default function GenerateView() {
   const {
@@ -31,7 +32,9 @@ export default function GenerateView() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-[#f9f7f3] flex flex-col items-center justify-start pt-12 pb-16 px-4">
+    <div className="min-h-screen bg-[#f9f7f3] flex flex-col">
+      <Header active="drafter" />
+    <div className="flex-1 flex flex-col items-center justify-start pt-12 pb-16 px-4">
       <div className="w-full max-w-5xl">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-semibold text-[#1F4538] tracking-tight">Create an Eblast</h1>
@@ -157,6 +160,7 @@ export default function GenerateView() {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }

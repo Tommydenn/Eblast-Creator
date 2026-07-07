@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useMemo } from "react";
 import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
+import { buildEblastHtml } from "@/lib/render-email";
 
 // Minimal script injected into the preview iframe.
 // ONLY purpose: highlight sections on hover and send a single message when
@@ -60,14 +61,20 @@ const SECTION_MAP: Record<string, EditorSection> = {
 };
 
 export default function PreviewPanel() {
-  const { buildHtml, setActiveSection, fields, images, community } = useDraft();
+  const { setActiveSection, fields, images, community } = useDraft();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // fields/images/community are real state — they trigger re-renders and
-  // thus re-run this memo. buildHtml reads from refs for synchronous access,
-  // so we just need these state values as the dependency signal.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const html = useMemo(() => buildHtml(), [buildHtml, fields, images, community]);
+  // Call buildEblastHtml directly with state values — NOT via buildHtml() which
+  // reads from refs. Refs are synced by useEffect (post-render), so they are
+  // always one render behind and would always return "" here.
+  const html = useMemo(() => {
+    if (!fields || !community) return "";
+    return buildEblastHtml(fields, community as any, {
+      heroImageUrl: images.hero?.url,
+      secondaryImageUrl: images.secondary?.url,
+      galleryImageUrls: images.gallery.map((g) => g.url),
+    });
+  }, [fields, images, community]);
 
   // Handle section-click messages from the preview iframe
   useEffect(() => {

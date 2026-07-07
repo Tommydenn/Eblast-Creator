@@ -5,14 +5,11 @@ import { eq, desc, inArray } from "drizzle-orm";
 
 const MAX_PER_COMMUNITY = 8;
 
-// GET /api/saved-drafts?communitySlug=X  — returns metadata list (no image data)
+// GET /api/saved-drafts?communitySlug=X  — filter by community (omit for all)
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("communitySlug");
-  if (!slug) {
-    return NextResponse.json({ ok: false, error: "Missing communitySlug" }, { status: 400 });
-  }
   try {
-    const rows = await db
+    const query = db
       .select({
         id: savedDrafts.id,
         communitySlug: savedDrafts.communitySlug,
@@ -20,10 +17,17 @@ export async function GET(req: NextRequest) {
         savedAt: savedDrafts.savedAt,
         subject: savedDrafts.subject,
         imageCount: savedDrafts.imageCount,
+        data: savedDrafts.data,
       })
       .from(savedDrafts)
-      .where(eq(savedDrafts.communitySlug, slug))
       .orderBy(desc(savedDrafts.savedAt));
+    const rawRows = slug
+      ? await query.where(eq(savedDrafts.communitySlug, slug))
+      : await query;
+    const rows = rawRows.map(({ data, ...meta }) => ({
+      ...meta,
+      isNewFormat: !!(data as any)?.fields,
+    }));
     return NextResponse.json({ ok: true, drafts: rows });
   } catch (err) {
     console.error("[saved-drafts GET]", err);

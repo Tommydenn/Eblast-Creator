@@ -570,9 +570,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Load saved draft ─────────────────────────────────────────────────────
   const loadSavedDraft = useCallback((draft: SavedDraft) => {
-    setFields_(draft.fields);
+    setFields_(draft.fields ?? null);
     setImages(draft.images ?? EMPTY_IMAGES);
     setImageBank(draft.imageBank ?? []);
+
     setReview(draft.review ?? null);
     setAgentLoop(draft.agentLoop ?? null);
     setSubjectSpecialist(draft.subjectSpecialist ?? null);

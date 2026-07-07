@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useDraft } from "@/context/DraftContext";
 import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
+import ApprovalModal from "./ApprovalModal";
 
-function TopBar() {
-  const { community, fields, isSaving, isPushing, pushResult, pushError, save, push, discard, dismissPushResult } = useDraft();
+function TopBar({ onApproval }: { onApproval: () => void }) {
+  const { community, fields, isSaving, saveNotice, isPushing, pushResult, pushError, save, push, discard, dismissPushResult } = useDraft();
 
   return (
     <div className="h-14 flex items-center justify-between px-5 bg-white border-b border-[#e8e3dc] shrink-0">
@@ -55,6 +56,11 @@ function TopBar() {
         </Link>
         <span className="text-[#e0dbd3] text-xs">|</span>
 
+        {/* Save notice — shown briefly after explicit save */}
+        {saveNotice && (
+          <span className="text-xs text-emerald-700 font-medium">{saveNotice}</span>
+        )}
+
         {pushResult && !pushError && (
           <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -77,6 +83,14 @@ function TopBar() {
           className="text-xs font-medium text-[#5a6b63] hover:text-[#1F4538] border border-[#ddd8d0] hover:border-[#1F4538]/40 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 bg-white"
         >
           {isSaving ? "Saving…" : "Save draft"}
+        </button>
+
+        {/* Send for approval — sits beside Push, same importance */}
+        <button
+          onClick={onApproval}
+          className="text-xs font-medium text-[#1F4538] border border-[#1F4538]/40 hover:bg-[#1F4538]/5 rounded-lg px-3 py-1.5 transition-colors"
+        >
+          Send for approval
         </button>
 
         <button
@@ -103,10 +117,11 @@ function TopBar() {
 
 export default function EditorLayout() {
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
-  const { isSaved, isSaving, fields, save } = useDraft();
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const { isSaved, isSaving, fields, autoSave } = useDraft();
 
-  // Auto-save on a fixed 5-second interval — same cadence as the preview refresh.
-  // Silently checks whether a save is needed; no visual interruption.
+  // Silent auto-save every 5 seconds — does NOT set isSaving, so the Save Draft
+  // button never flickers. Only runs when there are unsaved changes.
   const isSavedRef = useRef(isSaved);
   const isSavingRef = useRef(isSaving);
   const fieldsRef2 = useRef(fields);
@@ -115,7 +130,7 @@ export default function EditorLayout() {
   fieldsRef2.current = fields;
   useEffect(() => {
     const id = setInterval(() => {
-      if (!isSavedRef.current && !isSavingRef.current && fieldsRef2.current) save();
+      if (!isSavedRef.current && !isSavingRef.current && fieldsRef2.current) autoSave();
     }, 5000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,7 +138,7 @@ export default function EditorLayout() {
 
   return (
     <div className="h-screen flex flex-col bg-[#f5f3ef]">
-      <TopBar />
+      <TopBar onApproval={() => setApprovalOpen(true)} />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left: editor panel */}
@@ -159,7 +174,7 @@ export default function EditorLayout() {
             </button>
           </div>
 
-          {/* Preview iframe container — block layout so iframe can grow to full height */}
+          {/* Preview iframe container */}
           <div className="flex-1 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
             <div className="w-full max-w-[640px] mx-auto shadow-xl rounded-lg overflow-hidden">
               <PreviewPanel />
@@ -167,6 +182,8 @@ export default function EditorLayout() {
           </div>
         </div>
       </div>
+
+      {approvalOpen && <ApprovalModal onClose={() => setApprovalOpen(false)} />}
     </div>
   );
 }

@@ -8,7 +8,6 @@ import HeroSection from "./sections/HeroSection";
 import StorySection from "./sections/StorySection";
 import ImagesSection from "./sections/ImagesSection";
 import CtaSection from "./sections/CtaSection";
-import ApprovalModal from "./ApprovalModal";
 
 type LocalTab = EditorSection | "ai";
 
@@ -186,9 +185,8 @@ function RefinePanel() {
 // ── Main EditorPanel ──────────────────────────────────────────────────────────
 
 export default function EditorPanel() {
-  const { activeSection, setActiveSection, fields, isSaved, saveNotice } = useDraft();
+  const { activeSection, setActiveSection, fields } = useDraft();
   const [localTab, setLocalTab] = useState<LocalTab>(activeSection);
-  const [approvalOpen, setApprovalOpen] = useState(false);
 
   // Sync localTab → context when the user selects a real section tab
   const localTabRef = useRef(localTab);
@@ -245,17 +243,6 @@ export default function EditorPanel() {
           <div className="p-4 space-y-3">
             <RefinePanel />
             <ReviewPanel />
-            {!isSaved && (
-              <button
-                onClick={() => setApprovalOpen(true)}
-                className="w-full text-left text-xs text-[#7a8c85] hover:text-[#1F4538] transition-colors py-1"
-              >
-                Send for approval →
-              </button>
-            )}
-            {saveNotice && (
-              <div className="text-xs text-emerald-700 font-medium">{saveNotice}</div>
-            )}
           </div>
         ) : (
           <div className="p-5">
@@ -264,7 +251,6 @@ export default function EditorPanel() {
         )}
       </div>
 
-      {approvalOpen && <ApprovalModal onClose={() => setApprovalOpen(false)} />}
     </div>
   );
 }

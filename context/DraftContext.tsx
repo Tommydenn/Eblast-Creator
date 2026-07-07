@@ -181,6 +181,7 @@ export interface DraftContextValue {
   undo: () => void;
   redo: () => void;
   save: () => Promise<void>;
+  autoSave: () => Promise<void>;
   discard: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
   push: () => Promise<void>;
@@ -522,15 +523,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // ─── Save ─────────────────────────────────────────────────────────────────
-  const save = useCallback(async () => {
+  // ─── Build draft payload (shared by save + autoSave) ─────────────────────
+  const buildDraftPayload = useCallback((): { id: string; draft: SavedDraft } | null => {
     const f = fieldsRef.current;
     const c = communityRef.current;
-    if (!f || !c) return;
+    if (!f || !c) return null;
     const id = draftId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const imgs = imagesRef.current;
-    const bank = imageBank;
-
     const draft: SavedDraft = {
       id,
       communitySlug: c.slug,
@@ -539,13 +538,21 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       subject: f.subject,
       fields: f,
       images: imgs,
-      imageBank: bank,
+      imageBank,
       imageCount: (imgs.hero ? 1 : 0) + (imgs.secondary ? 1 : 0) + imgs.gallery.length,
       review,
       agentLoop,
       pastSendsContext,
       subjectSpecialist,
     };
+    return { id, draft };
+  }, [draftId, imageBank, review, agentLoop, pastSendsContext, subjectSpecialist]);
+
+  // ─── Save (explicit — shows "Saving…" indicator) ─────────────────────────
+  const save = useCallback(async () => {
+    const payload = buildDraftPayload();
+    if (!payload) return;
+    const { id, draft } = payload;
 
     setIsSaving(true);
     setSaveError(null);
@@ -566,7 +573,27 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsSaving(false);
     }
-  }, [draftId, imageBank, review, agentLoop, pastSendsContext, subjectSpecialist]);
+  }, [buildDraftPayload]);
+
+  // ─── autoSave (silent — no UI indicator, used by 5s interval) ────────────
+  const autoSave = useCallback(async () => {
+    const payload = buildDraftPayload();
+    if (!payload) return;
+    const { id, draft } = payload;
+    try {
+      const res = await fetch("/api/saved-drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft }),
+      });
+      const data = await res.json();
+      if (!data.ok) return;
+      setDraftId(id);
+      setIsSaved(true);
+    } catch {
+      // silent failure
+    }
+  }, [buildDraftPayload]);
 
   // ─── Load saved draft ─────────────────────────────────────────────────────
   const loadSavedDraft = useCallback((draft: SavedDraft) => {
@@ -715,6 +742,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     undo,
     redo,
     save,
+    autoSave,
     discard,
     loadSavedDraft,
     push,

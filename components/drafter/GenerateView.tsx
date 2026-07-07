@@ -231,11 +231,10 @@ function SavedDraftsView() {
 
   return (
     <div className="space-y-4">
-      {/* Search + filter bar */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {/* Search */}
+      {/* Search + community dropdown */}
+      <div className="flex items-center gap-3">
         <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9aaba4]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9aaba4] pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           <input
@@ -243,56 +242,32 @@ function SavedDraftsView() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search drafts…"
-            className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#ddd8d0] bg-white text-sm text-[#1a1a1a] placeholder-[#b0a89f] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/20 focus:border-[#1F4538]"
+            className="w-full pl-8 pr-3 py-2 rounded-xl border border-[#ddd8d0] bg-white text-sm text-[#1a1a1a] placeholder-[#b0a89f] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/20 focus:border-[#1F4538]"
           />
         </div>
 
-        {/* Community filter chips (only if multiple communities) */}
         {communityOrder.length > 1 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              onClick={() => setFilterSlug(null)}
-              className={[
-                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                filterSlug === null
-                  ? "bg-[#1F4538] text-white"
-                  : "bg-white border border-[#ddd8d0] text-[#7a8c85] hover:border-[#1F4538]/40",
-              ].join(" ")}
-            >
-              All
-            </button>
+          <select
+            value={filterSlug ?? ""}
+            onChange={(e) => setFilterSlug(e.target.value || null)}
+            className="rounded-xl border border-[#ddd8d0] bg-white text-sm text-[#5a6b63] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1F4538]/20 focus:border-[#1F4538] min-w-[180px]"
+          >
+            <option value="">All communities</option>
             {communityOrder.map((slug) => {
               const g = bySlug.get(slug)!;
-              const accent = accentBySlug.get(slug) ?? "#1F4538";
               return (
-                <button
-                  key={slug}
-                  onClick={() => setFilterSlug(filterSlug === slug ? null : slug)}
-                  className={[
-                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
-                    filterSlug === slug
-                      ? "text-white border-transparent"
-                      : "bg-white border-[#ddd8d0] text-[#7a8c85] hover:border-[#c8d8d0]",
-                  ].join(" ")}
-                  style={filterSlug === slug ? { backgroundColor: accent, borderColor: accent } : {}}
-                >
-                  {g.name}
-                  <span className={`ml-1.5 ${filterSlug === slug ? "opacity-70" : "text-[#b0a89f]"}`}>
-                    {g.drafts.length}
-                  </span>
-                </button>
+                <option key={slug} value={slug}>
+                  {g.name} ({g.drafts.length})
+                </option>
               );
             })}
-          </div>
+          </select>
         )}
-      </div>
 
-      {/* Count line */}
-      {(search || filterSlug) && (
-        <p className="text-xs text-[#9aaba4]">
-          {filtered.length} {filtered.length === 1 ? "draft" : "drafts"} found
+        <p className="text-xs text-[#9aaba4] shrink-0">
+          {filtered.length} {filtered.length === 1 ? "draft" : "drafts"}
         </p>
-      )}
+      </div>
 
       {/* Cards grid */}
       {filtered.length === 0 ? (

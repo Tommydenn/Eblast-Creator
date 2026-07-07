@@ -47,15 +47,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Missing required fields" }, { status: 400 });
   }
   try {
-    await db.insert(savedDrafts).values({
-      id,
-      communitySlug,
-      communityName: communityName ?? communitySlug,
-      savedAt: new Date(savedAt ?? Date.now()),
-      subject: subject ?? "",
-      imageCount: imageCount ?? 0,
-      data: draft,
-    });
+    await db.insert(savedDrafts)
+      .values({
+        id,
+        communitySlug,
+        communityName: communityName ?? communitySlug,
+        savedAt: new Date(savedAt ?? Date.now()),
+        subject: subject ?? "",
+        imageCount: imageCount ?? 0,
+        data: draft,
+      })
+      .onConflictDoUpdate({
+        target: savedDrafts.id,
+        set: {
+          communitySlug,
+          communityName: communityName ?? communitySlug,
+          savedAt: new Date(savedAt ?? Date.now()),
+          subject: subject ?? "",
+          imageCount: imageCount ?? 0,
+          data: draft,
+        },
+      });
 
     // Enforce the per-community cap — delete oldest if over limit.
     const existing = await db

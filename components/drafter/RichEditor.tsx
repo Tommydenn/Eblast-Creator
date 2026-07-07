@@ -146,48 +146,57 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
   }
 
   async function eyedrop() {
+    // Snapshot the range BEFORE opening the picker (selection is lost after)
+    const savedRange = savedRangeRef.current;
     try {
       const result = await new (window as any).EyeDropper().open();
       const pickedColor: string = result.sRGBHex;
-      // Add to custom palette regardless of whether text is selected
       addCustomColor(pickedColor);
       setColorOpen(false);
-      // Defer ALL DOM interaction — calling focus() immediately after EyeDropper
-      // resolves can cause Chrome to freeze while still exiting picker mode.
-      setTimeout(() => {
-        if (!editorRef.current || !savedRangeRef.current) return;
-        editorRef.current.focus();
-        const sel = window.getSelection();
-        if (!sel) return;
-        sel.removeAllRanges();
-        sel.addRange(savedRangeRef.current);
-        // Only apply color to text if there is an actual selection
-        if (!savedRangeRef.current.collapsed) {
-          document.execCommand("styleWithCSS", false, "true");
-          document.execCommand("foreColor", false, pickedColor);
+      // Avoid focus() or execCommand() entirely — both can freeze Chrome while
+      // the browser is still tearing down the eyedropper overlay. Instead use
+      // direct DOM span-wrapping which needs no focus or selection restore.
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (!savedRange || savedRange.collapsed) return;
+          const span = document.createElement("span");
+          span.style.color = pickedColor;
+          try {
+            savedRange.surroundContents(span);
+          } catch {
+            // Selection spans element boundaries; extract and re-insert
+            const frag = savedRange.extractContents();
+            span.appendChild(frag);
+            savedRange.insertNode(span);
+          }
           onInput();
-        }
-      }, 50);
+        }, 0);
+      });
     } catch { /* cancelled or unsupported */ }
   }
 
-  // Font size — em-based so scaling is proportional to each field's base size
+  // Font size — absolute px so sizes are consistent across all fields
   const fontSizeOptions = [
-    { label: "Tiny",     em: 0.7  },
-    { label: "Small",    em: 0.85 },
-    { label: "Normal",   em: 1.0  },
-    { label: "Large",    em: 1.2  },
-    { label: "X-Large",  em: 1.5  },
-    { label: "2×",       em: 2.0  },
+    { label: "10px", px: 10 },
+    { label: "12px", px: 12 },
+    { label: "14px", px: 14 },
+    { label: "16px", px: 16 },
+    { label: "18px", px: 18 },
+    { label: "20px", px: 20 },
+    { label: "24px", px: 24 },
+    { label: "28px", px: 28 },
+    { label: "32px", px: 32 },
+    { label: "36px", px: 36 },
+    { label: "48px", px: 48 },
   ];
 
-  function applyFontSize(em: number) {
+  function applyFontSize(px: number) {
     // Selection is still alive because onMouseDown+preventDefault preserved focus in the editor
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { setFontSizeOpen(false); return; }
     const range = sel.getRangeAt(0);
     const span = document.createElement("span");
-    span.style.fontSize = `${em}em`;
+    span.style.fontSize = `${px}px`;
     try {
       range.surroundContents(span);
     } catch {
@@ -424,16 +433,15 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
         </button>
 
         {fontSizeOpen && (
-          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 overflow-hidden w-36">
+          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 overflow-hidden w-28">
             {fontSizeOptions.map((opt) => (
               <button
-                key={opt.em}
+                key={opt.px}
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); applyFontSize(opt.em); }}
-                className="w-full text-left px-3 py-2 hover:bg-[#f0f5f2] transition-colors flex items-center justify-between border-b border-[#f5f3ef] last:border-0"
+                onMouseDown={(e) => { e.preventDefault(); applyFontSize(opt.px); }}
+                className="w-full text-left px-3 py-1.5 hover:bg-[#f0f5f2] transition-colors border-b border-[#f5f3ef] last:border-0"
               >
-                <span className="text-[#1a1a1a]" style={{ fontSize: `${Math.min(opt.em, 1.1) * 13}px` }}>{opt.label}</span>
-                <span className="text-[9px] text-[#b0b8b2] ml-2">{opt.em}em</span>
+                <span className="text-[#1a1a1a]" style={{ fontSize: `${Math.min(opt.px, 16)}px` }}>{opt.label}</span>
               </button>
             ))}
           </div>

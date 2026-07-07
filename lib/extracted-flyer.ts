@@ -78,6 +78,16 @@ export interface ExtractedFlyer {
   rsvpLabel?: string;
 
   /**
+   * Independent footer/CTA section overrides. When set, these replace the
+   * Hero values in the bottom call-to-action band only, so the two sections
+   * can show different event details. When absent, the CTA band inherits the
+   * Hero's eventDate / eventTime / rsvpLabel (same as before).
+   */
+  ctaEventDate?: string;
+  ctaEventTime?: string;
+  ctaRsvpLabel?: string;
+
+  /**
    * 1–2 sentences from the drafter explaining which past-send patterns or
    * brand rules they leaned on. Surfaced in the UI under "Intelligence
    * applied" so the user can see how the agent's memory shaped the draft.

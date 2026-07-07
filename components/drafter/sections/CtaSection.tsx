@@ -22,9 +22,39 @@ export default function CtaSection() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-lg bg-[#f5f3ef] border border-[#e8e3dc] px-3 py-2.5 text-xs text-[#7a8c85] leading-relaxed">
-        The bottom call-to-action section mirrors the event date, time, and RSVP label from the Hero tab. Edit those fields there to update both.
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Event Date" hint="Leave blank to mirror Hero">
+          <RichInput
+            value={fields.ctaEventDate ?? ""}
+            onValueChange={(html) => setField("ctaEventDate", html || undefined)}
+            placeholder={fields.eventDate ?? "e.g. Wednesday, May 13"}
+            className={baseInput}
+            activeEditorRef={activeEditorRef}
+            activeEditorCallback={activeEditorCallback}
+          />
+        </Field>
+        <Field label="Event Time" hint="Leave blank to mirror Hero">
+          <RichInput
+            value={fields.ctaEventTime ?? ""}
+            onValueChange={(html) => setField("ctaEventTime", html || undefined)}
+            placeholder={fields.eventTime ?? "e.g. 2:00 PM"}
+            className={baseInput}
+            activeEditorRef={activeEditorRef}
+            activeEditorCallback={activeEditorCallback}
+          />
+        </Field>
       </div>
+
+      <Field label="RSVP Label" hint="Leave blank to mirror Hero">
+        <RichInput
+          value={fields.ctaRsvpLabel ?? ""}
+          onValueChange={(html) => setField("ctaRsvpLabel", html || undefined)}
+          placeholder={fields.rsvpLabel ?? "e.g. RSVP Required"}
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+        />
+      </Field>
 
       <Field label="Call Button Label" hint="The primary action button at the bottom of the email">
         <RichInput

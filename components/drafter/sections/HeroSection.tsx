@@ -78,16 +78,6 @@ export default function HeroSection() {
         />
       </Field>
 
-      <Field label="Call Button Label" hint="The phone/action button inside the hero">
-        <RichInput
-          value={fields.ctaButtonLabel}
-          onValueChange={(html) => setField("ctaButtonLabel", html)}
-          placeholder="e.g. Call 920.504.3443"
-          className={baseInput}
-          activeEditorRef={activeEditorRef}
-          activeEditorCallback={activeEditorCallback}
-        />
-      </Field>
     </div>
   );
 }

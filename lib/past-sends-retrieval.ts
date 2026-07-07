@@ -89,8 +89,18 @@ export async function resolveSegmentsFromRecentSend(opts: {
     const lists = res.body?.to?.contactIlsLists;
     if (!lists) return fallback;
 
-    const included = (lists.include ?? []).map(Number).filter(Boolean);
-    const excluded = (lists.exclude ?? []).map(Number).filter(Boolean);
+    // HubSpot may return plain numbers or objects like { id: 1234 }
+    function toListId(item: unknown): number {
+      if (typeof item === "number") return item;
+      if (typeof item === "string") return parseInt(item, 10);
+      if (item && typeof item === "object") {
+        const obj = item as Record<string, unknown>;
+        return parseInt(String(obj.id ?? obj.listId ?? ""), 10);
+      }
+      return NaN;
+    }
+    const included = (lists.include ?? []).map(toListId).filter((n: number) => n > 0);
+    const excluded = (lists.exclude ?? []).map(toListId).filter((n: number) => n > 0);
 
     if (included.length === 0 && excluded.length === 0) return fallback;
     return { includedListIds: included, excludedListIds: excluded };

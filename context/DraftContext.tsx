@@ -266,11 +266,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Refs for synchronous access in buildHtml / callbacks
   const fieldsRef = useRef<ExtractedFlyer | null>(null);
   const imagesRef = useRef<DraftImages>(EMPTY_IMAGES);
+  const imageBankRef = useRef<string[]>([]);
   const communityRef = useRef<ClientCommunity | null>(null);
 
   // Keep refs in sync
   useEffect(() => { fieldsRef.current = fields; }, [fields]);
   useEffect(() => { imagesRef.current = images; }, [images]);
+  useEffect(() => { imageBankRef.current = imageBank; }, [imageBank]);
 
   // Derived community object
   const community = communities.find((c) => c.slug === selectedCommunitySlug) ?? null;
@@ -449,8 +451,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           savedAt: new Date().toISOString(),
           subject: newFields.subject,
           fields: newFields,
-          images: newImages,
-          imageBank: bank,
+          images: { hero: null, secondary: null, gallery: [] },
+          imageBank: [],
           imageCount: (newImages.hero ? 1 : 0) + (newImages.secondary ? 1 : 0) + newImages.gallery.length,
           review: data.review ?? null,
           agentLoop: data.agentLoop ?? null,
@@ -461,7 +463,31 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ draft: initDraft }),
-        }).catch(() => null);
+        })
+          .then(() => {
+            // Save all images separately — bank + slot images
+            const entries: Array<{ idx: number; url: string }> = [];
+            bank.forEach((url, i) => { if (url) entries.push({ idx: i, url }); });
+            if (newImages.hero?.url) entries.push({ idx: -1, url: newImages.hero.url });
+            if (newImages.hero?.originalUrl) entries.push({ idx: -2, url: newImages.hero.originalUrl });
+            if (newImages.secondary?.url) entries.push({ idx: -3, url: newImages.secondary.url });
+            if (newImages.secondary?.originalUrl) entries.push({ idx: -4, url: newImages.secondary.originalUrl });
+            newImages.gallery.forEach((g, i) => {
+              if (g.url) entries.push({ idx: -(10 + i * 2), url: g.url });
+              if (g.originalUrl) entries.push({ idx: -(11 + i * 2), url: g.originalUrl });
+            });
+            const CHUNK = 20;
+            const doChunk = (offset: number): Promise<void> => {
+              if (offset >= entries.length) return Promise.resolve();
+              return fetch(`/api/saved-drafts/${newDraftId}/images`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ images: entries.slice(offset, offset + CHUNK) }),
+              }).then(() => doChunk(offset + CHUNK));
+            };
+            return doChunk(0);
+          })
+          .catch(() => null);
       }
     } catch (e: any) {
       if (e.name === "AbortError") {
@@ -576,19 +602,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const id = draftId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const imgs = imagesRef.current;
 
-    // Strip base64 data URIs from the imageBank — these can be MB-sized blobs
-    // extracted from the PDF and will blow past the 4MB API route body limit.
-    const filteredBank = imageBank.filter(url => !url.startsWith("data:"));
-
-    // If a cropped image somehow ended up as a data URI, fall back to the
-    // original URL so the draft stays loadable without the blob in the DB.
-    function safeImgUrl(url: string, fallback: string): string {
-      return url.startsWith("data:") ? fallback : url;
-    }
+    // Strip ALL data URIs from the main payload — these can be multi-MB blobs
+    // from PDF extraction and will exceed Vercel's 4.5 MB API route body limit.
+    // All image data is saved separately via /api/saved-drafts/[id]/images.
     const filteredImages: DraftImages = {
-      hero: imgs.hero ? { url: safeImgUrl(imgs.hero.url, imgs.hero.originalUrl), originalUrl: imgs.hero.originalUrl } : null,
-      secondary: imgs.secondary ? { url: safeImgUrl(imgs.secondary.url, imgs.secondary.originalUrl), originalUrl: imgs.secondary.originalUrl } : null,
-      gallery: imgs.gallery.map(g => ({ url: safeImgUrl(g.url, g.originalUrl), originalUrl: g.originalUrl })),
+      hero: imgs.hero ? { url: "", originalUrl: "" } : null,
+      secondary: imgs.secondary ? { url: "", originalUrl: "" } : null,
+      gallery: imgs.gallery.map(() => ({ url: "", originalUrl: "" })),
     };
 
     const draft: SavedDraft = {
@@ -599,8 +619,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       subject: f.subject,
       fields: f,
       images: filteredImages,
-      imageBank: filteredBank,
-      imageCount: (filteredImages.hero ? 1 : 0) + (filteredImages.secondary ? 1 : 0) + filteredImages.gallery.length,
+      imageBank: [],
+      imageCount: (imgs.hero ? 1 : 0) + (imgs.secondary ? 1 : 0) + imgs.gallery.length,
       review,
       agentLoop,
       pastSendsContext,
@@ -608,6 +628,37 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     };
     return { id, draft };
   }, [draftId, imageBank, review, agentLoop, pastSendsContext, subjectSpecialist]);
+
+  // ─── Save images to separate endpoint ────────────────────────────────────
+  // imageBank entries: idx ≥ 0
+  // hero.url: -1, hero.originalUrl: -2
+  // secondary.url: -3, secondary.originalUrl: -4
+  // gallery[i].url: -(10+i*2), gallery[i].originalUrl: -(11+i*2)
+  const saveImagesForDraft = useCallback(async (draftId: string) => {
+    const imgs = imagesRef.current;
+    const bank = imageBankRef.current;
+
+    const entries: Array<{ idx: number; url: string }> = [];
+    bank.forEach((url, i) => { if (url) entries.push({ idx: i, url }); });
+    if (imgs.hero?.url) entries.push({ idx: -1, url: imgs.hero.url });
+    if (imgs.hero?.originalUrl) entries.push({ idx: -2, url: imgs.hero.originalUrl });
+    if (imgs.secondary?.url) entries.push({ idx: -3, url: imgs.secondary.url });
+    if (imgs.secondary?.originalUrl) entries.push({ idx: -4, url: imgs.secondary.originalUrl });
+    imgs.gallery.forEach((g, i) => {
+      if (g.url) entries.push({ idx: -(10 + i * 2), url: g.url });
+      if (g.originalUrl) entries.push({ idx: -(11 + i * 2), url: g.originalUrl });
+    });
+
+    if (entries.length === 0) return;
+    const CHUNK = 20;
+    for (let i = 0; i < entries.length; i += CHUNK) {
+      await fetch(`/api/saved-drafts/${draftId}/images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: entries.slice(i, i + CHUNK) }),
+      }).catch(() => null);
+    }
+  }, []);
 
   // ─── Save (explicit — shows "Saving…" indicator) ─────────────────────────
   const save = useCallback(async () => {
@@ -633,12 +684,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setSaveNotice("Draft saved");
       setTimeout(() => setSaveNotice(null), 3000);
       try { localStorage.setItem("eblast_lastDraftId", id); } catch {};
+      // Save all images separately to avoid 4.5 MB payload limit
+      saveImagesForDraft(id).catch(() => null);
     } catch (e: any) {
       setSaveError(e.message ?? "Save failed");
     } finally {
       setIsSaving(false);
     }
-  }, [buildDraftPayload]);
+  }, [buildDraftPayload, saveImagesForDraft]);
 
   // ─── autoSave (silent — no UI indicator, used by 5s interval) ────────────
   const autoSave = useCallback(async () => {
@@ -660,16 +713,18 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setIsSaved(true);
       // Remember last draft ID so GenerateView can offer "Resume" on next visit
       try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
+      // Save all images separately to avoid 4.5 MB payload limit
+      saveImagesForDraft(id).catch(() => null);
     } catch {
       // silent failure
     }
-  }, [buildDraftPayload]);
+  }, [buildDraftPayload, saveImagesForDraft]);
 
   // ─── Load saved draft ─────────────────────────────────────────────────────
   const loadSavedDraft = useCallback((draft: SavedDraft) => {
     setFields_(draft.fields ?? null);
     setImages(draft.images ?? EMPTY_IMAGES);
-    setImageBank(draft.imageBank ?? []);
+    setImageBank([]);
 
     setReview(draft.review ?? null);
     setAgentLoop(draft.agentLoop ?? null);
@@ -682,6 +737,66 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setActiveSection("hero");
     setStage("editing");
     setSelectedCommunitySlug(draft.communitySlug);
+
+    // Load images from separate endpoint (saved to avoid 4.5 MB payload limit)
+    fetch(`/api/saved-drafts/${draft.id}/images`)
+      .then((r) => r.json())
+      .then((data: { ok: boolean; images?: Array<{ idx: number; url: string }> }) => {
+        if (!data.ok || !data.images?.length) return;
+
+        const bank: string[] = [];
+        let heroUrl = "", heroOrigUrl = "";
+        let secUrl = "", secOrigUrl = "";
+        const gallerySlots: Record<number, { url?: string; origUrl?: string }> = {};
+
+        for (const { idx, url } of data.images) {
+          if (idx >= 0) {
+            bank[idx] = url;
+          } else if (idx === -1) {
+            heroUrl = url;
+          } else if (idx === -2) {
+            heroOrigUrl = url;
+          } else if (idx === -3) {
+            secUrl = url;
+          } else if (idx === -4) {
+            secOrigUrl = url;
+          } else if (idx <= -10) {
+            const neg = Math.abs(idx) - 10;
+            const slot = Math.floor(neg / 2);
+            const isOrig = neg % 2 === 1;
+            if (!gallerySlots[slot]) gallerySlots[slot] = {};
+            if (isOrig) gallerySlots[slot].origUrl = url;
+            else gallerySlots[slot].url = url;
+          }
+        }
+
+        const compactBank = bank.filter(Boolean);
+        if (compactBank.length) setImageBank(compactBank);
+
+        const hasSlotImages =
+          heroUrl || heroOrigUrl || secUrl || secOrigUrl || Object.keys(gallerySlots).length > 0;
+        if (hasSlotImages) {
+          setImages((prev) => {
+            const next = { ...prev };
+            if (heroUrl || heroOrigUrl) {
+              next.hero = { url: heroUrl || heroOrigUrl, originalUrl: heroOrigUrl || heroUrl };
+            }
+            if (secUrl || secOrigUrl) {
+              next.secondary = { url: secUrl || secOrigUrl, originalUrl: secOrigUrl || secUrl };
+            }
+            if (Object.keys(gallerySlots).length > 0) {
+              const gallery = [...prev.gallery];
+              Object.entries(gallerySlots).forEach(([s, { url: u, origUrl: o }]) => {
+                const i = parseInt(s);
+                gallery[i] = { url: u || o || "", originalUrl: o || u || "" };
+              });
+              next.gallery = gallery;
+            }
+            return next;
+          });
+        }
+      })
+      .catch(() => null);
   }, []);
 
   // ─── Discard ──────────────────────────────────────────────────────────────

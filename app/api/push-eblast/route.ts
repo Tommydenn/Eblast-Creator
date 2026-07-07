@@ -6,6 +6,8 @@ import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generate
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
+import { db } from "@/lib/db";
+import { pastSends } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -183,10 +185,33 @@ export async function POST(req: NextRequest) {
     console.error(`[push-eblast] create failed status=${create.status}`, JSON.stringify(create.body));
   }
 
-  // Keep the community's stored segments in sync with what was actually used,
-  // so the communities tab always reflects the most recently pushed lists.
-  if (create.ok && (segments.includedListIds.length > 0 || segments.excludedListIds.length > 0)) {
-    updateCommunitySegments(community.slug, segments.includedListIds, segments.excludedListIds).catch(() => null);
+  // Always persist the segments that were used so the next push inherits them.
+  updateCommunitySegments(community.slug, segments.includedListIds, segments.excludedListIds).catch(() => null);
+
+  // Insert/upsert a past_sends record with the HubSpot email ID so
+  // resolveSegmentsFromRecentSend can find this push on the next run and
+  // look up the actual list assignments directly from HubSpot.
+  if (create.ok && create.body?.id) {
+    db.insert(pastSends)
+      .values({
+        hubspotEmailId: String(create.body.id),
+        communityId: community.id,
+        subject: body.subject,
+        state: "PUBLISHED",
+        publishedAt: new Date(),
+        fromName: community.senders[0]?.name ?? community.displayName,
+      })
+      .onConflictDoUpdate({
+        target: pastSends.hubspotEmailId,
+        set: {
+          communityId: community.id,
+          subject: body.subject,
+          state: "PUBLISHED",
+          publishedAt: new Date(),
+          syncedAt: new Date(),
+        },
+      })
+      .catch(() => null);
   }
 
   return NextResponse.json({

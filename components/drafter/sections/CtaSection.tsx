@@ -17,7 +17,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
 export default function CtaSection() {
-  const { fields, setField, activeEditorRef, activeEditorCallback } = useDraft();
+  const { fields, setField, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   if (!fields) return null;
 
   return (
@@ -31,6 +31,8 @@ export default function CtaSection() {
             className={baseInput}
             activeEditorRef={activeEditorRef}
             activeEditorCallback={activeEditorCallback}
+            activeFieldNameRef={activeFieldNameRef}
+            fieldName="ctaEventDate"
           />
         </Field>
         <Field label="Event Time" hint="Leave blank to mirror Hero">
@@ -41,6 +43,8 @@ export default function CtaSection() {
             className={baseInput}
             activeEditorRef={activeEditorRef}
             activeEditorCallback={activeEditorCallback}
+            activeFieldNameRef={activeFieldNameRef}
+            fieldName="ctaEventTime"
           />
         </Field>
       </div>
@@ -53,6 +57,8 @@ export default function CtaSection() {
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="ctaRsvpLabel"
         />
       </Field>
 
@@ -64,6 +70,8 @@ export default function CtaSection() {
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="ctaButtonLabel"
         />
       </Field>
 
@@ -75,6 +83,8 @@ export default function CtaSection() {
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="footerName"
         />
       </Field>
     </div>

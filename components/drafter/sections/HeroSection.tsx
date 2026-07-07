@@ -17,7 +17,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
 export default function HeroSection() {
-  const { fields, setField, activeEditorRef, activeEditorCallback } = useDraft();
+  const { fields, setField, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   if (!fields) return null;
 
   return (
@@ -30,6 +30,8 @@ export default function HeroSection() {
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="headline"
         />
       </Field>
 
@@ -41,6 +43,8 @@ export default function HeroSection() {
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="scriptSubheadline"
         />
       </Field>
 
@@ -53,6 +57,8 @@ export default function HeroSection() {
             className={baseInput}
             activeEditorRef={activeEditorRef}
             activeEditorCallback={activeEditorCallback}
+            activeFieldNameRef={activeFieldNameRef}
+            fieldName="eventDate"
           />
         </Field>
         <Field label="Event Time">
@@ -63,6 +69,8 @@ export default function HeroSection() {
             className={baseInput}
             activeEditorRef={activeEditorRef}
             activeEditorCallback={activeEditorCallback}
+            activeFieldNameRef={activeFieldNameRef}
+            fieldName="eventTime"
           />
         </Field>
       </div>
@@ -75,6 +83,8 @@ export default function HeroSection() {
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="rsvpLabel"
         />
       </Field>
 

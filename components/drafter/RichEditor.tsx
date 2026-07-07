@@ -11,6 +11,8 @@ interface RichInputProps {
   className?: string;
   activeEditorRef: React.MutableRefObject<HTMLDivElement | null>;
   activeEditorCallback: React.MutableRefObject<(() => void) | null>;
+  activeFieldNameRef: React.MutableRefObject<string | null>;
+  fieldName: string;
 }
 
 export function RichInput({
@@ -20,6 +22,8 @@ export function RichInput({
   className,
   activeEditorRef,
   activeEditorCallback,
+  activeFieldNameRef,
+  fieldName,
 }: RichInputProps) {
   const ref = useRef<HTMLDivElement>(null);
   const isFocused = useRef(false);
@@ -64,6 +68,7 @@ export function RichInput({
         isFocused.current = true;
         activeEditorRef.current = ref.current;
         activeEditorCallback.current = readValue;
+        activeFieldNameRef.current = fieldName;
       }}
       onBlur={() => {
         isFocused.current = false;
@@ -84,15 +89,33 @@ export function RichInput({
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
+// Default font sizes as rendered in the email template, keyed by field name
+const FIELD_FONT_SIZES: Record<string, number> = {
+  headline: 36,
+  scriptSubheadline: 36,
+  eventDate: 22,
+  eventTime: 22,
+  rsvpLabel: 11,
+  storyEyebrow: 11,
+  storyScriptTitle: 38,
+  bodyParagraphs: 15,
+  ctaEventDate: 28,
+  ctaEventTime: 28,
+  ctaRsvpLabel: 11,
+  ctaButtonLabel: 14,
+  footerName: 14,
+};
+
 interface ToolbarProps {
   editorRef: { current: HTMLDivElement | null };
   brandColors: string[];
   brandFonts: string[];
   onInput: () => void;
+  activeFieldNameRef?: React.MutableRefObject<string | null>;
   className?: string;
 }
 
-export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, className }: ToolbarProps) {
+export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, activeFieldNameRef, className }: ToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
   const [fontOpen, setFontOpen] = useState(false);
   const [customColors, setCustomColors] = useState<string[]>([]);
@@ -120,17 +143,18 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
   }, []);
 
   // Detect current font size whenever the selection changes.
-  // Guard: if the font size input itself has focus, don't update (would wipe typed value).
-  // Also save the range so applyFontSize can restore it after input takes focus.
+  // Priority: (1) inline style.fontSize on a selected span, (2) field's template default.
+  // Guard: skip when the font size input itself has focus so typed values aren't wiped.
   useEffect(() => {
     function onSelectionChange() {
       if (document.activeElement === fontSizeInputRef.current) return;
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return;
-      // Save a non-collapsed range so we can restore it when applying from the input
+      // Save non-collapsed range so applyFontSize can restore it after input takes focus
       if (!sel.isCollapsed) {
         savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
       }
+      // Walk up from the selection anchor to find an inline font-size span
       let node: Node | null = sel.anchorNode;
       while (node) {
         if (node.nodeType === Node.ELEMENT_NODE) {
@@ -139,11 +163,17 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
         }
         node = node.parentNode;
       }
+      // Fall back to the email template's default size for the active field
+      const fieldName = activeFieldNameRef?.current;
+      if (fieldName && FIELD_FONT_SIZES[fieldName]) {
+        setFontSizeInput(FIELD_FONT_SIZES[fieldName].toString());
+        return;
+      }
       setFontSizeInput("");
     }
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, []);
+  }, [activeFieldNameRef]);
 
   function exec(cmd: string, val?: string) {
     if (!editorRef.current) return;

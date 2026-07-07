@@ -170,6 +170,7 @@ export interface DraftContextValue {
   lastEditTimestamp: number;
   activeEditorRef: React.MutableRefObject<HTMLDivElement | null>;
   activeEditorCallback: React.MutableRefObject<(() => void) | null>;
+  activeFieldNameRef: React.MutableRefObject<string | null>;
 
   selectCommunity: (slug: string) => void;
   generate: (file: File) => Promise<void>;
@@ -258,6 +259,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // target whichever contentEditable is currently focused in the sidebar.
   const activeEditorRef = useRef<HTMLDivElement | null>(null);
   const activeEditorCallback = useRef<(() => void) | null>(null);
+  const activeFieldNameRef = useRef<string | null>(null);
 
   // Debounce auto-save — increments whenever any field is edited so EditorLayout
   // can start a 5-second timer that resets on each new edit.
@@ -956,6 +958,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     lastEditTimestamp,
     activeEditorRef,
     activeEditorCallback,
+    activeFieldNameRef,
 
     selectCommunity,
     generate,

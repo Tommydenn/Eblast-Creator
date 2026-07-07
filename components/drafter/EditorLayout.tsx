@@ -231,7 +231,7 @@ export default function EditorLayout() {
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
-  const { isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, community } = useDraft();
+  const { isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, activeFieldNameRef, community } = useDraft();
 
   const isSavingRef = useRef(isSaving);
   const fieldsRef2 = useRef(fields);
@@ -320,6 +320,7 @@ export default function EditorLayout() {
               brandColors={brandColors}
               brandFonts={brandFonts}
               onInput={() => activeEditorCallback.current?.()}
+              activeFieldNameRef={activeFieldNameRef}
               className="flex items-center gap-0.5 flex-wrap"
             />
           </div>

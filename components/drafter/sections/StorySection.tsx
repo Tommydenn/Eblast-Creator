@@ -44,7 +44,7 @@ function fromHtml(el: HTMLDivElement): string[] {
 }
 
 export default function StorySection() {
-  const { fields, setField, activeEditorRef, activeEditorCallback } = useDraft();
+  const { fields, setField, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   const editorRef = useRef<HTMLDivElement>(null);
   const isFocused = useRef(false);
 
@@ -86,6 +86,8 @@ export default function StorySection() {
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="storyEyebrow"
         />
       </Field>
 
@@ -97,6 +99,8 @@ export default function StorySection() {
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="storyScriptTitle"
         />
       </Field>
 
@@ -112,6 +116,7 @@ export default function StorySection() {
             isFocused.current = true;
             activeEditorRef.current = editorRef.current;
             activeEditorCallback.current = handleBodyInput;
+            activeFieldNameRef.current = "bodyParagraphs";
           }}
           onBlur={() => {
             isFocused.current = false;

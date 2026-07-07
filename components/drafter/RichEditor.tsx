@@ -5,7 +5,7 @@ import React, { useRef, useEffect, useState } from "react";
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
 interface ToolbarProps {
-  editorRef: React.RefObject<HTMLDivElement>;
+  editorRef: { current: HTMLDivElement | null };
   brandColors: string[];
   brandFonts: string[];
   onInput: () => void;
@@ -33,7 +33,8 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
   }, []);
 
   function exec(cmd: string, val?: string) {
-    editorRef.current?.focus();
+    if (!editorRef.current) return;
+    editorRef.current.focus();
     document.execCommand("styleWithCSS", false, "true");
     document.execCommand(cmd, false, val);
     onInput();

@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { pastSends } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
 import { SendersPanel } from "@/components/SendersPanel";
+import { RecentSendsPanel } from "@/components/RecentSendsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -342,21 +343,6 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
               )}
             </Section>
 
-            {/* Marketing director */}
-            {c.marketingDirector && (
-              <Section title="Marketing director">
-                <Field label="Name">{c.marketingDirector.name}</Field>
-                <Field label="Email">
-                  <a
-                    href={`mailto:${c.marketingDirector.email}`}
-                    className="hover:underline"
-                    style={{ color: c.brand.accent }}
-                  >
-                    {c.marketingDirector.email}
-                  </a>
-                </Field>
-              </Section>
-            )}
           </div>
 
           {/* ── RIGHT COLUMN: Contact, Voice, Sending ─────────────────────── */}
@@ -405,124 +391,6 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
               )}
             </Section>
 
-            {/* Voice & Positioning */}
-            <Section title="Voice &amp; positioning" description="Rules the agents read when drafting.">
-              {c.voice?.tone && c.voice.tone.length > 0 && (
-                <div>
-                  <SectionLabel className="mb-2">Tone</SectionLabel>
-                  <div className="flex flex-wrap gap-1.5">
-                    {c.voice.tone.map((t) => (
-                      <span key={t} className="inline-flex items-center rounded-full border border-sand-200 bg-sand-50 px-3 py-0.5 text-xs font-medium text-sand-700">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {c.taglines && c.taglines.length > 0 && (
-                <div>
-                  <SectionLabel className="mb-2">Taglines</SectionLabel>
-                  <ul className="space-y-1.5">
-                    {c.taglines.map((t, i) => (
-                      <li key={i} className="rounded-lg border border-sand-200 bg-sand-50/40 px-3 py-2 text-sm italic text-sand-800">
-                        "{t}"
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {c.amenities && c.amenities.length > 0 && (
-                <div>
-                  <SectionLabel className="mb-2">Distinctive amenities</SectionLabel>
-                  <ul className="space-y-1 text-sm text-sand-800">
-                    {c.amenities.map((a, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-sand-400" />
-                        <span>{a}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {c.voice?.dos && c.voice.dos.length > 0 && (
-                <div>
-                  <SectionLabel className="mb-2">Do</SectionLabel>
-                  <ul className="space-y-1 text-sm text-sand-800">
-                    {c.voice.dos.map((d, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="mt-1 text-forest-600 font-bold">✓</span>
-                        <span>{d}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {c.voice?.donts && c.voice.donts.length > 0 && (
-                <div>
-                  <SectionLabel className="mb-2">Don't</SectionLabel>
-                  <ul className="space-y-1 text-sm text-sand-800">
-                    {c.voice.donts.map((d, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="mt-1 text-clay-600 font-bold">×</span>
-                        <span>{d}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {c.voice?.prohibited && c.voice.prohibited.length > 0 && (
-                <div>
-                  <SectionLabel className="mb-2">Prohibited words</SectionLabel>
-                  <div className="flex flex-wrap gap-1.5">
-                    {c.voice.prohibited.map((w) => (
-                      <span key={w} className="inline-flex items-center rounded-full border border-clay-200 bg-clay-50 px-2.5 py-0.5 text-xs text-clay-700 line-through">
-                        {w}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {c.voice?.approvedClaims && c.voice.approvedClaims.length > 0 && (
-                <div>
-                  <SectionLabel className="mb-2">Approved claims</SectionLabel>
-                  <ul className="space-y-1 text-sm text-sand-800">
-                    {c.voice.approvedClaims.map((claim, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="mt-1 shrink-0 text-sand-400">·</span>
-                        <span>{claim}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {c.voice?.photoStyleNotes && (
-                <div>
-                  <SectionLabel className="mb-2">Photo style</SectionLabel>
-                  <p className="text-sm text-sand-700 leading-relaxed">{c.voice.photoStyleNotes}</p>
-                </div>
-              )}
-
-              {c.voiceNotes && (
-                <div>
-                  <SectionLabel className="mb-2">Notes</SectionLabel>
-                  <p className="text-sm leading-relaxed text-sand-700">{c.voiceNotes}</p>
-                </div>
-              )}
-
-              {!c.voice?.tone && !c.taglines?.length && !c.amenities?.length && !c.voiceNotes && (
-                <p className="text-sm text-sand-500">
-                  No structured voice rules yet. Upload the brand guide to populate this automatically.
-                </p>
-              )}
-            </Section>
-
             {/* Sending */}
             <Section title="Sending" description="Who appears in the From: field for this community.">
               <SendersPanel slug={c.slug} initialSenders={c.senders} />
@@ -530,68 +398,9 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
           </div>
         </div>
 
-        {/* ── Recent sends — full width ─────────────────────────────────────── */}
+        {/* ── Recent sends — full width, collapsible ───────────────────────── */}
         <div className="mt-6">
-          <Section
-            title="Recent sends"
-            description="What the drafter and critic reference to match voice, format, and send cadence."
-          >
-            {recentSends.length === 0 ? (
-              <div className="rounded-xl bg-sand-50 px-4 py-10 text-center">
-                <p className="text-sm text-sand-400">
-                  No past sends in the last 365 days. Once this community sends its first eblast, the agents
-                  will start using it as a reference.
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-xl overflow-hidden border border-sand-200">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-sand-100 bg-sand-50/60 text-[11px] font-semibold uppercase tracking-widest text-sand-400">
-                      <th className="py-2.5 pr-3 text-left pl-4">Subject</th>
-                      <th className="py-2.5 px-2 text-left">Sent</th>
-                      <th className="py-2.5 px-2 text-left">From</th>
-                      <th className="py-2.5 px-2 text-right">Recipients</th>
-                      <th className="py-2.5 px-2 text-right">Open</th>
-                      <th className="py-2.5 pl-2 pr-4 text-right">Click</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-sand-100">
-                    {recentSends.map((s) => {
-                      const openPct =
-                        s.openCount !== null && s.recipientCount && s.recipientCount > 0
-                          ? Math.round((s.openCount / s.recipientCount) * 1000) / 10 : null;
-                      const clickPct =
-                        s.clickCount !== null && s.recipientCount && s.recipientCount > 0
-                          ? Math.round((s.clickCount / s.recipientCount) * 1000) / 10 : null;
-                      return (
-                        <tr key={s.hubspotEmailId} className="hover:bg-sand-50/60 transition-colors duration-100">
-                          <td className="py-2.5 pr-3 pl-4">
-                            <p className="text-sand-900">{s.subject ?? "(no subject)"}</p>
-                          </td>
-                          <td className="py-2.5 px-2 text-xs text-sand-500 tabular-nums">{s.sentAt ?? "—"}</td>
-                          <td className="py-2.5 px-2 text-xs text-sand-600">{s.fromName ?? "—"}</td>
-                          <td className="py-2.5 px-2 text-right tabular-nums text-sand-700">
-                            {s.recipientCount?.toLocaleString() ?? "—"}
-                          </td>
-                          <td className="py-2.5 px-2 text-right tabular-nums">
-                            {openPct !== null ? (
-                              <span className={openPct >= 40 ? "text-forest-700 font-medium" : openPct >= 25 ? "text-sand-800" : "text-clay-700"}>
-                                {openPct}%
-                              </span>
-                            ) : <span className="text-sand-400">—</span>}
-                          </td>
-                          <td className="py-2.5 pl-2 pr-4 text-right tabular-nums text-sand-700">
-                            {clickPct !== null ? `${clickPct}%` : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Section>
+          <RecentSendsPanel sends={recentSends} />
         </div>
       </main>
     </>

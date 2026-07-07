@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useDraft } from "@/context/DraftContext";
+import { FormatToolbar } from "@/components/drafter/RichEditor";
 import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
 import ApprovalModal from "./ApprovalModal";
@@ -117,23 +118,25 @@ export default function EditorLayout() {
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
-  const { isSaving, fields, autoSave } = useDraft();
+  const { isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, community } = useDraft();
 
-  // Refs so the interval callback always reads the latest values without stale closure
+  // Stable refs so callbacks always read the latest values without stale closures
   const isSavingRef = useRef(isSaving);
   const fieldsRef2 = useRef(fields);
+  const autoSaveRef = useRef(autoSave);
   isSavingRef.current = isSaving;
   fieldsRef2.current = fields;
+  autoSaveRef.current = autoSave;
 
-  // Auto-save every 5 seconds. Shows a brief "Auto-saving…" status in the top
-  // bar (away from the Save Draft button). Does NOT touch isSaving state.
+  // Auto-save: fires 5 seconds AFTER the last user edit (debounce).
+  // lastEditTimestamp updates on every setField/setFields call.
   useEffect(() => {
-    const id = setInterval(async () => {
+    if (!lastEditTimestamp) return;
+    const id = setTimeout(async () => {
       if (!isSavingRef.current && fieldsRef2.current) {
         setAutoSaveLabel("Auto-saving…");
         const start = Date.now();
-        await autoSave();
-        // Show indicator for at least 1 second so it's readable
+        await autoSaveRef.current();
         const elapsed = Date.now() - start;
         if (elapsed < 1000) {
           await new Promise<void>((r) => setTimeout(r, 1000 - elapsed));
@@ -141,9 +144,21 @@ export default function EditorLayout() {
         setAutoSaveLabel(null);
       }
     }, 5000);
-    return () => clearInterval(id);
+    return () => clearTimeout(id);
+  // Only re-run when a new edit happens — not when autoSave/isSaving change
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [lastEditTimestamp]);
+
+  const brandColors = [
+    community?.brand?.primary,
+    community?.brand?.accent,
+    community?.brand?.secondary,
+  ].filter(Boolean) as string[];
+
+  const brandFonts = [
+    community?.brand?.fontHeadline,
+    community?.brand?.fontBody,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="h-screen flex flex-col bg-[#f5f3ef]">
@@ -162,7 +177,7 @@ export default function EditorLayout() {
 
         {/* Right: preview */}
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-          {/* Preview toolbar */}
+          {/* Preview header */}
           <div className="h-9 flex items-center justify-between px-4 bg-[#f0ede7] border-b border-[#e8e3dc] shrink-0">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4]">Live Preview</span>
             <button
@@ -181,6 +196,17 @@ export default function EditorLayout() {
                 </>
               )}
             </button>
+          </div>
+
+          {/* Formatting toolbar — always visible above the email preview */}
+          <div className="border-b border-[#e8e3dc] bg-white px-3 py-1.5 shrink-0">
+            <FormatToolbar
+              editorRef={activeEditorRef}
+              brandColors={brandColors}
+              brandFonts={brandFonts}
+              onInput={() => activeEditorCallback.current?.()}
+              className="flex items-center gap-0.5 flex-wrap"
+            />
           </div>
 
           {/* Preview iframe container */}

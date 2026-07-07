@@ -167,6 +167,9 @@ export interface DraftContextValue {
   isSaving: boolean;
   saveError: string | null;
   approvalStatus: { decision: string; sentAt: string } | null;
+  lastEditTimestamp: number;
+  activeEditorRef: React.MutableRefObject<HTMLDivElement | null>;
+  activeEditorCallback: React.MutableRefObject<(() => void) | null>;
 
   selectCommunity: (slug: string) => void;
   generate: (file: File) => Promise<void>;
@@ -251,6 +254,15 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Approval
   const [approvalStatus, setApprovalStatus] = useState<{ decision: string; sentAt: string } | null>(null);
 
+  // Format toolbar — shared mutable refs so the preview-panel toolbar can
+  // target whichever contentEditable is currently focused in the sidebar.
+  const activeEditorRef = useRef<HTMLDivElement | null>(null);
+  const activeEditorCallback = useRef<(() => void) | null>(null);
+
+  // Debounce auto-save — increments whenever any field is edited so EditorLayout
+  // can start a 5-second timer that resets on each new edit.
+  const [lastEditTimestamp, setLastEditTimestamp] = useState(0);
+
   // Refs for synchronous access in buildHtml / callbacks
   const fieldsRef = useRef<ExtractedFlyer | null>(null);
   const imagesRef = useRef<DraftImages>(EMPTY_IMAGES);
@@ -292,11 +304,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const setField = useCallback(<K extends keyof ExtractedFlyer>(key: K, value: ExtractedFlyer[K]) => {
     setFields_((prev) => prev ? { ...prev, [key]: value } : prev);
     setIsSaved(false);
+    setLastEditTimestamp(Date.now());
   }, []);
 
   const setFields = useCallback((patch: Partial<ExtractedFlyer>) => {
     setFields_((prev) => prev ? { ...prev, ...patch } : prev);
     setIsSaved(false);
+    setLastEditTimestamp(Date.now());
   }, []);
 
   // ─── Image management ──────────────────────────────────────────────────────
@@ -650,20 +664,17 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Discard ──────────────────────────────────────────────────────────────
   const discard = useCallback(() => {
-    // Fire-and-forget: persist the current state so the user can resume later.
-    // Only write localStorage after the save confirms success (avoids pointing
-    // to an ID that never made it into the DB).
+    // Write localStorage SYNCHRONOUSLY before clearing state so GenerateView
+    // can read the resume ID on its very first mount (no async race).
     const payload = buildDraftPayload();
     if (payload) {
       const { id, draft } = payload;
+      try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
+      // Fire-and-forget save so the draft is persisted in the DB too.
       fetch("/api/saved-drafts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ draft }),
-      }).then((r) => r.json()).then((data) => {
-        if (data.ok) {
-          try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
-        }
       }).catch(() => null);
     }
     setStage("idle");
@@ -778,6 +789,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     isSaving,
     saveError,
     approvalStatus,
+    lastEditTimestamp,
+    activeEditorRef,
+    activeEditorCallback,
 
     selectCommunity,
     generate,

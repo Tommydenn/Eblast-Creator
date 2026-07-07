@@ -42,6 +42,7 @@ export default function SubjectSection() {
           maxLength={150}
         />
         <p className="mt-1 text-xs text-[#9aaba4]">{fields.previewText.length}/150 chars · Target: under 120</p>
+        <p className="mt-0.5 text-[10px] text-[#b0a89f]">Shown in the inbox below the subject — not visible in the email preview.</p>
       </Field>
 
       {subjectSpecialist && subjectSpecialist.alternatives.length > 0 && (

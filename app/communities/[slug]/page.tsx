@@ -204,7 +204,8 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
       {aggregates.sendCount > 0 && (
         <div className="border-b border-sand-200 bg-white">
           <div className="mx-auto max-w-[1240px] px-6 py-4">
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {/* Seamless KPI strip — shared borders, no gaps */}
+            <div className="flex rounded-xl border border-sand-200 overflow-hidden divide-x divide-sand-200">
               <Kpi label="Sends · 365d" value={aggregates.sendCount} accentColor={c.brand.accent} />
               <Kpi
                 label="Avg open rate"
@@ -680,8 +681,8 @@ function Kpi({
   accentColor: string;
 }) {
   return (
-    <div className="rounded-xl border border-sand-200/80 bg-white px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-sand-500">{label}</p>
+    <div className="flex-1 bg-white px-4 py-3 min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-sand-500 truncate">{label}</p>
       <p
         className="mt-1 text-2xl tabular-nums leading-none font-semibold"
         style={{ color: color === "good" ? accentColor : "#1a1a1a", fontFamily: "inherit" }}

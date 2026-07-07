@@ -446,9 +446,9 @@ export default function GenerateView() {
 
           {/* Tab content */}
           {tab === "new" ? (
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-stretch">
-              {/* Generate card */}
-              <div className="bg-white rounded-2xl shadow-sm border border-[#e8e3dc] p-7">
+            <div className="flex gap-6 items-stretch">
+              {/* Generate card — flex-1 so it fills space left by CI card */}
+              <div className="flex-1 min-w-0 bg-white rounded-2xl shadow-sm border border-[#e8e3dc] p-7">
                 <div className="mb-6">
                   <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-2">
                     Community
@@ -547,18 +547,29 @@ export default function GenerateView() {
                 )}
               </div>
 
-              {/* Community Intelligence sidebar — stretches to match the generate card height */}
-              {selectedCommunity && (
-                <div className="bg-white rounded-2xl shadow-sm border border-[#e8e3dc] overflow-hidden flex flex-col">
-                  <div className="px-5 py-4 border-b border-[#f0ede7] shrink-0">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">Community Intelligence</p>
-                    <p className="text-base font-semibold text-[#1F4538] mt-0.5">{selectedCommunity.displayName}</p>
-                  </div>
-                  <div className="flex-1 overflow-auto">
-                    <CommunityIntelligence communitySlug={selectedCommunity.slug} />
-                  </div>
+              {/* Community Intelligence sidebar — slides in when a community is selected */}
+              <div
+                className="overflow-hidden shrink-0"
+                style={{
+                  width: selectedCommunity ? 380 : 0,
+                  opacity: selectedCommunity ? 1 : 0,
+                  transition: "width 420ms cubic-bezier(0.4,0,0.2,1), opacity 320ms ease",
+                }}
+              >
+                <div style={{ width: 380 }} className="h-full">
+                  {selectedCommunity && (
+                    <div className="bg-white rounded-2xl shadow-sm border border-[#e8e3dc] overflow-hidden flex flex-col h-full">
+                      <div className="px-5 py-4 border-b border-[#f0ede7] shrink-0">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">Community Intelligence</p>
+                        <p className="text-base font-semibold text-[#1F4538] mt-0.5">{selectedCommunity.displayName}</p>
+                      </div>
+                      <div className="flex-1 overflow-auto">
+                        <CommunityIntelligence communitySlug={selectedCommunity.slug} />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           ) : (
             <SavedDraftsView />

@@ -44,8 +44,8 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
 
         {/* Auto-save status — small, in the left area, away from Save Draft */}
         {autoSaveLabel && (
-          <span className="text-[10px] text-[#9aaba4] italic shrink-0 flex items-center gap-1">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+          <span className="text-xs text-[#7a8c85] italic shrink-0 flex items-center gap-1.5 bg-[#f0ede7] border border-[#e8e3dc] rounded-md px-2.5 py-1">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
               <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
               <path d="M12 2a10 10 0 0 1 10 10"/>
             </svg>
@@ -131,7 +131,13 @@ export default function EditorLayout() {
     const id = setInterval(async () => {
       if (!isSavingRef.current && fieldsRef2.current) {
         setAutoSaveLabel("Auto-saving…");
+        const start = Date.now();
         await autoSave();
+        // Show indicator for at least 1 second so it's readable
+        const elapsed = Date.now() - start;
+        if (elapsed < 1000) {
+          await new Promise<void>((r) => setTimeout(r, 1000 - elapsed));
+        }
         setAutoSaveLabel(null);
       }
     }, 5000);

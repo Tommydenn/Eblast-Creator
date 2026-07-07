@@ -412,12 +412,43 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setAgentLoop(data.agentLoop ?? null);
       setSubjectSpecialist(data.subjectSpecialist ?? null);
       setPastSendsContext(data.pastSendsContext ?? []);
-      setDraftId(null);
       setIsSaved(false);
       setUndoStack([]);
       setRedoStack([]);
       setActiveSection("hero");
       setStage("editing");
+
+      // Eagerly claim a draftId and write it to localStorage so the resume
+      // banner always points to the draft just generated, not a previous one.
+      const newDraftId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      setDraftId(newDraftId);
+      try { localStorage.setItem("eblast_lastDraftId", newDraftId); } catch {}
+
+      // Immediately persist to DB so resume works even if the user navigates
+      // away before the first 5-second autoSave fires.
+      const com = communityRef.current;
+      if (com) {
+        const initDraft: SavedDraft = {
+          id: newDraftId,
+          communitySlug: com.slug,
+          communityName: com.displayName,
+          savedAt: new Date().toISOString(),
+          subject: newFields.subject,
+          fields: newFields,
+          images: newImages,
+          imageBank: bank,
+          imageCount: (newImages.hero ? 1 : 0) + (newImages.secondary ? 1 : 0) + newImages.gallery.length,
+          review: data.review ?? null,
+          agentLoop: data.agentLoop ?? null,
+          pastSendsContext: data.pastSendsContext ?? [],
+          subjectSpecialist: data.subjectSpecialist ?? null,
+        };
+        fetch("/api/saved-drafts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ draft: initDraft }),
+        }).catch(() => null);
+      }
     } catch (e: any) {
       if (e.name === "AbortError") {
         setStage("idle");
@@ -619,7 +650,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Discard ──────────────────────────────────────────────────────────────
   const discard = useCallback(() => {
-    // Fire-and-forget: persist the current state so the user can resume later
+    // Fire-and-forget: persist the current state so the user can resume later.
+    // Only write localStorage after the save confirms success (avoids pointing
+    // to an ID that never made it into the DB).
     const payload = buildDraftPayload();
     if (payload) {
       const { id, draft } = payload;
@@ -627,8 +660,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ draft }),
+      }).then((r) => r.json()).then((data) => {
+        if (data.ok) {
+          try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
+        }
       }).catch(() => null);
-      try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
     }
     setStage("idle");
     setFields_(null);

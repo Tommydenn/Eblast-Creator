@@ -9,9 +9,10 @@ interface ToolbarProps {
   brandColors: string[];
   brandFonts: string[];
   onInput: () => void;
+  className?: string;
 }
 
-export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput }: ToolbarProps) {
+export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, className }: ToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
   const [fontOpen, setFontOpen] = useState(false);
   const [hasEyeDropper, setHasEyeDropper] = useState(false);
@@ -70,7 +71,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput }: T
   }
 
   return (
-    <div className="flex items-center gap-0.5 px-2 py-1.5 bg-[#f5f3ef] rounded-t-lg border border-b-0 border-[#ddd8d0] flex-wrap">
+    <div className={className ?? "flex items-center gap-0.5 px-2 py-1.5 bg-[#f5f3ef] rounded-t-lg border border-b-0 border-[#ddd8d0] flex-wrap"}>
       {/* Bold / Italic / Underline */}
       <button
         type="button"

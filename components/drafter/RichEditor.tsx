@@ -76,7 +76,7 @@ export function RichInput({
         const text = e.clipboardData.getData("text/plain");
         document.execCommand("insertText", false, text);
       }}
-      className={className}
+      className={`rich-input-display${className ? ` ${className}` : ""}`}
       style={{ outline: "none", minHeight: "2rem" }}
     />
   );
@@ -98,6 +98,8 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
   const [fontSizeOpen, setFontSizeOpen] = useState(false);
   const [hasEyeDropper, setHasEyeDropper] = useState(false);
   const [customColors, setCustomColors] = useState<string[]>([]);
+  const [currentFontSizePx, setCurrentFontSizePx] = useState<number | null>(null);
+  const [hexInput, setHexInput] = useState("");
   const colorPanelRef = useRef<HTMLDivElement>(null);
   const fontPanelRef = useRef<HTMLDivElement>(null);
   const fontSizePanelRef = useRef<HTMLDivElement>(null);
@@ -153,26 +155,47 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
       const pickedColor: string = result.sRGBHex;
       addCustomColor(pickedColor);
       setColorOpen(false);
-      // Avoid focus() or execCommand() entirely — both can freeze Chrome while
-      // the browser is still tearing down the eyedropper overlay. Instead use
-      // direct DOM span-wrapping which needs no focus or selection restore.
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          if (!savedRange || savedRange.collapsed) return;
-          const span = document.createElement("span");
-          span.style.color = pickedColor;
-          try {
-            savedRange.surroundContents(span);
-          } catch {
-            // Selection spans element boundaries; extract and re-insert
-            const frag = savedRange.extractContents();
-            span.appendChild(frag);
-            savedRange.insertNode(span);
-          }
-          onInput();
-        }, 0);
-      });
+      // Chrome on Windows freezes the browser during post-eyedropper teardown.
+      // A 1-second delay ensures teardown is fully complete before DOM mutation.
+      setTimeout(() => {
+        if (!savedRange || savedRange.collapsed) return;
+        const span = document.createElement("span");
+        span.style.color = pickedColor;
+        try {
+          savedRange.surroundContents(span);
+        } catch {
+          const frag = savedRange.extractContents();
+          span.appendChild(frag);
+          savedRange.insertNode(span);
+        }
+        onInput();
+      }, 1000);
     } catch { /* cancelled or unsupported */ }
+  }
+
+  function applyHexColor() {
+    let hex = hexInput.trim();
+    if (!hex.startsWith("#")) hex = "#" + hex;
+    if (!/^#[0-9A-Fa-f]{3}$/.test(hex) && !/^#[0-9A-Fa-f]{6}$/.test(hex)) return;
+    addCustomColor(hex);
+    exec("foreColor", hex);
+    setColorOpen(false);
+    setHexInput("");
+  }
+
+  function detectCurrentFontSize(): number | null {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let node: Node | null = sel.anchorNode;
+    while (node) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const fs = (node as HTMLElement).style.fontSize;
+        if (fs && fs.endsWith("px")) return parseInt(fs, 10);
+      }
+      if (node === editorRef.current) break;
+      node = node.parentNode;
+    }
+    return null;
   }
 
   // Font size — absolute px so sizes are consistent across all fields
@@ -346,18 +369,36 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
               ))}
             </div>
 
+            {/* Hex color input */}
+            <div className="flex items-center gap-1 mt-2 border-t border-[#f0ede7] pt-2">
+              <input
+                type="text"
+                placeholder="#hex"
+                value={hexInput}
+                onChange={(e) => setHexInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyHexColor(); } }}
+                className="flex-1 text-[10px] border border-[#ddd8d0] rounded px-1.5 py-1 outline-none focus:border-[#1F4538] text-[#1a1a1a]"
+                style={{ minWidth: 0 }}
+              />
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); applyHexColor(); }}
+                className="text-[10px] px-1.5 py-1 rounded bg-[#f0f5f2] text-[#1F4538] font-medium hover:bg-[#ddeee6] transition-colors shrink-0"
+              >Apply</button>
+            </div>
+
             {hasEyeDropper && (
               <button
                 type="button"
                 onClick={eyedrop}
-                className="w-full flex items-center gap-1.5 text-[10px] text-[#7a8c85] hover:text-[#1F4538] px-1 py-1.5 rounded hover:bg-[#f0f5f2] transition-colors border-t border-[#f0ede7] mt-1"
+                className="w-full flex items-center gap-1.5 text-[10px] text-[#7a8c85] hover:text-[#1F4538] px-1 py-1.5 rounded hover:bg-[#f0f5f2] transition-colors mt-1"
                 title="Pick color from screen"
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M2 22l10-10M20.5 3.5a2.121 2.121 0 0 0-3 0l-1 1-3-3 1-1a2.121 2.121 0 0 1 3 0z"/>
                   <path d="M15 8l-9 9 3 3 9-9"/>
                 </svg>
-                Eyedropper
+                Eyedropper (picks from screen)
               </button>
             )}
 
@@ -420,15 +461,22 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
       <div className="relative" ref={fontSizePanelRef}>
         <button
           type="button"
-          onMouseDown={(e) => { e.preventDefault(); setFontSizeOpen((v) => !v); setColorOpen(false); setFontOpen(false); }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const opening = !fontSizeOpen;
+            setFontSizeOpen(opening);
+            setColorOpen(false);
+            setFontOpen(false);
+            if (opening) setCurrentFontSizePx(detectCurrentFontSize());
+          }}
           className="h-6 px-2 rounded text-[10px] font-medium text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center gap-1"
-          title="Font size (relative scaling)"
+          title="Font size"
         >
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <text x="3" y="18" fontSize="14" fill="currentColor" stroke="none" style={{ fontFamily: "inherit" }}>A</text>
             <text x="13" y="22" fontSize="9" fill="currentColor" stroke="none" style={{ fontFamily: "inherit" }}>A</text>
           </svg>
-          Size
+          {currentFontSizePx ? `${currentFontSizePx}px` : "Size"}
           <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
 
@@ -438,10 +486,12 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
               <button
                 key={opt.px}
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); applyFontSize(opt.px); }}
-                className="w-full text-left px-3 py-1.5 hover:bg-[#f0f5f2] transition-colors border-b border-[#f5f3ef] last:border-0"
+                onMouseDown={(e) => { e.preventDefault(); applyFontSize(opt.px); setCurrentFontSizePx(opt.px); }}
+                className={`w-full text-left px-3 py-1.5 transition-colors border-b border-[#f5f3ef] last:border-0 ${
+                  currentFontSizePx === opt.px ? "bg-[#f0f5f2] text-[#1F4538] font-semibold" : "hover:bg-[#f0f5f2]"
+                }`}
               >
-                <span className="text-[#1a1a1a]" style={{ fontSize: `${Math.min(opt.px, 16)}px` }}>{opt.label}</span>
+                <span style={{ fontSize: `${Math.min(opt.px, 16)}px` }}>{opt.label}</span>
               </button>
             ))}
           </div>

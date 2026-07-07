@@ -135,3 +135,17 @@
   100% { opacity: 0; transform: translateY(8px); }
 }
 .eb-toast { animation: eb-toast 3.5s ease-in-out both; }
+
+/* Sidebar RichInput: suppress all inline formatting so toolbar edits don't
+   visually affect the sidebar fields. HTML is preserved in innerHTML for
+   email output — only the visual rendering is locked down. */
+.rich-input-display,
+.rich-input-display * {
+  font-size: 14px !important;
+  color: #1a1a1a !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+  text-decoration: none !important;
+  font-family: inherit !important;
+  background: transparent !important;
+}

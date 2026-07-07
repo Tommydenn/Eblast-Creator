@@ -464,25 +464,36 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ draft: initDraft }),
         })
-          .then(() => {
-            // Save all images separately — bank + slot images
-            const entries: Array<{ idx: number; url: string }> = [];
-            bank.forEach((url, i) => { if (url) entries.push({ idx: i, url }); });
-            if (newImages.hero?.url) entries.push({ idx: -1, url: newImages.hero.url });
-            if (newImages.hero?.originalUrl) entries.push({ idx: -2, url: newImages.hero.originalUrl });
-            if (newImages.secondary?.url) entries.push({ idx: -3, url: newImages.secondary.url });
-            if (newImages.secondary?.originalUrl) entries.push({ idx: -4, url: newImages.secondary.originalUrl });
+          .then(async () => {
+            // Save slot images first (hero/secondary/gallery) — must always persist
+            const slotEntries: Array<{ idx: number; url: string }> = [];
+            if (newImages.hero?.url) slotEntries.push({ idx: -1, url: newImages.hero.url });
+            if (newImages.hero?.originalUrl) slotEntries.push({ idx: -2, url: newImages.hero.originalUrl });
+            if (newImages.secondary?.url) slotEntries.push({ idx: -3, url: newImages.secondary.url });
+            if (newImages.secondary?.originalUrl) slotEntries.push({ idx: -4, url: newImages.secondary.originalUrl });
             newImages.gallery.forEach((g, i) => {
-              if (g.url) entries.push({ idx: -(10 + i * 2), url: g.url });
-              if (g.originalUrl) entries.push({ idx: -(11 + i * 2), url: g.originalUrl });
+              if (g.url) slotEntries.push({ idx: -(10 + i * 2), url: g.url });
+              if (g.originalUrl) slotEntries.push({ idx: -(11 + i * 2), url: g.originalUrl });
+            });
+            if (slotEntries.length > 0) {
+              await fetch(`/api/saved-drafts/${newDraftId}/images`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ images: slotEntries }),
+              }).catch(() => null);
+            }
+            // Save imageBank HTTPS URLs only — skip data URIs (too large for 4.5 MB Vercel limit)
+            const bankEntries: Array<{ idx: number; url: string }> = [];
+            bank.forEach((url, i) => {
+              if (url && url.startsWith("http")) bankEntries.push({ idx: i, url });
             });
             const CHUNK = 20;
             const doChunk = (offset: number): Promise<void> => {
-              if (offset >= entries.length) return Promise.resolve();
+              if (offset >= bankEntries.length) return Promise.resolve();
               return fetch(`/api/saved-drafts/${newDraftId}/images`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ images: entries.slice(offset, offset + CHUNK) }),
+                body: JSON.stringify({ images: bankEntries.slice(offset, offset + CHUNK) }),
               }).then(() => doChunk(offset + CHUNK));
             };
             return doChunk(0);
@@ -638,24 +649,35 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const imgs = imagesRef.current;
     const bank = imageBankRef.current;
 
-    const entries: Array<{ idx: number; url: string }> = [];
-    bank.forEach((url, i) => { if (url) entries.push({ idx: i, url }); });
-    if (imgs.hero?.url) entries.push({ idx: -1, url: imgs.hero.url });
-    if (imgs.hero?.originalUrl) entries.push({ idx: -2, url: imgs.hero.originalUrl });
-    if (imgs.secondary?.url) entries.push({ idx: -3, url: imgs.secondary.url });
-    if (imgs.secondary?.originalUrl) entries.push({ idx: -4, url: imgs.secondary.originalUrl });
+    // Save slot images first (hero/secondary/gallery) — small HTTPS URLs, must always persist
+    const slotEntries: Array<{ idx: number; url: string }> = [];
+    if (imgs.hero?.url) slotEntries.push({ idx: -1, url: imgs.hero.url });
+    if (imgs.hero?.originalUrl) slotEntries.push({ idx: -2, url: imgs.hero.originalUrl });
+    if (imgs.secondary?.url) slotEntries.push({ idx: -3, url: imgs.secondary.url });
+    if (imgs.secondary?.originalUrl) slotEntries.push({ idx: -4, url: imgs.secondary.originalUrl });
     imgs.gallery.forEach((g, i) => {
-      if (g.url) entries.push({ idx: -(10 + i * 2), url: g.url });
-      if (g.originalUrl) entries.push({ idx: -(11 + i * 2), url: g.originalUrl });
+      if (g.url) slotEntries.push({ idx: -(10 + i * 2), url: g.url });
+      if (g.originalUrl) slotEntries.push({ idx: -(11 + i * 2), url: g.originalUrl });
     });
-
-    if (entries.length === 0) return;
-    const CHUNK = 20;
-    for (let i = 0; i < entries.length; i += CHUNK) {
+    if (slotEntries.length > 0) {
       await fetch(`/api/saved-drafts/${draftId}/images`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: entries.slice(i, i + CHUNK) }),
+        body: JSON.stringify({ images: slotEntries }),
+      }).catch(() => null);
+    }
+
+    // Save imageBank — skip data URIs (too large for 4.5 MB Vercel limit), HTTPS only
+    const bankEntries: Array<{ idx: number; url: string }> = [];
+    bank.forEach((url, i) => {
+      if (url && url.startsWith("http")) bankEntries.push({ idx: i, url });
+    });
+    const CHUNK = 20;
+    for (let i = 0; i < bankEntries.length; i += CHUNK) {
+      await fetch(`/api/saved-drafts/${draftId}/images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: bankEntries.slice(i, i + CHUNK) }),
       }).catch(() => null);
     }
   }, []);

@@ -2,6 +2,86 @@
 
 import React, { useRef, useEffect, useState } from "react";
 
+// ── RichInput — single-line contentEditable for toolbar-compatible fields ──────
+
+interface RichInputProps {
+  value: string;
+  onValueChange: (html: string) => void;
+  placeholder?: string;
+  className?: string;
+  activeEditorRef: React.MutableRefObject<HTMLDivElement | null>;
+  activeEditorCallback: React.MutableRefObject<(() => void) | null>;
+}
+
+export function RichInput({
+  value,
+  onValueChange,
+  placeholder,
+  className,
+  activeEditorRef,
+  activeEditorCallback,
+}: RichInputProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const isFocused = useRef(false);
+  // Keep callback ref stable so readValue always calls the latest setter
+  const onValueChangeRef = useRef(onValueChange);
+  useEffect(() => { onValueChangeRef.current = onValueChange; });
+
+  // Initialize DOM on mount
+  useEffect(() => {
+    if (ref.current) {
+      document.execCommand("defaultParagraphSeparator", false, "div");
+      ref.current.innerHTML = value ?? "";
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync external value changes (e.g. AI refine) without clobbering user edits
+  useEffect(() => {
+    if (!isFocused.current && ref.current) {
+      ref.current.innerHTML = value ?? "";
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  function readValue() {
+    if (!ref.current) return;
+    let html = ref.current.innerHTML;
+    // Strip any div wrapper execCommand may add for paragraph separation
+    const divMatch = html.match(/^<div>([\s\S]*)<\/div>$/i);
+    if (divMatch) html = divMatch[1];
+    html = html.replace(/<br\s*\/?>$/i, "").trim();
+    onValueChangeRef.current(html);
+  }
+
+  return (
+    <div
+      ref={ref}
+      contentEditable={true}
+      suppressContentEditableWarning={true}
+      data-placeholder={placeholder ?? ""}
+      onFocus={() => {
+        isFocused.current = true;
+        activeEditorRef.current = ref.current;
+        activeEditorCallback.current = readValue;
+      }}
+      onBlur={() => {
+        isFocused.current = false;
+        readValue();
+      }}
+      onInput={readValue}
+      onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+      onPaste={(e) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData("text/plain");
+        document.execCommand("insertText", false, text);
+      }}
+      className={className}
+      style={{ outline: "none", minHeight: "2rem" }}
+    />
+  );
+}
+
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
 interface ToolbarProps {
@@ -18,6 +98,8 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
   const [hasEyeDropper, setHasEyeDropper] = useState(false);
   const colorPanelRef = useRef<HTMLDivElement>(null);
   const fontPanelRef = useRef<HTMLDivElement>(null);
+  // Saved selection range so eyedropper can restore it after picking
+  const savedRangeRef = useRef<Range | null>(null);
 
   useEffect(() => {
     setHasEyeDropper("EyeDropper" in window);
@@ -40,28 +122,57 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
     onInput();
   }
 
+  function saveSelectionRange() {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+    }
+  }
+
   async function eyedrop() {
     try {
       const result = await new (window as any).EyeDropper().open();
-      exec("foreColor", result.sRGBHex);
       setColorOpen(false);
-    } catch { /* cancelled */ }
+      // Restore focus + selection, then apply the picked color
+      if (editorRef.current) {
+        editorRef.current.focus();
+        if (savedRangeRef.current) {
+          const sel = window.getSelection();
+          sel?.removeAllRanges();
+          sel?.addRange(savedRangeRef.current);
+        }
+      }
+      exec("foreColor", result.sRGBHex);
+    } catch { /* cancelled or unsupported */ }
   }
 
-  // Color sections: brand colors (up to 3) + basic palette
-  const brandSection = brandColors.slice(0, 3);
+  // All brand colors — primary, accent, background, secondary, plus supporting[]
+  const uniqueColors: string[] = [];
+  const seenColors = new Set<string>();
+  for (const c of brandColors) {
+    if (c && !seenColors.has(c.toLowerCase())) {
+      seenColors.add(c.toLowerCase());
+      uniqueColors.push(c);
+    }
+  }
   const basicColors = ["#1a1a1a", "#ffffff", "#c0392b", "#2e86c1", "#27ae60", "#f39c12", "#8e44ad"];
 
-  // Font options: community brand fonts first, then standard
+  // Font options: brand fonts first, then email template font (script/cursive), then standard
+  const SCRIPT_FONT = "'Brush Script MT', 'Lucida Handwriting', cursive";
   const standardFonts = ["Arial", "Georgia", "Times New Roman", "Verdana", "Trebuchet MS"];
   const seenFonts = new Set<string>();
-  const fontOptions: Array<{ name: string; label: string; isBrand: boolean }> = [];
+  const fontOptions: Array<{ name: string; label: string; isBrand: boolean; isScript?: boolean }> = [];
   for (const f of brandFonts) {
     const key = f.toLowerCase();
     if (!seenFonts.has(key)) {
       seenFonts.add(key);
-      fontOptions.push({ name: f, label: f.split(",")[0].trim(), isBrand: true });
+      fontOptions.push({ name: f, label: f.split(",")[0].trim().replace(/['"]/g, ""), isBrand: true });
     }
+  }
+  // Always include the email template's script/cursive font
+  if (!seenFonts.has(SCRIPT_FONT.toLowerCase())) {
+    seenFonts.add(SCRIPT_FONT.toLowerCase());
+    fontOptions.push({ name: SCRIPT_FONT, label: "Script / Cursive", isBrand: false, isScript: true });
   }
   for (const f of standardFonts) {
     const key = f.toLowerCase();
@@ -102,7 +213,12 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
       <div className="relative" ref={colorPanelRef}>
         <button
           type="button"
-          onMouseDown={(e) => { e.preventDefault(); setColorOpen((v) => !v); setFontOpen(false); }}
+          onMouseDown={(e) => {
+            saveSelectionRange();
+            e.preventDefault();
+            setColorOpen((v) => !v);
+            setFontOpen(false);
+          }}
           className="w-7 h-6 rounded text-[13px] font-bold text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center justify-center"
           title="Font color"
         >
@@ -110,12 +226,12 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
         </button>
 
         {colorOpen && (
-          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 p-2.5 w-44">
-            {brandSection.length > 0 && (
+          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 p-2.5 w-52">
+            {uniqueColors.length > 0 && (
               <>
                 <p className="text-[9px] font-semibold uppercase tracking-wider text-[#9aaba4] mb-1.5">Brand colors</p>
-                <div className="flex gap-1.5 mb-2.5">
-                  {brandSection.map((hex) => (
+                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                  {uniqueColors.map((hex) => (
                     <button
                       key={hex}
                       type="button"
@@ -148,7 +264,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
             {hasEyeDropper && (
               <button
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); eyedrop(); }}
+                onClick={eyedrop}
                 className="w-full flex items-center gap-1.5 text-[10px] text-[#7a8c85] hover:text-[#1F4538] px-1 py-1.5 rounded hover:bg-[#f0f5f2] transition-colors border-t border-[#f0ede7] mt-1"
                 title="Pick color from screen"
               >
@@ -193,7 +309,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
         </button>
 
         {fontOpen && (
-          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 overflow-hidden w-48">
+          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 overflow-hidden w-52">
             {fontOptions.map((f) => (
               <button
                 key={f.name}
@@ -205,6 +321,9 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
                 <span className="truncate">{f.label}</span>
                 {f.isBrand && (
                   <span className="text-[9px] text-[#1F4538] font-semibold uppercase tracking-wider ml-2 shrink-0">Brand</span>
+                )}
+                {f.isScript && (
+                  <span className="text-[9px] text-[#9aaba4] font-semibold uppercase tracking-wider ml-2 shrink-0">Email</span>
                 )}
               </button>
             ))}

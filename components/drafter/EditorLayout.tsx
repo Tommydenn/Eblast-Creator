@@ -8,8 +8,66 @@ import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
 import ApprovalModal from "./ApprovalModal";
 
+// Error code generator — gives each error a short stable identifier
+function errorCode(msg: string): string {
+  let h = 0;
+  for (let i = 0; i < msg.length; i++) h = (Math.imul(31, h) + msg.charCodeAt(i)) | 0;
+  return "ERR_" + Math.abs(h).toString(36).toUpperCase().slice(0, 5);
+}
+
 function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSaveLabel: string | null }) {
-  const { community, fields, isSaving, saveNotice, isPushing, pushResult, pushError, save, push, discard, dismissPushResult } = useDraft();
+  const {
+    community,
+    fields,
+    isSaving,
+    saveError,
+    isPushing,
+    pushResult,
+    pushError,
+    approvalStatus,
+    save,
+    push,
+    discard,
+    dismissPushResult,
+  } = useDraft();
+
+  // ── Button flash states ────────────────────────────────────────────────────
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [pushFlash, setPushFlash] = useState(false);
+  const [approvalFlash, setApprovalFlash] = useState(false);
+
+  // Track isSaving transitions to detect successful saves
+  const prevIsSaving = useRef(false);
+  useEffect(() => {
+    if (prevIsSaving.current && !isSaving && !saveError) {
+      setSavedFlash(true);
+      const id = setTimeout(() => setSavedFlash(false), 2500);
+      return () => clearTimeout(id);
+    }
+    prevIsSaving.current = isSaving;
+  }, [isSaving, saveError]);
+
+  // Track isPushing transitions to detect successful pushes
+  const prevIsPushing = useRef(false);
+  useEffect(() => {
+    if (prevIsPushing.current && !isPushing && !pushError) {
+      setPushFlash(true);
+      const id = setTimeout(() => setPushFlash(false), 2500);
+      return () => clearTimeout(id);
+    }
+    prevIsPushing.current = isPushing;
+  }, [isPushing, pushError]);
+
+  // Track approvalStatus transitions to detect successful approval sends
+  const prevApprovalStatus = useRef(approvalStatus);
+  useEffect(() => {
+    if (!prevApprovalStatus.current && approvalStatus) {
+      setApprovalFlash(true);
+      const id = setTimeout(() => setApprovalFlash(false), 2500);
+      return () => clearTimeout(id);
+    }
+    prevApprovalStatus.current = approvalStatus;
+  }, [approvalStatus]);
 
   return (
     <div className="h-14 flex items-center justify-between px-4 bg-white border-b border-[#e8e3dc] shrink-0 gap-3">
@@ -21,7 +79,6 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
 
         <div className="w-px h-5 bg-[#e8e3dc] shrink-0" />
 
-        {/* New Draft — visible, prominent button */}
         <button
           onClick={discard}
           className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1.5 transition-all"
@@ -33,7 +90,6 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
           New Draft
         </button>
 
-        {/* Community name + subject on two stacked lines */}
         {community && (
           <div className="flex flex-col min-w-0 leading-none">
             <span className="text-xs font-semibold text-[#1a1a1a] truncate">{community.displayName}</span>
@@ -43,7 +99,6 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
           </div>
         )}
 
-        {/* Auto-save status — small, in the left area, away from Save Draft */}
         {autoSaveLabel && (
           <span className="text-xs text-[#7a8c85] italic shrink-0 flex items-center gap-1.5 bg-[#f0ede7] border border-[#e8e3dc] rounded-md px-2.5 py-1">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
@@ -57,11 +112,8 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
 
       {/* Right: action buttons */}
       <div className="flex items-center gap-2 shrink-0">
-        {saveNotice && (
-          <span className="text-xs text-emerald-700 font-medium">{saveNotice}</span>
-        )}
-
-        {pushResult && !pushError && (
+        {/* Push success banner */}
+        {pushResult && !pushError && !pushFlash && (
           <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
             Pushed to HubSpot
@@ -71,44 +123,87 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
           </div>
         )}
 
-        {pushError && (
-          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 max-w-[200px] truncate" title={pushError}>
-            {pushError}
-          </div>
-        )}
+        {/* Save Draft button + error */}
+        <div className="relative">
+          <button
+            onClick={save}
+            disabled={isSaving}
+            className={[
+              "text-xs font-medium border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 bg-white",
+              savedFlash
+                ? "text-emerald-700 border-emerald-300 bg-emerald-50"
+                : "text-[#5a6b63] hover:text-[#1F4538] border-[#ddd8d0] hover:border-[#1F4538]/40",
+            ].join(" ")}
+          >
+            {isSaving ? "Saving…" : savedFlash ? (
+              <span className="flex items-center gap-1">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Saved
+              </span>
+            ) : "Save Draft"}
+          </button>
+          {saveError && (
+            <div className="absolute top-full right-0 mt-1.5 z-50 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shadow-md w-64">
+              <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-0.5">{errorCode(saveError)}</p>
+              <p className="text-xs text-red-700">{saveError}</p>
+            </div>
+          )}
+        </div>
 
-        <button
-          onClick={save}
-          disabled={isSaving}
-          className="text-xs font-medium text-[#5a6b63] hover:text-[#1F4538] border border-[#ddd8d0] hover:border-[#1F4538]/40 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 bg-white"
-        >
-          {isSaving ? "Saving…" : "Save Draft"}
-        </button>
-
+        {/* Send for Approval button */}
         <button
           onClick={onApproval}
-          className="text-xs font-medium text-[#1F4538] border border-[#1F4538]/40 hover:bg-[#1F4538]/5 rounded-lg px-3 py-1.5 transition-colors"
+          className={[
+            "text-xs font-medium border rounded-lg px-3 py-1.5 transition-colors",
+            approvalFlash
+              ? "text-emerald-700 border-emerald-300 bg-emerald-50"
+              : "text-[#1F4538] border-[#1F4538]/40 hover:bg-[#1F4538]/5",
+          ].join(" ")}
         >
-          Send for Approval
+          {approvalFlash ? (
+            <span className="flex items-center gap-1">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Sent
+            </span>
+          ) : "Send for Approval"}
         </button>
 
-        <button
-          onClick={push}
-          disabled={isPushing}
-          className="text-xs font-semibold text-white bg-[#1F4538] hover:bg-[#173829] rounded-lg px-4 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-        >
-          {isPushing ? (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10"/></svg>
-              Pushing…
-            </>
-          ) : (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              Push to HubSpot
-            </>
+        {/* Push to HubSpot button + error */}
+        <div className="relative">
+          <button
+            onClick={push}
+            disabled={isPushing}
+            className={[
+              "text-xs font-semibold rounded-lg px-4 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5",
+              pushFlash
+                ? "text-emerald-700 border border-emerald-300 bg-emerald-50"
+                : "text-white bg-[#1F4538] hover:bg-[#173829]",
+            ].join(" ")}
+          >
+            {isPushing ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10"/></svg>
+                Pushing…
+              </>
+            ) : pushFlash ? (
+              <>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Pushed
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Push to HubSpot
+              </>
+            )}
+          </button>
+          {pushError && (
+            <div className="absolute top-full right-0 mt-1.5 z-50 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shadow-md w-72">
+              <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-0.5">{errorCode(pushError)}</p>
+              <p className="text-xs text-red-700">{pushError}</p>
+            </div>
           )}
-        </button>
+        </div>
       </div>
     </div>
   );
@@ -120,7 +215,6 @@ export default function EditorLayout() {
   const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
   const { isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, community } = useDraft();
 
-  // Stable refs so callbacks always read the latest values without stale closures
   const isSavingRef = useRef(isSaving);
   const fieldsRef2 = useRef(fields);
   const autoSaveRef = useRef(autoSave);
@@ -129,7 +223,6 @@ export default function EditorLayout() {
   autoSaveRef.current = autoSave;
 
   // Auto-save: fires 5 seconds AFTER the last user edit (debounce).
-  // lastEditTimestamp updates on every setField/setFields call.
   useEffect(() => {
     if (!lastEditTimestamp) return;
     const id = setTimeout(async () => {
@@ -145,19 +238,23 @@ export default function EditorLayout() {
       }
     }, 5000);
     return () => clearTimeout(id);
-  // Only re-run when a new edit happens — not when autoSave/isSaving change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastEditTimestamp]);
 
+  // All brand colors: primary, accent, background, secondary, plus supporting[]
   const brandColors = [
     community?.brand?.primary,
     community?.brand?.accent,
+    community?.brand?.background,
     community?.brand?.secondary,
+    ...(community?.brand?.supporting ?? []),
   ].filter(Boolean) as string[];
 
+  // Brand fonts: headline + body from community profile
   const brandFonts = [
     community?.brand?.fontHeadline,
     community?.brand?.fontBody,
+    community?.brand?.fonts?.script?.name,
   ].filter(Boolean) as string[];
 
   return (

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
+import { RichInput } from "@/components/drafter/RichEditor";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -16,7 +17,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
 export default function CtaSection() {
-  const { fields, setField } = useDraft();
+  const { fields, setField, activeEditorRef, activeEditorCallback } = useDraft();
   if (!fields) return null;
 
   return (
@@ -26,22 +27,24 @@ export default function CtaSection() {
       </div>
 
       <Field label="Call Button Label" hint="The primary action button at the bottom of the email">
-        <input
-          type="text"
+        <RichInput
           value={fields.ctaButtonLabel}
-          onChange={(e) => setField("ctaButtonLabel", e.target.value)}
-          className={baseInput}
+          onValueChange={(html) => setField("ctaButtonLabel", html)}
           placeholder="e.g. Call 920.504.3443"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
         />
       </Field>
 
       <Field label="Footer Name" hint="Defaults to the community display name">
-        <input
-          type="text"
+        <RichInput
           value={fields.footerName ?? ""}
-          onChange={(e) => setField("footerName", e.target.value || undefined)}
-          className={baseInput}
+          onValueChange={(html) => setField("footerName", html || undefined)}
           placeholder="Leave blank to use community name"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
         />
       </Field>
     </div>

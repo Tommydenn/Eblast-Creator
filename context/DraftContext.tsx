@@ -59,7 +59,7 @@ export type Stage = "idle" | "generating" | "editing";
 export type EditorSection = "subject" | "hero" | "story" | "images" | "cta";
 
 export interface CommunityAddress { street?: string; city?: string; state?: string; zip?: string }
-export interface CommunityBrand { primary: string; accent: string; background: string; fontHeadline: string; fontBody: string; secondary?: string }
+export interface CommunityBrand { primary: string; accent: string; background: string; fontHeadline: string; fontBody: string; secondary?: string; supporting?: string[]; textOnPrimary?: string; textOnAccent?: string; fonts?: { display?: { name: string; fallback: string }; body?: { name: string; fallback: string }; script?: { name: string; fallback: string } } }
 export interface CommunityLogo { url: string; variant: string; onColor: string }
 export interface CommunitySender { id: string; name: string; email: string; title?: string | null; isPrimary: boolean }
 export interface CommunityHubspot { acronym?: string; listId?: number; includedListIds?: number[]; excludedListIds?: number[] }

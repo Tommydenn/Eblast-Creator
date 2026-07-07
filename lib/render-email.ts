@@ -25,6 +25,28 @@ function renderBodyParagraph(p: string): string {
     .replace(/\son\w+='[^']*'/gi, "");
 }
 
+// Inline field: sanitize rich HTML from single-line contentEditable fields.
+// Strips div wrappers, dangerous elements, and event handlers — preserves
+// inline formatting (bold, italic, color spans, font spans).
+function renderInlineField(s: string): string {
+  if (!s) return "";
+  return s
+    .replace(/^<div>([\s\S]*)<\/div>$/i, "$1")
+    .replace(/<br\s*\/?>$/i, "")
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "")
+    .trim();
+}
+
+// Strip all HTML tags to get plain text — used for fields that feed into
+// computed values (phone replacement, toUpperCase, etc.).
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]+>/g, "");
+}
+
 // Relative luminance (0 = black, 1 = white). Returns null for malformed hex.
 function relLuminance(hex: string): number | null {
   const h = hex.replace("#", "");
@@ -171,7 +193,8 @@ export function buildEblastHtml(
   const formattedTracking = ctaPhone
     ? ctaPhone.replace(/\D/g, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1.$2.$3")
     : null;
-  const rawLabel = flyer.ctaButtonLabel || (formattedTracking ? `Call ${formattedTracking}` : "Call Us");
+  // Strip HTML from ctaButtonLabel before phone-replacement & uppercasing
+  const rawLabel = stripHtml(flyer.ctaButtonLabel) || (formattedTracking ? `Call ${formattedTracking}` : "Call Us");
   const ctaDisplayText = formattedTracking
     ? rawLabel.replace(/\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/, formattedTracking).toUpperCase()
     : rawLabel.toUpperCase();
@@ -208,18 +231,18 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
-            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel.toUpperCase())}</p>` : ""}
-            <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${escapeHtml(flyer.headline)}</p>
+            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
-              const len = flyer.scriptSubheadline.length;
-              const fontSize = len <= 18 ? 44 : len <= 28 ? 36 : len <= 38 ? 28 : 22;
-              return `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${fontSize}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${escapeHtml(flyer.scriptSubheadline)}</p>`;
+              const plainLen = stripHtml(flyer.scriptSubheadline).length;
+              const fontSize = plainLen <= 18 ? 44 : plainLen <= 28 ? 36 : plainLen <= 38 ? 28 : 22;
+              return `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${fontSize}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>`;
             })() : ""}
             ${eventDateLine ? `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto;">
               <tr>
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
-                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>
+                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
                   ${communityAddressLine ? `<p style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 1px; color: #E8DDC4; margin: 0;">${escapeHtml(communityAddressLine)}</p>` : ""}
                 </td>
               </tr>
@@ -240,8 +263,8 @@ export function buildEblastHtml(
   const story = `
   <tr data-section="Story">
     <td style="padding: 44px 36px 12px 36px;">
-      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${escapeHtml(flyer.storyEyebrow.toUpperCase())}</p>
-      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${escapeHtml(flyer.storyScriptTitle)}</p>` : ""}
+      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(flyer.storyEyebrow)}</p>
+      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
   <tr data-section="Story">
@@ -312,8 +335,8 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${brand.accent};">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${rsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${escapeHtml(rsvpLabel.toUpperCase())}</p>` : ""}
-            ${eventDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="eventDate">${escapeHtml(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${escapeHtml(flyer.eventTime)}</span>` : ""}</p>` : ""}
+            ${rsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            ${eventDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>` : ""}
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
                 <td width="${ctaBtnWidth}" align="center" style="background:${brand.primary};">
@@ -345,7 +368,7 @@ export function buildEblastHtml(
       </table>` : ""}
       <p style="font-family: ${brand.fontHeadline}; font-size: 26px; color: ${brand.primary}; margin: 0 0 10px 0;">Thank You!</p>
       ${primarySender?.name ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 2px 0;">${escapeHtml(primarySender.name)}</p>` : ""}
-      <p data-field="footerName" style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${escapeHtml(flyer.footerName ?? community.displayName)}</p>
+      <p data-field="footerName" style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${renderInlineField(flyer.footerName ?? community.displayName)}</p>
       ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" style="font-family: ${brand.fontBody}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${escapeHtml(primarySender.email)}</a>` : ""}
     </td>
   </tr>`;

@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect } from "react";
 import { useDraft } from "@/context/DraftContext";
+import { RichInput } from "@/components/drafter/RichEditor";
 
 function Field({
   label,
@@ -78,24 +79,24 @@ export default function StorySection() {
   return (
     <div className="space-y-5">
       <Field label="Section Eyebrow" hint="Small label above the story section">
-        <input
-          type="text"
+        <RichInput
           value={fields.storyEyebrow}
-          onChange={(e) => setField("storyEyebrow", e.target.value)}
-          className={baseInput}
+          onValueChange={(html) => setField("storyEyebrow", html)}
           placeholder="e.g. A Look Inside Our Kitchen"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
         />
       </Field>
 
       <Field label="Section Title" hint="Optional script-style title">
-        <input
-          type="text"
+        <RichInput
           value={fields.storyScriptTitle ?? ""}
-          onChange={(e) =>
-            setField("storyScriptTitle", e.target.value || undefined)
-          }
-          className={baseInput}
+          onValueChange={(html) => setField("storyScriptTitle", html || undefined)}
           placeholder="Optional script heading…"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
         />
       </Field>
 

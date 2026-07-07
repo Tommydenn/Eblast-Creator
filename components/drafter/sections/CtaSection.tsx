@@ -21,41 +21,11 @@ export default function CtaSection() {
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-[#7a8c85] leading-relaxed">
-        The final call-to-action section at the bottom of the email, with event details and a button.
-      </p>
+      <div className="rounded-lg bg-[#f5f3ef] border border-[#e8e3dc] px-3 py-2.5 text-xs text-[#7a8c85] leading-relaxed">
+        The bottom call-to-action section mirrors the event date, time, and RSVP label from the Hero tab. Edit those fields there to update both.
+      </div>
 
-      <Field label="CTA Eyebrow">
-        <input
-          type="text"
-          value={fields.ctaEyebrow}
-          onChange={(e) => setField("ctaEyebrow", e.target.value)}
-          className={baseInput}
-          placeholder="e.g. Reserve Your Seat"
-        />
-      </Field>
-
-      <Field label="CTA Date / Headline" hint="Shown large above the button">
-        <input
-          type="text"
-          value={fields.ctaHeadline}
-          onChange={(e) => setField("ctaHeadline", e.target.value)}
-          className={baseInput}
-          placeholder="e.g. Wednesday, May 13 · 2:00 PM"
-        />
-      </Field>
-
-      <Field label="CTA Subline" hint="Supporting line below the headline">
-        <input
-          type="text"
-          value={fields.ctaSubline}
-          onChange={(e) => setField("ctaSubline", e.target.value)}
-          className={baseInput}
-          placeholder="e.g. Seating is limited · RSVP required"
-        />
-      </Field>
-
-      <Field label="CTA Button Label">
+      <Field label="Call Button Label" hint="The primary action button at the bottom of the email">
         <input
           type="text"
           value={fields.ctaButtonLabel}
@@ -65,7 +35,7 @@ export default function CtaSection() {
         />
       </Field>
 
-      <Field label="Footer Name" hint="Defaults to community display name">
+      <Field label="Footer Name" hint="Defaults to the community display name">
         <input
           type="text"
           value={fields.footerName ?? ""}

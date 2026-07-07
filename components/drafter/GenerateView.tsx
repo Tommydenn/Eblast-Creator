@@ -295,6 +295,13 @@ function SavedDraftsView() {
 
 // ─── Main view ────────────────────────────────────────────────────────────────
 
+interface ResumeDraft {
+  id: string;
+  subject: string;
+  communityName: string;
+  savedAt: string;
+}
+
 export default function GenerateView() {
   const {
     communities,
@@ -304,14 +311,17 @@ export default function GenerateView() {
     cancelGenerate,
     isGenerating,
     generateError,
+    loadSavedDraft,
   } = useDraft();
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [tab, setTab] = useState<"new" | "drafts">("new");
+  const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
 
-  // Pre-select community from URL query param (e.g. from the communities page CTA)
+  // Pre-select community from URL query param
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const slug = params.get("community");
@@ -320,6 +330,44 @@ export default function GenerateView() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [communities.length]);
+
+  // Check localStorage for a draft the user can resume
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const lastId = localStorage.getItem("eblast_lastDraftId");
+      if (!lastId) return;
+      fetch(`/api/saved-drafts/${encodeURIComponent(lastId)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled || !data.ok || !data.draft?.fields) return;
+          const d = data.draft;
+          const ageMs = Date.now() - new Date(d.savedAt).getTime();
+          // Only offer resume if the draft is less than 7 days old
+          if (ageMs < 7 * 24 * 60 * 60 * 1000) {
+            setResumeDraft({ id: lastId, subject: d.subject, communityName: d.communityName, savedAt: d.savedAt });
+          }
+        })
+        .catch(() => null);
+    } catch {}
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleResume() {
+    if (!resumeDraft) return;
+    setIsResuming(true);
+    try {
+      const res = await fetch(`/api/saved-drafts/${encodeURIComponent(resumeDraft.id)}`);
+      const data = await res.json();
+      if (data.ok && data.draft) {
+        loadSavedDraft(data.draft);
+        setResumeDraft(null);
+      }
+    } finally {
+      setIsResuming(false);
+    }
+  }
 
   const selectedCommunity = communities.find((c) => c.slug === selectedCommunitySlug) ?? null;
 
@@ -369,9 +417,36 @@ export default function GenerateView() {
             </button>
           </div>
 
+          {/* Resume banner */}
+          {resumeDraft && (
+            <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-[#c8d8d0] bg-[#f0f5f2] px-5 py-3.5">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-[#1F4538]">Resume where you left off</p>
+                <p className="text-sm text-[#3d5249] truncate mt-0.5">
+                  {resumeDraft.communityName} · <span className="text-[#5a6b63]">{resumeDraft.subject || "(no subject)"}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setResumeDraft(null)}
+                  className="text-xs text-[#9aaba4] hover:text-[#5a6b63] transition-colors"
+                >
+                  Dismiss
+                </button>
+                <button
+                  onClick={handleResume}
+                  disabled={isResuming}
+                  className="text-xs font-semibold text-white bg-[#1F4538] hover:bg-[#173829] rounded-lg px-4 py-1.5 transition-colors disabled:opacity-50"
+                >
+                  {isResuming ? "Opening…" : "Resume Draft →"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Tab content */}
           {tab === "new" ? (
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-stretch">
               {/* Generate card */}
               <div className="bg-white rounded-2xl shadow-sm border border-[#e8e3dc] p-7">
                 <div className="mb-6">
@@ -472,14 +547,16 @@ export default function GenerateView() {
                 )}
               </div>
 
-              {/* Community Intelligence sidebar */}
+              {/* Community Intelligence sidebar — stretches to match the generate card height */}
               {selectedCommunity && (
-                <div className="bg-white rounded-2xl shadow-sm border border-[#e8e3dc] overflow-hidden">
-                  <div className="px-5 py-4 border-b border-[#f0ede7]">
+                <div className="bg-white rounded-2xl shadow-sm border border-[#e8e3dc] overflow-hidden flex flex-col">
+                  <div className="px-5 py-4 border-b border-[#f0ede7] shrink-0">
                     <p className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">Community Intelligence</p>
                     <p className="text-base font-semibold text-[#1F4538] mt-0.5">{selectedCommunity.displayName}</p>
                   </div>
-                  <CommunityIntelligence communitySlug={selectedCommunity.slug} />
+                  <div className="flex-1 overflow-auto">
+                    <CommunityIntelligence communitySlug={selectedCommunity.slug} />
+                  </div>
                 </div>
               )}
             </div>

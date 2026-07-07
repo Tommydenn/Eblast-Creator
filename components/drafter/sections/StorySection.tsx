@@ -37,6 +37,10 @@ export default function StorySection() {
     community?.brand?.secondary,
   ];
   const brandColors: string[] = rawColors.filter(Boolean) as string[];
+  const brandFonts: string[] = [
+    community?.brand?.fontHeadline,
+    community?.brand?.fontBody,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="space-y-5">
@@ -72,6 +76,7 @@ export default function StorySection() {
             setField("bodyParagraphs", paras.length > 0 ? paras : [""])
           }
           brandColors={brandColors}
+          brandFonts={brandFonts}
         />
       </Field>
 

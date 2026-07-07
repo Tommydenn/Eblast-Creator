@@ -21,16 +21,6 @@ export default function HeroSection() {
 
   return (
     <div className="space-y-5">
-      <Field label="Eyebrow" hint="Small uppercase label above the headline (e.g. RSVP REQUIRED)">
-        <input
-          type="text"
-          value={fields.eyebrow ?? ""}
-          onChange={(e) => setField("eyebrow", e.target.value)}
-          className={baseInput}
-          placeholder="e.g. RSVP REQUIRED"
-        />
-      </Field>
-
       <Field label="Headline">
         <input
           type="text"
@@ -41,7 +31,7 @@ export default function HeroSection() {
         />
       </Field>
 
-      <Field label="Script Subheadline" hint="Optional handwritten-style subheading">
+      <Field label="Script Subheadline" hint="Optional handwritten-style subheading beneath the headline">
         <input
           type="text"
           value={fields.scriptSubheadline ?? ""}
@@ -72,7 +62,7 @@ export default function HeroSection() {
         </Field>
       </div>
 
-      <Field label="RSVP Label" hint="Leave blank if no RSVP required">
+      <Field label="RSVP Label" hint="Shown at the top of the hero and CTA sections. Leave blank if no RSVP required.">
         <input
           type="text"
           value={fields.rsvpLabel ?? ""}
@@ -82,7 +72,7 @@ export default function HeroSection() {
         />
       </Field>
 
-      <Field label="CTA Button Label" hint="The phone/action button inside the hero">
+      <Field label="Call Button Label" hint="The phone/action button inside the hero">
         <input
           type="text"
           value={fields.ctaButtonLabel}

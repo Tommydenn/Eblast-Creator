@@ -59,6 +59,7 @@ export default async function CommunitiesPage() {
     const fam = c.brandFamily ?? c.shortName;
     grouped.set(fam, [...(grouped.get(fam) ?? []), c]);
   }
+  const sortedFamilies = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
 
   const total = communities.length;
   const withRecentSends = communities.filter((c) => statsByCommunity.has(c.id)).length;
@@ -77,9 +78,7 @@ export default async function CommunitiesPage() {
           <div>
             <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-clay-600">Control center</p>
             <h1 className="mt-1 font-serif text-[30px] font-bold leading-tight text-sand-900">Communities</h1>
-            <p className="mt-1.5 text-sm text-sand-500">
-              {total} communities · Great Lakes Management
-            </p>
+            <p className="mt-1.5 text-sm text-sand-500">{total} communities · Great Lakes Management</p>
           </div>
 
           {/* Inline health summary */}
@@ -90,139 +89,132 @@ export default async function CommunitiesPage() {
           </div>
         </div>
 
-        {/* Community groups */}
-        <div className="space-y-6">
-          {Array.from(grouped.entries())
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([family, list]) => (
-              <section key={family}>
-                <div className="mb-2 flex items-center gap-2">
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: FAMILY_COLORS[family] ?? DEFAULT_BAR_COLOR }}
-                  />
-                  <h2 className="text-[11px] font-semibold uppercase tracking-widest text-sand-600">
-                    {family}
-                  </h2>
-                  <span className="text-[11px] text-sand-400">
-                    {list.length === 1 ? "1 location" : `${list.length} locations`}
-                  </span>
-                </div>
+        {/* Single unified table — all communities, family header rows between groups.
+            One table means column widths are perfectly consistent across all families. */}
+        <div className="rounded-xl border border-sand-200 bg-white overflow-hidden">
+          <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "38%" }} />
+              <col style={{ width: "22%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "18%" }} />
+            </colgroup>
+            <thead>
+              <tr className="border-b border-sand-100 bg-sand-50/80 text-[10px] font-semibold uppercase tracking-widest text-sand-400">
+                <th className="px-5 py-3 text-left">Community</th>
+                <th className="px-4 py-3 text-left">Sender</th>
+                <th className="px-4 py-3 text-right">Sends</th>
+                <th className="px-4 py-3 text-right">Avg open</th>
+                <th className="px-5 py-3 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedFamilies.map(([family, list]) => {
+                const barColor = FAMILY_COLORS[family] ?? DEFAULT_BAR_COLOR;
+                return [
+                  /* Family header row */
+                  <tr key={`hdr-${family}`} className="bg-sand-50/50 border-t border-sand-100">
+                    <td colSpan={5} className="px-5 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: barColor }} />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-sand-600">{family}</span>
+                        <span className="text-[10px] text-sand-400">
+                          {list.length === 1 ? "1 location" : `${list.length} locations`}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>,
+                  /* Community rows */
+                  ...list.map((c) => {
+                    const stats = statsByCommunity.get(c.id);
+                    const openPct = stats?.avgOpenPct ?? null;
 
-                <div className="rounded-xl border border-sand-200 bg-white overflow-hidden">
-                  <table className="w-full table-fixed text-sm">
-                    <colgroup>
-                      <col style={{ width: "36%" }} />
-                      <col style={{ width: "22%" }} />
-                      <col style={{ width: "12%" }} />
-                      <col style={{ width: "12%" }} />
-                      <col style={{ width: "18%" }} />
-                    </colgroup>
-                    <thead>
-                      <tr className="border-b border-sand-100 bg-sand-50/70 text-[10px] font-semibold uppercase tracking-widest text-sand-400">
-                        <th className="px-5 py-2.5 text-left">Community</th>
-                        <th className="px-4 py-2.5 text-left">Sender</th>
-                        <th className="px-4 py-2.5 text-right">Sends</th>
-                        <th className="px-4 py-2.5 text-right">Avg open</th>
-                        <th className="px-5 py-2.5 text-left">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-sand-100">
-                      {list.map((c) => {
-                        const stats = statsByCommunity.get(c.id);
-                        const openPct = stats?.avgOpenPct ?? null;
-                        const barColor = FAMILY_COLORS[family] ?? DEFAULT_BAR_COLOR;
+                    const gaps: string[] = [];
+                    if (c.senders.length === 0) gaps.push("No sender");
+                    if ((c.hubspot.includedListIds?.length ?? 0) === 0 &&
+                        (c.hubspot.excludedListIds?.length ?? 0) === 0)
+                      gaps.push("No segments");
+                    if (!c.trackingPhone) gaps.push("No tracking #");
+                    const isReady = gaps.length === 0;
 
-                        const gaps: string[] = [];
-                        if (c.senders.length === 0) gaps.push("No sender");
-                        if ((c.hubspot.includedListIds?.length ?? 0) === 0 &&
-                            (c.hubspot.excludedListIds?.length ?? 0) === 0)
-                          gaps.push("No segments");
-                        if (!c.trackingPhone) gaps.push("No tracking #");
-                        const isReady = gaps.length === 0;
-
-                        return (
-                          <tr key={c.slug} className="group align-middle hover:bg-sand-50 transition-colors duration-100">
-                            <td className="px-5 py-3">
-                              <Link href={`/communities/${c.slug}`} className="block">
-                                <div className="flex items-center gap-3">
-                                  <span
-                                    className="h-6 w-[3px] shrink-0 rounded-full opacity-70"
-                                    style={{ backgroundColor: barColor }}
-                                    aria-hidden
-                                  />
-                                  <div className="min-w-0">
-                                    <div className="font-medium text-sand-900 group-hover:text-forest-700 transition-colors truncate">
-                                      {c.displayName}
-                                    </div>
-                                    <div className="text-[11px] text-sand-400 truncate">
-                                      {c.address.city
-                                        ? `${c.address.city}, ${c.address.state ?? ""}`
-                                        : "—"}
-                                      {c.careTypes && c.careTypes.length > 0 && (
-                                        <span className="ml-1.5">· {c.careTypes.join(" · ")}</span>
-                                      )}
-                                    </div>
-                                  </div>
+                    return (
+                      <tr key={c.slug} className="group border-t border-sand-100/70 hover:bg-sand-50 transition-colors duration-100">
+                        <td className="px-5 py-3">
+                          <Link href={`/communities/${c.slug}`} className="block">
+                            <div className="flex items-center gap-3">
+                              <span
+                                className="h-5 w-[3px] shrink-0 rounded-full opacity-60"
+                                style={{ backgroundColor: barColor }}
+                                aria-hidden
+                              />
+                              <div className="min-w-0">
+                                <div className="font-medium text-sand-900 group-hover:text-forest-700 transition-colors truncate">
+                                  {c.displayName}
                                 </div>
-                              </Link>
-                            </td>
-                            <td className="px-4 py-3">
-                              {c.senders[0] ? (
-                                <div className="min-w-0">
-                                  <div className="text-sm text-sand-900 truncate">{c.senders[0].name}</div>
-                                  {c.senders.length > 1 && (
-                                    <div className="text-[11px] text-sand-400">+{c.senders.length - 1} more</div>
+                                <div className="text-[11px] text-sand-400 truncate">
+                                  {c.address.city
+                                    ? `${c.address.city}, ${c.address.state ?? ""}`
+                                    : "—"}
+                                  {c.careTypes && c.careTypes.length > 0 && (
+                                    <span className="ml-1.5">· {c.careTypes.join(" · ")}</span>
                                   )}
                                 </div>
-                              ) : (
-                                <span className="text-xs text-sand-400">—</span>
+                              </div>
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3">
+                          {c.senders[0] ? (
+                            <div className="min-w-0">
+                              <div className="text-sm text-sand-900 truncate">{c.senders[0].name}</div>
+                              {c.senders.length > 1 && (
+                                <div className="text-[11px] text-sand-400">+{c.senders.length - 1} more</div>
                               )}
-                            </td>
-                            <td className="px-4 py-3 text-right tabular-nums text-sm text-sand-700">
-                              {stats?.sendCount ?? <span className="text-sand-300">0</span>}
-                            </td>
-                            <td className="px-4 py-3 text-right tabular-nums text-sm">
-                              {openPct !== null ? (
-                                <span
-                                  className={
-                                    openPct >= 40
-                                      ? "text-forest-700 font-medium"
-                                      : openPct >= 25
-                                      ? "text-sand-800"
-                                      : "text-clay-700"
-                                  }
-                                >
-                                  {openPct}%
-                                </span>
-                              ) : (
-                                <span className="text-sand-300">—</span>
-                              )}
-                            </td>
-                            <td className="px-5 py-3">
-                              {isReady ? (
-                                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-forest-700">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-forest-500 shrink-0" />
-                                  Ready
-                                </span>
-                              ) : (
-                                <span
-                                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-clay-700 cursor-help"
-                                  title={gaps.join(" · ")}
-                                >
-                                  <span className="h-1.5 w-1.5 rounded-full bg-clay-400 shrink-0" />
-                                  {gaps.length === 1 ? gaps[0] : `${gaps.length} gaps`}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-sand-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-sm text-sand-700">
+                          {stats?.sendCount ?? <span className="text-sand-300">0</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-sm">
+                          {openPct !== null ? (
+                            <span className={
+                              openPct >= 40 ? "text-forest-700 font-medium"
+                              : openPct >= 25 ? "text-sand-800"
+                              : "text-clay-700"
+                            }>
+                              {openPct}%
+                            </span>
+                          ) : (
+                            <span className="text-sand-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          {isReady ? (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-forest-700">
+                              <span className="h-1.5 w-1.5 rounded-full bg-forest-500 shrink-0" />
+                              Ready
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-clay-700 cursor-help"
+                              title={gaps.join(" · ")}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-clay-400 shrink-0" />
+                              {gaps.length === 1 ? gaps[0] : `${gaps.length} gaps`}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  }),
+                ];
+              })}
+            </tbody>
+          </table>
         </div>
       </main>
     </>

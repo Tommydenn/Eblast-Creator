@@ -7,56 +7,55 @@ import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
 import ApprovalModal from "./ApprovalModal";
 
-function TopBar({ onApproval }: { onApproval: () => void }) {
+function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSaveLabel: string | null }) {
   const { community, fields, isSaving, saveNotice, isPushing, pushResult, pushError, save, push, discard, dismissPushResult } = useDraft();
 
   return (
-    <div className="h-14 flex items-center justify-between px-5 bg-white border-b border-[#e8e3dc] shrink-0">
-      <div className="flex items-center gap-3 min-w-0">
-        {/* Brand */}
-        <Link href="/" className="flex items-center gap-2 mr-1">
+    <div className="h-14 flex items-center justify-between px-4 bg-white border-b border-[#e8e3dc] shrink-0 gap-3">
+      {/* Left: logo + New Draft button + community name / subject */}
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <Link href="/" className="shrink-0">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-[#1F4538] text-[10px] font-bold uppercase tracking-wider text-white">E</span>
-          <span className="text-xs font-semibold text-[#1a1a1a] hidden sm:inline">Eblast Drafter</span>
         </Link>
 
-        <span className="text-[#e0dbd3] text-xs">|</span>
+        <div className="w-px h-5 bg-[#e8e3dc] shrink-0" />
 
+        {/* New Draft — visible, prominent button */}
         <button
           onClick={discard}
-          className="text-xs text-[#9aaba4] hover:text-[#5a6b63] transition-colors flex items-center gap-1.5"
-          title="Start over"
+          className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1.5 transition-all"
+          title="Discard and start a new draft"
         >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="15 18 9 12 15 6"/>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          New draft
+          New Draft
         </button>
 
+        {/* Community name + subject on two stacked lines */}
         {community && (
-          <>
-            <span className="text-[#e0dbd3] text-xs">·</span>
-            <span className="text-xs font-medium text-[#5a6b63] truncate max-w-[180px]">{community.displayName}</span>
-          </>
+          <div className="flex flex-col min-w-0 leading-none">
+            <span className="text-xs font-semibold text-[#1a1a1a] truncate">{community.displayName}</span>
+            {fields?.subject && (
+              <span className="text-[10.5px] text-[#9aaba4] truncate mt-0.5 max-w-[280px]">{fields.subject}</span>
+            )}
+          </div>
         )}
 
-        {fields?.subject && (
-          <>
-            <span className="text-[#e0dbd3] text-xs hidden sm:inline">·</span>
-            <span className="text-xs text-[#9aaba4] truncate max-w-[240px] hidden sm:inline">{fields.subject}</span>
-          </>
+        {/* Auto-save status — small, in the left area, away from Save Draft */}
+        {autoSaveLabel && (
+          <span className="text-[10px] text-[#9aaba4] italic shrink-0 flex items-center gap-1">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+              <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+              <path d="M12 2a10 10 0 0 1 10 10"/>
+            </svg>
+            {autoSaveLabel}
+          </span>
         )}
       </div>
 
+      {/* Right: action buttons */}
       <div className="flex items-center gap-2 shrink-0">
-        <Link
-          href="/communities"
-          className="text-xs text-[#9aaba4] hover:text-[#1F4538] transition-colors px-2 py-1 rounded"
-        >
-          Communities
-        </Link>
-        <span className="text-[#e0dbd3] text-xs">|</span>
-
-        {/* Save notice — shown briefly after explicit save */}
         {saveNotice && (
           <span className="text-xs text-emerald-700 font-medium">{saveNotice}</span>
         )}
@@ -72,7 +71,7 @@ function TopBar({ onApproval }: { onApproval: () => void }) {
         )}
 
         {pushError && (
-          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 max-w-[220px] truncate" title={pushError}>
+          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 max-w-[200px] truncate" title={pushError}>
             {pushError}
           </div>
         )}
@@ -82,15 +81,14 @@ function TopBar({ onApproval }: { onApproval: () => void }) {
           disabled={isSaving}
           className="text-xs font-medium text-[#5a6b63] hover:text-[#1F4538] border border-[#ddd8d0] hover:border-[#1F4538]/40 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 bg-white"
         >
-          {isSaving ? "Saving…" : "Save draft"}
+          {isSaving ? "Saving…" : "Save Draft"}
         </button>
 
-        {/* Send for approval — sits beside Push, same importance */}
         <button
           onClick={onApproval}
           className="text-xs font-medium text-[#1F4538] border border-[#1F4538]/40 hover:bg-[#1F4538]/5 rounded-lg px-3 py-1.5 transition-colors"
         >
-          Send for approval
+          Send for Approval
         </button>
 
         <button
@@ -100,7 +98,7 @@ function TopBar({ onApproval }: { onApproval: () => void }) {
         >
           {isPushing ? (
             <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10"/><path d="M12 6v6"/></svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10"/></svg>
               Pushing…
             </>
           ) : (
@@ -118,19 +116,24 @@ function TopBar({ onApproval }: { onApproval: () => void }) {
 export default function EditorLayout() {
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
   const [approvalOpen, setApprovalOpen] = useState(false);
-  const { isSaved, isSaving, fields, autoSave } = useDraft();
+  const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
+  const { isSaving, fields, autoSave } = useDraft();
 
-  // Silent auto-save every 5 seconds — does NOT set isSaving, so the Save Draft
-  // button never flickers. Only runs when there are unsaved changes.
-  const isSavedRef = useRef(isSaved);
+  // Refs so the interval callback always reads the latest values without stale closure
   const isSavingRef = useRef(isSaving);
   const fieldsRef2 = useRef(fields);
-  isSavedRef.current = isSaved;
   isSavingRef.current = isSaving;
   fieldsRef2.current = fields;
+
+  // Auto-save every 5 seconds. Shows a brief "Auto-saving…" status in the top
+  // bar (away from the Save Draft button). Does NOT touch isSaving state.
   useEffect(() => {
-    const id = setInterval(() => {
-      if (!isSavedRef.current && !isSavingRef.current && fieldsRef2.current) autoSave();
+    const id = setInterval(async () => {
+      if (!isSavingRef.current && fieldsRef2.current) {
+        setAutoSaveLabel("Auto-saving…");
+        await autoSave();
+        setAutoSaveLabel(null);
+      }
     }, 5000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,7 +141,7 @@ export default function EditorLayout() {
 
   return (
     <div className="h-screen flex flex-col bg-[#f5f3ef]">
-      <TopBar onApproval={() => setApprovalOpen(true)} />
+      <TopBar onApproval={() => setApprovalOpen(true)} autoSaveLabel={autoSaveLabel} />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left: editor panel */}

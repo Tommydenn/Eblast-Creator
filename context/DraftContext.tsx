@@ -568,6 +568,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setIsSaved(true);
       setSaveNotice("Draft saved");
       setTimeout(() => setSaveNotice(null), 3000);
+      try { localStorage.setItem("eblast_lastDraftId", id); } catch {};
     } catch (e: any) {
       setSaveError(e.message ?? "Save failed");
     } finally {
@@ -590,6 +591,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       if (!data.ok) return;
       setDraftId(id);
       setIsSaved(true);
+      // Remember last draft ID so GenerateView can offer "Resume" on next visit
+      try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
     } catch {
       // silent failure
     }
@@ -616,6 +619,17 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Discard ──────────────────────────────────────────────────────────────
   const discard = useCallback(() => {
+    // Fire-and-forget: persist the current state so the user can resume later
+    const payload = buildDraftPayload();
+    if (payload) {
+      const { id, draft } = payload;
+      fetch("/api/saved-drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft }),
+      }).catch(() => null);
+      try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
+    }
     setStage("idle");
     setFields_(null);
     setImages(EMPTY_IMAGES);
@@ -634,7 +648,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setApprovalStatus(null);
     setRefineError(null);
     setGenerateError(null);
-  }, []);
+  }, [buildDraftPayload]);
 
   // ─── Push ─────────────────────────────────────────────────────────────────
   const push = useCallback(async () => {

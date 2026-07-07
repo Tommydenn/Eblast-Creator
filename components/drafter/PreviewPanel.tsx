@@ -5,22 +5,7 @@ import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
 import { buildEblastHtml } from "@/lib/render-email";
 
-// Minimal script injected into the preview iframe.
-// ONLY purpose: highlight sections on hover and send a single message when
-// the user clicks a section. No editing happens here.
 const PREVIEW_SCRIPT = /* javascript */`(function(){
-  var lastSection = null;
-  var overlay = document.createElement('div');
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:9999;';
-  document.body.appendChild(overlay);
-
-  function clearHighlight(){
-    document.querySelectorAll('[data-section]').forEach(function(el){
-      el.style.outline='';
-      el.style.cursor='';
-    });
-  }
-
   document.addEventListener('mouseover',function(e){
     var el=e.target;
     while(el&&el!==document.body){
@@ -28,14 +13,17 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
       el=el.parentElement;
     }
     if(!el||el===document.body) return;
-    clearHighlight();
+    document.querySelectorAll('[data-section]').forEach(function(s){
+      s.style.outline='';s.style.cursor='';
+    });
     el.style.outline='2px solid rgba(31,69,56,0.35)';
     el.style.outlineOffset='0px';
     el.style.cursor='pointer';
-    lastSection=el.dataset.section;
   },true);
 
-  document.addEventListener('mouseleave',function(){ clearHighlight(); lastSection=null; },true);
+  document.addEventListener('mouseleave',function(){
+    document.querySelectorAll('[data-section]').forEach(function(s){s.style.outline='';s.style.cursor='';});
+  },true);
 
   document.addEventListener('click',function(e){
     var el=e.target;
@@ -60,6 +48,21 @@ const SECTION_MAP: Record<string, EditorSection> = {
   "Footer": "cta",
 };
 
+function injectScript(doc: Document) {
+  if (doc.body.querySelector("[data-preview-script]")) return;
+  const s = doc.createElement("script");
+  s.setAttribute("data-preview-script", "1");
+  s.textContent = PREVIEW_SCRIPT;
+  doc.body.appendChild(s);
+}
+
+function resizeIframe(iframe: HTMLIFrameElement) {
+  const doc = iframe.contentDocument;
+  if (!doc?.body) return;
+  const h = doc.documentElement.scrollHeight || doc.body.scrollHeight;
+  if (h > 0) iframe.style.height = h + "px";
+}
+
 export default function PreviewPanel() {
   const { setActiveSection, fields, images, community } = useDraft();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -73,24 +76,40 @@ export default function PreviewPanel() {
     });
   }, [fields, images, community]);
 
-  // Keep a ref so the interval always reads the latest html without depending on it.
   const htmlRef = useRef(html);
   htmlRef.current = html;
 
-  const [srcDoc, setSrcDoc] = useState(html);
-
-  // Immediately show the preview when a draft first loads (html transitions from "" to a value).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (html) setSrcDoc(html); }, [!!html]);
-
-  // Silently refresh the preview every 5 seconds — same cadence as auto-save.
-  // No flicker on each keystroke; edits appear on the next 5s tick.
+  // srcDoc is set once when the draft first loads, then never changed via React.
+  // Subsequent updates go directly into the iframe DOM to avoid reload flicker.
+  const [initSrc, setInitSrc] = useState("");
+  const initDone = useRef(false);
   useEffect(() => {
-    const id = setInterval(() => { if (htmlRef.current) setSrcDoc(htmlRef.current); }, 5000);
+    if (html && !initDone.current) {
+      initDone.current = true;
+      setInitSrc(html);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!html]);
+
+  // Every 5 seconds: patch the iframe body in-place (no reload, no flicker).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const iframe = iframeRef.current;
+      const doc = iframe?.contentDocument;
+      const newHtml = htmlRef.current;
+      if (!doc?.body || !newHtml) return;
+      try {
+        const parser = new DOMParser();
+        const parsed = parser.parseFromString(newHtml, "text/html");
+        doc.body.innerHTML = parsed.body.innerHTML;
+        injectScript(doc);
+        resizeIframe(iframe);
+      } catch {}
+    }, 5000);
     return () => clearInterval(id);
   }, []);
 
-  // Handle section-click messages from the preview iframe
+  // Handle section-click messages from the iframe
   useEffect(() => {
     function handler(e: MessageEvent) {
       if (!e.data || e.data.type !== "section-click") return;
@@ -101,27 +120,15 @@ export default function PreviewPanel() {
     return () => window.removeEventListener("message", handler);
   }, [setActiveSection]);
 
-  // After each load: auto-size the iframe to its content height, then inject script
   function handleLoad() {
     const iframe = iframeRef.current;
     const doc = iframe?.contentDocument;
     if (!doc?.body || !iframe) return;
-
-    // Auto-size: read the full rendered height of the email document
-    const contentHeight = doc.documentElement.scrollHeight || doc.body.scrollHeight;
-    if (contentHeight > 0) {
-      iframe.style.height = contentHeight + "px";
-    }
-
-    // Inject hover/click script (guard against double-inject)
-    if (doc.body.querySelector('script[data-preview-script]')) return;
-    const s = doc.createElement("script");
-    s.setAttribute("data-preview-script", "1");
-    s.textContent = PREVIEW_SCRIPT;
-    doc.body.appendChild(s);
+    resizeIframe(iframe);
+    injectScript(doc);
   }
 
-  if (!srcDoc) {
+  if (!initSrc) {
     return (
       <div className="flex items-center justify-center py-20 text-sm text-[#9aaba4]">
         Preview will appear here
@@ -132,7 +139,7 @@ export default function PreviewPanel() {
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={srcDoc}
+      srcDoc={initSrc}
       title="Email preview"
       className="w-full bg-white"
       style={{ minHeight: 600, height: "1200px", display: "block" }}

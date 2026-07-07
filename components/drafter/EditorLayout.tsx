@@ -36,6 +36,24 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
   const [pushFlash, setPushFlash] = useState(false);
   const [approvalFlash, setApprovalFlash] = useState(false);
 
+  // ── Error auto-dismiss (4.5s) ─────────────────────────────────────────────
+  const [hideSaveError, setHideSaveError] = useState(false);
+  const [hidePushError, setHidePushError] = useState(false);
+
+  useEffect(() => {
+    if (!saveError) { setHideSaveError(false); return; }
+    setHideSaveError(false);
+    const id = setTimeout(() => setHideSaveError(true), 4500);
+    return () => clearTimeout(id);
+  }, [saveError]);
+
+  useEffect(() => {
+    if (!pushError) { setHidePushError(false); return; }
+    setHidePushError(false);
+    const id = setTimeout(() => setHidePushError(true), 4500);
+    return () => clearTimeout(id);
+  }, [pushError]);
+
   // Track isSaving transitions to detect successful saves
   const prevIsSaving = useRef(false);
   useEffect(() => {
@@ -142,8 +160,8 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
               </span>
             ) : "Save Draft"}
           </button>
-          {saveError && (
-            <div className="absolute top-full right-0 mt-1.5 z-50 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shadow-md w-64">
+          {saveError && !hideSaveError && (
+            <div className="absolute top-full right-0 mt-1.5 z-50 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shadow-md w-64 animate-fade-out">
               <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-0.5">{errorCode(saveError)}</p>
               <p className="text-xs text-red-700">{saveError}</p>
             </div>
@@ -197,7 +215,7 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
               </>
             )}
           </button>
-          {pushError && (
+          {pushError && !hidePushError && (
             <div className="absolute top-full right-0 mt-1.5 z-50 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shadow-md w-72">
               <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-0.5">{errorCode(pushError)}</p>
               <p className="text-xs text-red-700">{pushError}</p>

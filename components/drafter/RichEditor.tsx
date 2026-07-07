@@ -95,20 +95,28 @@ interface ToolbarProps {
 export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, className }: ToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
   const [fontOpen, setFontOpen] = useState(false);
+  const [fontSizeOpen, setFontSizeOpen] = useState(false);
   const [hasEyeDropper, setHasEyeDropper] = useState(false);
+  const [customColors, setCustomColors] = useState<string[]>([]);
   const colorPanelRef = useRef<HTMLDivElement>(null);
   const fontPanelRef = useRef<HTMLDivElement>(null);
+  const fontSizePanelRef = useRef<HTMLDivElement>(null);
   // Saved selection range so eyedropper can restore it after picking
   const savedRangeRef = useRef<Range | null>(null);
 
   useEffect(() => {
     setHasEyeDropper("EyeDropper" in window);
+    try {
+      const saved = localStorage.getItem("eblast_custom_colors");
+      if (saved) setCustomColors(JSON.parse(saved));
+    } catch {}
   }, []);
 
   useEffect(() => {
     function close(e: MouseEvent) {
       if (colorPanelRef.current && !colorPanelRef.current.contains(e.target as Node)) setColorOpen(false);
       if (fontPanelRef.current && !fontPanelRef.current.contains(e.target as Node)) setFontOpen(false);
+      if (fontSizePanelRef.current && !fontSizePanelRef.current.contains(e.target as Node)) setFontSizeOpen(false);
     }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -129,21 +137,71 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
     }
   }
 
+  function addCustomColor(hex: string) {
+    setCustomColors(prev => {
+      const next = [hex, ...prev.filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 10);
+      try { localStorage.setItem("eblast_custom_colors", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
   async function eyedrop() {
     try {
       const result = await new (window as any).EyeDropper().open();
+      const pickedColor: string = result.sRGBHex;
+      // Add to custom palette regardless of whether text is selected
+      addCustomColor(pickedColor);
       setColorOpen(false);
-      // Restore focus + selection, then apply the picked color
-      if (editorRef.current) {
+      // Defer ALL DOM interaction — calling focus() immediately after EyeDropper
+      // resolves can cause Chrome to freeze while still exiting picker mode.
+      setTimeout(() => {
+        if (!editorRef.current || !savedRangeRef.current) return;
         editorRef.current.focus();
-        if (savedRangeRef.current) {
-          const sel = window.getSelection();
-          sel?.removeAllRanges();
-          sel?.addRange(savedRangeRef.current);
+        const sel = window.getSelection();
+        if (!sel) return;
+        sel.removeAllRanges();
+        sel.addRange(savedRangeRef.current);
+        // Only apply color to text if there is an actual selection
+        if (!savedRangeRef.current.collapsed) {
+          document.execCommand("styleWithCSS", false, "true");
+          document.execCommand("foreColor", false, pickedColor);
+          onInput();
         }
-      }
-      exec("foreColor", result.sRGBHex);
+      }, 50);
     } catch { /* cancelled or unsupported */ }
+  }
+
+  // Font size — em-based so scaling is proportional to each field's base size
+  const fontSizeOptions = [
+    { label: "Tiny",     em: 0.7  },
+    { label: "Small",    em: 0.85 },
+    { label: "Normal",   em: 1.0  },
+    { label: "Large",    em: 1.2  },
+    { label: "X-Large",  em: 1.5  },
+    { label: "2×",       em: 2.0  },
+  ];
+
+  function applyFontSize(em: number) {
+    // Selection is still alive because onMouseDown+preventDefault preserved focus in the editor
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { setFontSizeOpen(false); return; }
+    const range = sel.getRangeAt(0);
+    const span = document.createElement("span");
+    span.style.fontSize = `${em}em`;
+    try {
+      range.surroundContents(span);
+    } catch {
+      // Selection spans multiple block elements
+      const frag = range.extractContents();
+      span.appendChild(frag);
+      range.insertNode(span);
+      const newRange = document.createRange();
+      newRange.selectNodeContents(span);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+    onInput();
+    setFontSizeOpen(false);
   }
 
   // All brand colors — primary, accent, background, secondary, plus supporting[]
@@ -169,7 +227,6 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
       fontOptions.push({ name: f, label: f.split(",")[0].trim().replace(/['"]/g, ""), isBrand: true });
     }
   }
-  // Always include the email template's script/cursive font
   if (!seenFonts.has(SCRIPT_FONT.toLowerCase())) {
     seenFonts.add(SCRIPT_FONT.toLowerCase());
     fontOptions.push({ name: SCRIPT_FONT, label: "Script / Cursive", isBrand: false, isScript: true });
@@ -218,6 +275,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
             e.preventDefault();
             setColorOpen((v) => !v);
             setFontOpen(false);
+            setFontSizeOpen(false);
           }}
           className="w-7 h-6 rounded text-[13px] font-bold text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center justify-center"
           title="Font color"
@@ -227,6 +285,24 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
 
         {colorOpen && (
           <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 p-2.5 w-52">
+            {customColors.length > 0 && (
+              <>
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-[#9aaba4] mb-1.5">Custom</p>
+                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                  {customColors.map((hex) => (
+                    <button
+                      key={hex}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); exec("foreColor", hex); setColorOpen(false); }}
+                      className="w-6 h-6 rounded-full ring-1 ring-black/10 hover:scale-125 transition-transform"
+                      style={{ backgroundColor: hex }}
+                      title={hex}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
             {uniqueColors.length > 0 && (
               <>
                 <p className="text-[9px] font-semibold uppercase tracking-wider text-[#9aaba4] mb-1.5">Brand colors</p>
@@ -295,7 +371,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
       <div className="relative" ref={fontPanelRef}>
         <button
           type="button"
-          onMouseDown={(e) => { e.preventDefault(); setFontOpen((v) => !v); setColorOpen(false); }}
+          onMouseDown={(e) => { e.preventDefault(); setFontOpen((v) => !v); setColorOpen(false); setFontSizeOpen(false); }}
           className="h-6 px-2 rounded text-[10px] font-medium text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center gap-1"
           title="Font family"
         >
@@ -325,6 +401,39 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, cla
                 {f.isScript && (
                   <span className="text-[9px] text-[#9aaba4] font-semibold uppercase tracking-wider ml-2 shrink-0">Email</span>
                 )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Font size picker */}
+      <div className="relative" ref={fontSizePanelRef}>
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); setFontSizeOpen((v) => !v); setColorOpen(false); setFontOpen(false); }}
+          className="h-6 px-2 rounded text-[10px] font-medium text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center gap-1"
+          title="Font size (relative scaling)"
+        >
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <text x="3" y="18" fontSize="14" fill="currentColor" stroke="none" style={{ fontFamily: "inherit" }}>A</text>
+            <text x="13" y="22" fontSize="9" fill="currentColor" stroke="none" style={{ fontFamily: "inherit" }}>A</text>
+          </svg>
+          Size
+          <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+
+        {fontSizeOpen && (
+          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 overflow-hidden w-36">
+            {fontSizeOptions.map((opt) => (
+              <button
+                key={opt.em}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); applyFontSize(opt.em); }}
+                className="w-full text-left px-3 py-2 hover:bg-[#f0f5f2] transition-colors flex items-center justify-between border-b border-[#f5f3ef] last:border-0"
+              >
+                <span className="text-[#1a1a1a]" style={{ fontSize: `${Math.min(opt.em, 1.1) * 13}px` }}>{opt.label}</span>
+                <span className="text-[9px] text-[#b0b8b2] ml-2">{opt.em}em</span>
               </button>
             ))}
           </div>

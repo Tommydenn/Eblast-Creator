@@ -575,6 +575,22 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (!f || !c) return null;
     const id = draftId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const imgs = imagesRef.current;
+
+    // Strip base64 data URIs from the imageBank — these can be MB-sized blobs
+    // extracted from the PDF and will blow past the 4MB API route body limit.
+    const filteredBank = imageBank.filter(url => !url.startsWith("data:"));
+
+    // If a cropped image somehow ended up as a data URI, fall back to the
+    // original URL so the draft stays loadable without the blob in the DB.
+    function safeImgUrl(url: string, fallback: string): string {
+      return url.startsWith("data:") ? fallback : url;
+    }
+    const filteredImages: DraftImages = {
+      hero: imgs.hero ? { url: safeImgUrl(imgs.hero.url, imgs.hero.originalUrl), originalUrl: imgs.hero.originalUrl } : null,
+      secondary: imgs.secondary ? { url: safeImgUrl(imgs.secondary.url, imgs.secondary.originalUrl), originalUrl: imgs.secondary.originalUrl } : null,
+      gallery: imgs.gallery.map(g => ({ url: safeImgUrl(g.url, g.originalUrl), originalUrl: g.originalUrl })),
+    };
+
     const draft: SavedDraft = {
       id,
       communitySlug: c.slug,
@@ -582,9 +598,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       savedAt: new Date().toISOString(),
       subject: f.subject,
       fields: f,
-      images: imgs,
-      imageBank,
-      imageCount: (imgs.hero ? 1 : 0) + (imgs.secondary ? 1 : 0) + imgs.gallery.length,
+      images: filteredImages,
+      imageBank: filteredBank,
+      imageCount: (filteredImages.hero ? 1 : 0) + (filteredImages.secondary ? 1 : 0) + filteredImages.gallery.length,
       review,
       agentLoop,
       pastSendsContext,
@@ -607,7 +623,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ draft }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { ok: boolean; error?: string };
+      try { data = JSON.parse(text); }
+      catch { throw new Error(text.replace(/\n/g, " ").trim().slice(0, 200) || `HTTP ${res.status}`); }
       if (!data.ok) throw new Error(data.error ?? "Save failed");
       setDraftId(id);
       setIsSaved(true);
@@ -632,7 +651,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ draft }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { ok: boolean };
+      try { data = JSON.parse(text); }
+      catch { return; /* non-JSON response, fail silently for auto-save */ }
       if (!data.ok) return;
       setDraftId(id);
       setIsSaved(true);

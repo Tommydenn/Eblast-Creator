@@ -21,7 +21,7 @@ import { db } from "../lib/db/index";
 import { communities } from "../lib/db/schema";
 import { getCommunity } from "../lib/db/queries";
 import { extractBrandGuide } from "../lib/brand-guide-extractor";
-import type { CommunityBrand, BrandGuideExtracted, CommunityVoice } from "../lib/db/schema";
+import type { CommunityBrand, BrandGuideExtracted } from "../lib/db/schema";
 
 async function main() {
   const [slug, pdfPath] = process.argv.slice(2);
@@ -91,23 +91,11 @@ async function main() {
     fontsSource: "brand-guide-extracted",
   };
 
-  // Build/merge voice. Prefer extraction values; merge approvedClaims unioned
-  // with anything already manually set.
-  const updatedVoice: CommunityVoice = {
-    tone: extraction.voice.tone ?? community.voice?.tone,
-    dos: extraction.voice.dos ?? community.voice?.dos,
-    donts: extraction.voice.donts ?? community.voice?.donts,
-    prohibited: extraction.voice.prohibited ?? community.voice?.prohibited,
-    approvedClaims: extraction.voice.approvedClaims ?? community.voice?.approvedClaims,
-    photoStyleNotes: extraction.voice.photoStyleNotes ?? community.voice?.photoStyleNotes,
-  };
-
   // Forensics blob — full extraction snapshot.
   const brandGuideExtracted: BrandGuideExtracted = {
     extractedAt: new Date().toISOString(),
     palette: extraction.palette,
     fonts: updatedBrand.fonts,
-    voice: updatedVoice,
     notes: extraction.applicationNotes,
     raw: extraction,
   };
@@ -119,7 +107,6 @@ async function main() {
     .update(communities)
     .set({
       brand: updatedBrand,
-      voice: updatedVoice,
       taglines: updatedTaglines,
       amenities: updatedAmenities,
       brandGuideExtracted,
@@ -134,11 +121,6 @@ async function main() {
   console.log(`    background: ${updatedBrand.background}`);
   console.log(`    headline font: ${updatedBrand.fontHeadline}`);
   console.log(`    body font:     ${updatedBrand.fontBody}`);
-  console.log(`    voice tone:    ${(updatedVoice.tone ?? []).join(", ") || "(none)"}`);
-  console.log(`    voice dos:     ${(updatedVoice.dos ?? []).length} entries`);
-  console.log(`    voice donts:   ${(updatedVoice.donts ?? []).length} entries`);
-  console.log(`    prohibited:    ${(updatedVoice.prohibited ?? []).length} entries`);
-  console.log(`    approved claims: ${(updatedVoice.approvedClaims ?? []).length} entries`);
   console.log(`    taglines:      ${(updatedTaglines ?? []).length}`);
   console.log(`    amenities:     ${(updatedAmenities ?? []).length}`);
   console.log(`    logo variants noted: ${extraction.logoVariants.length}`);

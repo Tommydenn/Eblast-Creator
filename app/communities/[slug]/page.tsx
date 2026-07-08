@@ -346,7 +346,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
 
           </div>
 
-          {/* ── RIGHT COLUMN: Contact, Voice, Sending ─────────────────────── */}
+          {/* ── RIGHT COLUMN: Contact, Sending ───────────────────────────── */}
           <div className="space-y-6">
 
             {/* Contact & Identity */}

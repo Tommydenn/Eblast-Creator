@@ -14,7 +14,6 @@ import {
   type CommunityHubSpot,
   type CommunityLogo,
   type CommunityAsset,
-  type CommunityVoice,
   type CommunityMarketingDirector,
   type BrandGuideExtracted,
 } from "./schema";
@@ -28,7 +27,6 @@ export interface Community extends Omit<CommunityRow, "address" | "brand" | "soc
   brand: CommunityBrand;
   socials: CommunitySocials;
   hubspot: CommunityHubSpot;
-  voice: CommunityVoice | null;
   marketingDirector: CommunityMarketingDirector | null;
   logos: CommunityLogo[];
   photoLibrary: CommunityAsset[];
@@ -70,7 +68,6 @@ function rowToCommunity(row: CommunityRow, senders: CommunitySender[]): Communit
     brand: row.brand as CommunityBrand,
     socials: (row.socials ?? {}) as CommunitySocials,
     hubspot: (row.hubspot ?? {}) as CommunityHubSpot,
-    voice: (row.voice ?? null) as CommunityVoice | null,
     marketingDirector: (row.marketingDirector ?? null) as CommunityMarketingDirector | null,
     logos: (row.logos ?? []) as CommunityLogo[],
     photoLibrary: (row.photoLibrary ?? []) as CommunityAsset[],

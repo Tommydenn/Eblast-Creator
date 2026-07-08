@@ -157,8 +157,6 @@ export const seedCommunities: SeedCommunity[] = [
         "All-new stainless appliances and quartz countertops",
         "Satellite TV and WiFi included",
       ],
-      voiceNotes:
-        "Boutique, warm, hospitality-forward. Lean on food and craft. Family-decision audience: addresses adult children making the decision for a parent as much as the resident themselves.",
       socials: {},
       marketingDirector: { name: "Amelia Ozell", email: "aozell@greatlakesmc.com" },
     },

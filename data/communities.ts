@@ -15,7 +15,6 @@ export type {
   CommunityHubSpot,
   CommunityLogo,
   CommunityAsset,
-  CommunityVoice,
   CommunityMarketingDirector,
   BrandGuideExtracted,
 } from "@/lib/db/schema";

@@ -84,22 +84,6 @@ const extractFlyerToolSchema = {
 };
 
 function systemPrompt(community: Community, pastSends?: PastSendForContext[]): string {
-  const voiceBlock = community.voice
-    ? [
-        community.voice.tone?.length ? `Tone: ${community.voice.tone.join(", ")}.` : null,
-        community.voice.dos?.length ? `Do: ${community.voice.dos.join(" / ")}` : null,
-        community.voice.donts?.length ? `Don't: ${community.voice.donts.join(" / ")}` : null,
-        community.voice.prohibited?.length ? `Never use these words/phrases: ${community.voice.prohibited.join(", ")}.` : null,
-        community.voice.approvedClaims?.length ? `Approved claims you may use: ${community.voice.approvedClaims.join(" / ")}` : null,
-        community.voice.photoStyleNotes ? `Photo direction: ${community.voice.photoStyleNotes}` : null,
-      ].filter(Boolean).join("\n")
-    : "";
-
-  const hasVoice = voiceBlock.length > 0;
-  const fallbackVoice =
-    community.voiceNotes ??
-    "Warm, hospitable, dignified. Speak to both prospective residents and the adult children making the decision for a parent.";
-
   const trackingPhoneNote = community.trackingPhone
     ? `\n- For phone CTAs in this email, use ${community.trackingPhone} (the community's tracking number) — do NOT use any other phone number from the flyer, even if the flyer prints a different one.`
     : "";
@@ -117,7 +101,7 @@ Notes on using this:
 - The drafts that already shipped represent the brand's accepted voice — match it. If your draft sounds noticeably different, that's a yellow flag.`
       : "";
 
-  const hasIntelligenceContext = (pastSends && pastSends.length > 0) || hasVoice;
+  const hasIntelligenceContext = pastSends && pastSends.length > 0;
 
   return `You are the lead copywriter for ${community.displayName}, a ${community.type.replace(/_/g, " ")} senior-living community${community.address.city ? ` in ${community.address.city}, ${community.address.state ?? ""}`.trim() : ""}. You are writing one of the best senior-living marketing emails on the planet — held to the bar of a working professional, not an intern who just learned the template.
 
@@ -126,7 +110,7 @@ Your job: take a printed flyer (provided as a PDF) and translate it into the str
 ${SENIOR_LIVING_CRAFT_DOCTRINE}
 
 This community's voice
-${hasVoice ? voiceBlock : fallbackVoice}
+Warm, hospitable, dignified. Speak to both prospective residents and the adult children making the decision for a parent.
 
 Inviolable rules
 - Never use em dashes (—) anywhere in the email. Replace with a comma, a period, or a new sentence.

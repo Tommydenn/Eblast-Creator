@@ -135,9 +135,6 @@ export default async function CommunitiesPage() {
 
                         const gaps: string[] = [];
                         if (c.senders.length === 0) gaps.push("No sender");
-                        if ((c.hubspot.includedListIds?.length ?? 0) === 0 &&
-                            (c.hubspot.excludedListIds?.length ?? 0) === 0)
-                          gaps.push("No segments");
                         if (!c.trackingPhone) gaps.push("No tracking #");
                         const isReady = gaps.length === 0;
 

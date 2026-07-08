@@ -223,7 +223,7 @@ ${
   }
 
 Voice
-${community.voiceNotes ?? "Warm, hospitable, dignified. Speak to prospective residents AND adult children making the decision for a parent."}
+Warm, hospitable, dignified. Speak to prospective residents AND adult children making the decision for a parent.
 ${community.taglines && community.taglines.length > 0 ? `Brand taglines you can lean on: ${community.taglines.join(" / ")}` : ""}
 ${community.amenities && community.amenities.length > 0 ? `Distinctive amenities to reference: ${community.amenities.join(", ")}` : ""}
 

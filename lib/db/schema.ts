@@ -118,21 +118,6 @@ export interface CommunityAsset {
   tags?: string[];
 }
 
-export interface CommunityVoice {
-  /** Tonal attributes, e.g. ["warm", "boutique", "hospitality-forward"]. */
-  tone?: string[];
-  /** Specific things to do — "address adult children making the decision". */
-  dos?: string[];
-  /** Specific things NOT to do — "no superlatives", "never say 'facility'". */
-  donts?: string[];
-  /** Words/phrases the agent should never use. */
-  prohibited?: string[];
-  /** Approved factual claims, e.g. "5-star CMS rating", "26-apartment boutique". */
-  approvedClaims?: string[];
-  /** Photo styling notes, e.g. "natural light", "candid resident moments". */
-  photoStyleNotes?: string;
-}
-
 export interface CommunityMarketingDirector {
   name: string;
   email: string;
@@ -143,7 +128,6 @@ export interface BrandGuideExtracted {
   extractedAt: string;
   palette?: { primary?: string; accent?: string; background?: string; secondary?: string; supporting?: string[] };
   fonts?: CommunityBrand["fonts"];
-  voice?: CommunityVoice;
   notes?: string;
   /** The raw extraction so a future schema change can re-process. */
   raw?: any;
@@ -192,10 +176,6 @@ export const communities = pgTable("communities", {
 
   taglines: text("taglines").array(),
   amenities: text("amenities").array(),
-  /** Free-form voice notes (legacy). Prefer the structured `voice` field below. */
-  voiceNotes: text("voice_notes"),
-  voice: jsonb("voice").$type<CommunityVoice>(),
-
   socials: jsonb("socials").$type<CommunitySocials>().notNull().default({}),
 
   marketingDirector: jsonb("marketing_director").$type<CommunityMarketingDirector>(),

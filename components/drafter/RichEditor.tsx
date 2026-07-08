@@ -27,11 +27,9 @@ export function RichInput({
 }: RichInputProps) {
   const ref = useRef<HTMLDivElement>(null);
   const isFocused = useRef(false);
-  // Keep callback ref stable so readValue always calls the latest setter
   const onValueChangeRef = useRef(onValueChange);
   useEffect(() => { onValueChangeRef.current = onValueChange; });
 
-  // Initialize DOM on mount
   useEffect(() => {
     if (ref.current) {
       document.execCommand("defaultParagraphSeparator", false, "div");
@@ -40,7 +38,6 @@ export function RichInput({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync external value changes (e.g. AI refine) without clobbering user edits
   useEffect(() => {
     if (!isFocused.current && ref.current) {
       ref.current.innerHTML = value ?? "";
@@ -51,10 +48,11 @@ export function RichInput({
   function readValue() {
     if (!ref.current) return;
     let html = ref.current.innerHTML;
-    // Strip any div wrapper execCommand may add for paragraph separation
     const divMatch = html.match(/^<div>([\s\S]*)<\/div>$/i);
     if (divMatch) html = divMatch[1];
-    html = html.replace(/<br\s*\/?>$/i, "").trim();
+    html = html.replace(/<br\s*\/?>$/i, "");
+    // Browser inserts &nbsp; in empty contentEditable — normalize to regular spaces
+    html = html.replace(/&nbsp;/g, " ").trim();
     onValueChangeRef.current(html);
   }
 
@@ -142,19 +140,14 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  // Detect current font size whenever the selection changes.
-  // Priority: (1) inline style.fontSize on a selected span, (2) field's template default.
-  // Guard: skip when the font size input itself has focus so typed values aren't wiped.
   useEffect(() => {
     function onSelectionChange() {
       if (document.activeElement === fontSizeInputRef.current) return;
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return;
-      // Save non-collapsed range so applyFontSize can restore it after input takes focus
       if (!sel.isCollapsed) {
         savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
       }
-      // Walk up from the selection anchor to find an inline font-size span
       let node: Node | null = sel.anchorNode;
       while (node) {
         if (node.nodeType === Node.ELEMENT_NODE) {
@@ -163,7 +156,6 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
         }
         node = node.parentNode;
       }
-      // Fall back to the email template's default size for the active field
       const fieldName = activeFieldNameRef?.current;
       if (fieldName && FIELD_FONT_SIZES[fieldName]) {
         setFontSizeInput(FIELD_FONT_SIZES[fieldName].toString());
@@ -175,11 +167,21 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
     return () => document.removeEventListener("selectionchange", onSelectionChange);
   }, [activeFieldNameRef]);
 
-  function exec(cmd: string, val?: string) {
+  // Bold/italic/underline/removeFormat: styleWithCSS false → semantic <b>/<i>/<u>, properly togglable
+  function execFormat(cmd: string) {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    document.execCommand("styleWithCSS", false, "false");
+    document.execCommand(cmd, false, undefined);
+    onInput();
+  }
+
+  // Color only: styleWithCSS true → inline <span style="color:…">
+  function execColor(hex: string) {
     if (!editorRef.current) return;
     editorRef.current.focus();
     document.execCommand("styleWithCSS", false, "true");
-    document.execCommand(cmd, false, val);
+    document.execCommand("foreColor", false, hex);
     onInput();
   }
 
@@ -196,14 +198,53 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
     if (!hex.startsWith("#")) hex = "#" + hex;
     if (!/^#[0-9A-Fa-f]{3}$/.test(hex) && !/^#[0-9A-Fa-f]{6}$/.test(hex)) return;
     addCustomColor(hex);
-    exec("foreColor", hex);
+    execColor(hex);
     setColorOpen(false);
     setHexInput("");
   }
 
+  // Font family: handles cross-paragraph selections in the body editor without corrupting
+  // paragraph structure (execCommand("fontName") wraps multi-div selections in a span,
+  // which breaks fromHtml()'s :scope > div query and collapses all paragraphs into one).
+  function applyFontFamily(fontFamily: string) {
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+
+    const divs = Array.from(editorRef.current.querySelectorAll<HTMLDivElement>(":scope > div"));
+
+    if (divs.length > 1) {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+
+        function getTopLevelEl(node: Node): Element | null {
+          let n: Node | null = node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode;
+          while (n && n.parentNode !== editorRef.current) n = n.parentNode;
+          return (n && n !== editorRef.current && n.nodeType === Node.ELEMENT_NODE) ? n as Element : null;
+        }
+
+        const startEl = getTopLevelEl(range.startContainer);
+        const endEl = getTopLevelEl(range.endContainer);
+
+        if (startEl && endEl && startEl !== endEl) {
+          const startIdx = divs.indexOf(startEl as HTMLDivElement);
+          const endIdx = divs.indexOf(endEl as HTMLDivElement);
+          for (let i = Math.max(0, startIdx); i <= Math.min(divs.length - 1, endIdx); i++) {
+            divs[i].style.fontFamily = fontFamily;
+          }
+          onInput();
+          return;
+        }
+      }
+    }
+
+    // Single paragraph or flat single-line editor — safe to use execCommand
+    document.execCommand("styleWithCSS", false, "true");
+    document.execCommand("fontName", false, fontFamily);
+    onInput();
+  }
 
   function applyFontSize(px: number) {
-    // Restore saved selection if the editor no longer has focus (e.g. after clicking the input)
     const sel = window.getSelection();
     let range: Range | null = null;
     if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
@@ -216,21 +257,17 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
     if (!range || range.collapsed) return;
     const span = document.createElement("span");
     span.style.fontSize = `${px}px`;
-    try {
-      range.surroundContents(span);
-    } catch {
-      const frag = range.extractContents();
-      span.appendChild(frag);
-      range.insertNode(span);
-      const newRange = document.createRange();
-      newRange.selectNodeContents(span);
-      window.getSelection()?.removeAllRanges();
-      window.getSelection()?.addRange(newRange);
-    }
+    // Always extractContents — surroundContents throws on cross-element boundaries
+    const frag = range.extractContents();
+    span.appendChild(frag);
+    range.insertNode(span);
+    const newRange = document.createRange();
+    newRange.selectNodeContents(span);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(newRange);
     onInput();
   }
 
-  // All brand colors — primary, accent, background, secondary, plus supporting[]
   const uniqueColors: string[] = [];
   const seenColors = new Set<string>();
   for (const c of brandColors) {
@@ -241,7 +278,6 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
   }
   const basicColors = ["#1a1a1a", "#ffffff", "#c0392b", "#2e86c1", "#27ae60", "#f39c12", "#8e44ad"];
 
-  // Font options: brand fonts first, then email template font (script/cursive), then standard
   const SCRIPT_FONT = "'Brush Script MT', 'Lucida Handwriting', cursive";
   const standardFonts = ["Arial", "Georgia", "Times New Roman", "Verdana", "Trebuchet MS"];
   const seenFonts = new Set<string>();
@@ -270,14 +306,14 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
       {/* Bold / Italic / Underline */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); exec("bold"); }}
+        onMouseDown={(e) => { e.preventDefault(); execFormat("bold"); }}
         className="w-7 h-6 rounded text-[13px] font-bold text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors"
         title="Bold"
       >B</button>
 
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); exec("italic"); }}
+        onMouseDown={(e) => { e.preventDefault(); execFormat("italic"); }}
         className="w-7 h-6 rounded text-[13px] italic text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors"
         style={{ fontFamily: "Georgia, serif" }}
         title="Italic"
@@ -285,7 +321,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
 
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); exec("underline"); }}
+        onMouseDown={(e) => { e.preventDefault(); execFormat("underline"); }}
         className="w-7 h-6 rounded text-[13px] underline text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors"
         title="Underline"
       >U</button>
@@ -317,7 +353,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
                     <button
                       key={hex}
                       type="button"
-                      onMouseDown={(e) => { e.preventDefault(); exec("foreColor", hex); setColorOpen(false); }}
+                      onMouseDown={(e) => { e.preventDefault(); execColor(hex); setColorOpen(false); }}
                       className="w-6 h-6 rounded-full ring-1 ring-black/10 hover:scale-125 transition-transform"
                       style={{ backgroundColor: hex }}
                       title={hex}
@@ -335,7 +371,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
                     <button
                       key={hex}
                       type="button"
-                      onMouseDown={(e) => { e.preventDefault(); exec("foreColor", hex); setColorOpen(false); }}
+                      onMouseDown={(e) => { e.preventDefault(); execColor(hex); setColorOpen(false); }}
                       className="w-6 h-6 rounded-full ring-1 ring-black/10 hover:scale-125 transition-transform"
                       style={{ backgroundColor: hex }}
                       title={hex}
@@ -351,7 +387,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
                 <button
                   key={hex}
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); exec("foreColor", hex); setColorOpen(false); }}
+                  onMouseDown={(e) => { e.preventDefault(); execColor(hex); setColorOpen(false); }}
                   className={`w-6 h-6 rounded-full hover:scale-125 transition-transform ${
                     hex === "#ffffff" ? "ring-1 ring-[#ddd8d0]" : "ring-1 ring-black/10"
                   }`}
@@ -381,7 +417,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
 
             <button
               type="button"
-              onMouseDown={(e) => { e.preventDefault(); exec("foreColor", "#3A3A3A"); setColorOpen(false); }}
+              onMouseDown={(e) => { e.preventDefault(); execColor("#3A3A3A"); setColorOpen(false); }}
               className="w-full flex items-center gap-1.5 text-[10px] text-[#9aaba4] hover:text-[#5a6b63] px-1 py-1 rounded hover:bg-[#f5f3ef] transition-colors mt-0.5"
               title="Reset to default"
             >
@@ -417,7 +453,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
               <button
                 key={f.name}
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); exec("fontName", f.name); setFontOpen(false); }}
+                onMouseDown={(e) => { e.preventDefault(); applyFontFamily(f.name); setFontOpen(false); }}
                 className="w-full text-left px-3 py-2.5 text-sm hover:bg-[#f0f5f2] transition-colors flex items-center justify-between border-b border-[#f5f3ef] last:border-0"
                 style={{ fontFamily: f.name }}
               >
@@ -434,7 +470,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
         )}
       </div>
 
-      {/* Font size input — shows current selection's size, allows typing a custom px value */}
+      {/* Font size input */}
       <input
         ref={fontSizeInputRef}
         type="number"
@@ -455,7 +491,6 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
           if (!isNaN(px) && px >= 6 && px <= 120) applyFontSize(px);
         }}
         onMouseDown={(e) => {
-          // Capture the editor selection NOW, before mousedown moves focus and collapses it
           const sel = window.getSelection();
           if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
             savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
@@ -470,7 +505,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
 
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); exec("removeFormat"); }}
+        onMouseDown={(e) => { e.preventDefault(); execFormat("removeFormat"); }}
         className="h-6 px-2 rounded text-[10px] font-medium text-[#9aaba4] hover:bg-white hover:text-[#5a6b63] transition-colors"
         title="Clear all formatting"
       >
@@ -504,11 +539,15 @@ export function RichBodyEditor({ paragraphs, onChange, brandColors, brandFonts }
     if (!el) return [""];
     const divs = Array.from(el.querySelectorAll(":scope > div"));
     if (divs.length === 0) {
-      const html = el.innerHTML.replace(/<br\s*\/?>/gi, "").trim();
+      const html = el.innerHTML.replace(/<br\s*\/?>/gi, "").replace(/&nbsp;/g, " ").trim();
       return html ? [html] : [""];
     }
     const paras = divs
-      .map((d) => (d as HTMLElement).innerHTML.replace(/<br\s*\/?>$/i, "").trim())
+      .map((d) => {
+        let html = (d as HTMLElement).innerHTML.replace(/<br\s*\/?>$/i, "").trim();
+        html = html.replace(/&nbsp;/g, " ").trim();
+        return html;
+      })
       .filter((p) => p !== "" && p !== "<br>");
     return paras.length > 0 ? paras : [""];
   }

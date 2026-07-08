@@ -106,9 +106,14 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       let galleryImageUrls: string[];
 
       if (isNewFormat && currentImages) {
-        heroImageUrl = currentImages.hero?.url;
-        secondaryImageUrl = currentImages.secondary?.url;
+        // currentImages.url fields are empty strings when read from a draft saved by the
+        // client — buildDraftPayload clears them to avoid the 4.5 MB payload limit; the
+        // actual data URIs live in draftImageBank. Fall back to the CDN HTML (saved after
+        // the first successful approval send) so images are never lost.
+        heroImageUrl = currentImages.hero?.url || extractImgSrc(currentHtml, "Hero image");
+        secondaryImageUrl = currentImages.secondary?.url || extractImgSrc(currentHtml, "Secondary image");
         galleryImageUrls = (currentImages.gallery ?? []).map((g) => g.url).filter(Boolean);
+        if (galleryImageUrls.length === 0) galleryImageUrls = extractGalleryImgs(currentHtml);
       } else {
         heroImageUrl = extractImgSrc(currentHtml, "Hero image");
         secondaryImageUrl = extractImgSrc(currentHtml, "Secondary image");
@@ -202,9 +207,9 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
         // Update the saved draft with the refined content (write both formats for compatibility).
         const updatedImages = isNewFormat ? {
-          hero: nextHero ? { url: nextHero, originalUrl: currentImages?.hero?.originalUrl ?? nextHero } : null,
-          secondary: nextSecondary ? { url: nextSecondary, originalUrl: currentImages?.secondary?.originalUrl ?? nextSecondary } : null,
-          gallery: nextGallery.map((url, i) => ({ url, originalUrl: currentImages?.gallery?.[i]?.originalUrl ?? url })),
+          hero: nextHero ? { url: nextHero, originalUrl: currentImages?.hero?.originalUrl || nextHero } : null,
+          secondary: nextSecondary ? { url: nextSecondary, originalUrl: currentImages?.secondary?.originalUrl || nextSecondary } : null,
+          gallery: nextGallery.map((url, i) => ({ url, originalUrl: currentImages?.gallery?.[i]?.originalUrl || url })),
         } : undefined;
         const updatedData = {
           ...draftData,

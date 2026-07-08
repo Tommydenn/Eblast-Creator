@@ -21,7 +21,8 @@ async function main() {
       .limit(1);
 
     let communityId: string;
-    if (existing.length > 0) {
+    const isNew = existing.length === 0;
+    if (!isNew) {
       communityId = existing[0].id;
       await db.update(communities).set({ ...community, updatedAt: new Date() }).where(eq(communities.id, communityId));
       console.log(`  updated  ${community.slug}`);
@@ -31,11 +32,9 @@ async function main() {
       console.log(`  inserted ${community.slug}`);
     }
 
-    // Replace senders for this community (drop and re-insert; senders are
-    // small and the seed file is the source of truth).
-    await db.delete(communitySenders).where(eq(communitySenders.communityId, communityId));
-    if (senders.length > 0) {
-      // Mark first sender as primary if none specified.
+    // Senders: only seed on first insert. For existing communities, senders are
+    // managed through the UI and must not be overwritten by the seed.
+    if (isNew && senders.length > 0) {
       const anyPrimary = senders.some((s) => s.isPrimary);
       const senderRows = senders.map((s, i) => ({
         communityId,

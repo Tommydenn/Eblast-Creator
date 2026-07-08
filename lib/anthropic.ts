@@ -34,7 +34,6 @@ const extractFlyerToolSchema = {
     eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
     headline: { type: "string", description: "The event name or a short factual description from the flyer. 2–5 words. Title-case. No exclamation points. Do NOT be clever — no 'Discover...', 'Experience...', 'An Evening of...', or any tagline-style phrase. Just name the event clearly and warmly, exactly as the flyer does." },
     scriptSubheadline: { type: "string", description: "Optional short subtitle in cursive under the headline. Only include if the flyer itself has a natural subtitle worth showing — do NOT invent one. Must be a plain, warm factual phrase, not a tagline. No exclamation points. Aim under 25 chars, hard limit 35. Examples: 'With Live Entertainment', 'Families Welcome', 'Dinner Included'. Leave empty if nothing from the flyer fits naturally." },
-    heroHook: { type: "string", description: "Always emit an empty string. This field is no longer rendered in the email." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
     eventTime: { type: "string", description: "Event time, e.g. '2:00 PM'." },
@@ -217,10 +216,9 @@ const refineFlyerToolSchema = {
   // refinement there is always an existing value to copy, so requiring a field
   // never forces fabrication (the model emits "" for fields that were empty).
   required: [
-    "subject", "previewText", "eyebrow", "headline", "scriptSubheadline", "heroHook",
+    "subject", "previewText", "eyebrow", "headline", "scriptSubheadline",
     "eventDate", "eventTime", "eventLocation",
     "storyEyebrow", "storyScriptTitle", "bodyParagraphs",
-    "pullQuoteEyebrow", "pullQuote", "pullQuoteAttribution",
     "ctaEyebrow", "ctaHeadline", "ctaSubline", "ctaButtonLabel", "ctaButtonHref",
     "heroImageAlt", "heroImageDescription", "secondaryImageAlt", "secondaryImageDescription",
     "audienceHints",

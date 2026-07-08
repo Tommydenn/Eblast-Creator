@@ -78,10 +78,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  console.log(
-    `[push-eblast] community=${community.slug} subject="${body.subject}" htmlBytes=${html.length}`,
-  );
-
   // 1) Convert relative /public image paths (logos, etc.) to data URIs so
   //    HubSpot can resolve them. swapDataUrisForHostedImages then uploads them
   //    to HubSpot File Manager and swaps the data URIs for hosted CDN URLs.
@@ -96,9 +92,6 @@ export async function POST(req: NextRequest) {
     html,
     folderPath: `/eblast-drafter/${community.slug}`,
   });
-  console.log(
-    `[push-eblast] image swap: attempted=${swap.attempted} uploaded=${swap.uploaded} bytesBefore=${swap.bytesBefore} bytesAfter=${swap.bytesAfter}`,
-  );
   if (swap.failures.length > 0) {
     console.error(`[push-eblast] image-upload failures`, JSON.stringify(swap.failures));
     return NextResponse.json({
@@ -130,7 +123,6 @@ export async function POST(req: NextRequest) {
   });
   if (!upload.ok) {
     console.error(`[push-eblast] upload failed status=${upload.status}`, JSON.stringify(upload.body));
-    // Bug: step label "upload_images" was reused for the template-upload step (misleading); also missing HTTP status
     return NextResponse.json({
       ok: false,
       steps: [
@@ -140,7 +132,7 @@ export async function POST(req: NextRequest) {
           status: 200,
           body: { attempted: swap.attempted, uploaded: swap.uploaded, bytesAfter: swap.bytesAfter },
         },
-        upload,
+        { ...upload, step: "upload_template" },
       ],
     }, { status: upload.status ?? 500 });
   }
@@ -162,10 +154,6 @@ export async function POST(req: NextRequest) {
     includedListIds: segments.includedListIds,
     excludedListIds: segments.excludedListIds,
   };
-  console.log(
-    `[push-eblast] segments being sent to HubSpot:`,
-    JSON.stringify(segmentsPayload),
-  );
   const create = await createEmail({
     name: body.name ?? generateHubspotEmailName({
       acronym: community.hubspot.acronym,

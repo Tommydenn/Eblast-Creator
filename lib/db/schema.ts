@@ -3,7 +3,7 @@
 //
 // Conventions:
 //   - Tabular fields are columns; structured nested objects (brand, address,
-//     hubspot, voice, socials) are JSONB so existing TypeScript shape access
+//     hubspot, socials) are JSONB so existing TypeScript shape access
 //     like `community.brand.primary` keeps working.
 //   - Multi-row relations (senders, past sends, drafts, approvals) are their
 //     own tables.
@@ -346,7 +346,11 @@ export const pdfChunks = pgTable(
 
 export type PdfChunkRow = InferSelectModel<typeof pdfChunks>;
 
-// ---------- approval threads (magic-link salesperson approvals) -----------
+// ---------- approval threads (superseded) ---------------------------------
+// This table was the original approval design; it was replaced by
+// savedDraftApprovals (above). The DB table still exists but nothing reads
+// or writes to it. Kept in schema to prevent drizzle-kit push from trying
+// to recreate it. Do not add new code that references this table.
 
 export const approvalThreads = pgTable("approval_threads", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -355,13 +359,9 @@ export const approvalThreads = pgTable("approval_threads", {
     .references(() => drafts.id, { onDelete: "cascade" }),
   salespersonEmail: text("salesperson_email").notNull(),
   salespersonName: text("salesperson_name"),
-  /** Signed token used in the magic link. */
   magicToken: text("magic_token").notNull().unique(),
   decision: approvalDecisionEnum("decision").notNull().default("pending"),
   editNotes: text("edit_notes"),
   sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
 });
-
-export type ApprovalThreadRow = InferSelectModel<typeof approvalThreads>;
-export type NewApprovalThreadRow = InferInsertModel<typeof approvalThreads>;

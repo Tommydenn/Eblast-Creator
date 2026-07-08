@@ -20,18 +20,3 @@ export type {
 } from "@/lib/db/schema";
 
 export { getCommunity, listCommunities } from "@/lib/db/queries";
-
-/**
- * @deprecated The hardcoded `communities` array no longer exists.
- *   Use `listCommunities()` (async) for the registry. Source-of-truth seed
- *   data lives in `lib/db/seed-data.ts` and is loaded into Postgres via
- *   `npm run db:seed`.
- */
-export const communities: never[] = [];
-
-/** @deprecated `CommunityType` is now an enum in the DB schema. */
-export type CommunityType =
-  | "assisted_living"
-  | "memory_care"
-  | "independent_living"
-  | "mixed";

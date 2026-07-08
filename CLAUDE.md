@@ -32,11 +32,11 @@ Marketing creates a designed PDF flyer per upcoming event/announcement, per comm
 ## Database
 
 Postgres is the source of truth for the registry. Schema in `lib/db/schema.ts`. Tables:
-- `communities` — 22 GLM communities (Caretta x4, Talamore x3, Hayden Grove x2, The Glenn x5, Cottagewood x2, Amira Choice x2, Global Pointe, Seven Hills, Orchards of Minnetonka, The Pillars of Grand Rapids). JSONB columns for nested objects (`brand`, `address`, `hubspot`, `socials`, `voice`, `marketingDirector`, `logos`, `photoLibrary`, `brandGuideExtracted`).
+- `communities` — 22 GLM communities (Caretta x4, Talamore x3, Hayden Grove x2, The Glenn x5, Cottagewood x2, Amira Choice x2, Global Pointe, Seven Hills, Orchards of Minnetonka, The Pillars of Grand Rapids). JSONB columns for nested objects (`brand`, `address`, `hubspot`, `socials`, `marketingDirector`, `logos`, `photoLibrary`, `brandGuideExtracted`).
 - `community_senders` — multiple senders per community (real data: Caretta locations share Becky Sobolik + Meranda Lelonek; Talamore St Cloud has Brian Glonek + Josie Brenny; etc.).
 - `past_sends` — HubSpot history mirror. Populated by `npm run sync:past-sends`. Keeps last 365 days of `BATCH_EMAIL` sends only. Each row has subject, preview text, from name+email, state, published_at, recipient/open/click/bounce/unsubscribe counts, and a `raw` JSONB blob with the full HubSpot snapshot.
 - `drafts` — eblasts the agent has produced, with status state machine (`drafting → awaiting_approval → edits_requested → approved → scheduled → sent`).
-- `approval_threads` — magic-link salesperson approvals.
+- `approval_threads` — superseded by `savedDraftApprovals`. Kept in schema to avoid accidental drops; nothing writes to it.
 
 Reads through `lib/db/queries.ts` (`getCommunity(slug)`, `listCommunities()`). All async. Legacy import path `@/data/communities` re-exports the same.
 
@@ -48,11 +48,11 @@ Scripts:
 - `npm run db:studio` — Drizzle Studio (browser DB explorer).
 - `npx tsx scripts/sync-past-sends.ts` — pull last 365 days of BATCH_EMAIL marketing emails into `past_sends` (with stats). Idempotent.
 - `npx tsx scripts/enrich-communities.ts` — read each community's past sends and fill in missing community fields (tracking phone, website, email, senders).
-- `npx tsx scripts/extract-brand-guide.ts <slug> <path/to/pdf>` — read a brand-guide PDF and write `brand` + `voice` + `taglines` + `amenities` onto the community.
+- `npx tsx scripts/extract-brand-guide.ts <slug> <path/to/pdf>` — read a brand-guide PDF and write `brand` + `taglines` + `amenities` onto the community.
 
 Runs via Vercel cron daily (configured in `vercel.json`) — hits `/api/cron/sync-past-sends`.
 
-Required env vars: `DATABASE_URL` (Neon pooled). Set via Vercel Postgres → Connect Project → `.env.local` snippet.
+Required env vars: see `.env.example` for all required variables (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `HUBSPOT_PRIVATE_APP_TOKEN`, `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `MAIL_FROM`, `NEXT_PUBLIC_APP_URL`). Production values live in Vercel project settings.
 
 Per-community fields worth knowing:
 - `trackingPhone` — CallRail number used in eblast CTAs. NEVER same as `phone` (which is the public/flyer number).
@@ -89,8 +89,9 @@ See `.env.example`. Production values live in Vercel project settings.
 
 - `ANTHROPIC_API_KEY` — Anthropic Console
 - `HUBSPOT_PRIVATE_APP_TOKEN` — needs `content` AND `files` scopes
-- `HUBSPOT_DEFAULT_FROM_NAME`
-- `HUBSPOT_DEFAULT_REPLY_TO`
+- `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET` — Microsoft Graph app-only creds for outbound approval email
+- `MAIL_FROM` — licensed M365 mailbox to send from
+- `NEXT_PUBLIC_APP_URL` — base URL for magic links
 
 ## Run / deploy
 
@@ -142,9 +143,8 @@ Coded email templates need a HubL annotation header and a CAN-SPAM compliant foo
 
 | Path | Purpose |
 |---|---|
-| `data/communities.ts` | Single source of truth for the 20 communities — type def + array of entries. Editing this file is how you onboard a new community. |
+| `data/communities.ts` | Backward-compat re-export shim. Community registry now lives in Postgres — import from `@/lib/db/queries` in new code. |
 | `data/communities/{slug}/` | Per-community asset folder placeholders. Real assets live on HubSpot Files. |
-| `data/communities-onboarding.csv` | Template for batch-onboarding the remaining 19 communities. |
 | `lib/anthropic.ts` | Claude PDF extraction with structured tool output + the chat refinement function. |
 | `lib/critic.ts` | Reviewer agent. Takes ExtractedFlyer + Community → severity-tagged findings, suggestions, subject alternatives. |
 | `lib/agentic-draft.ts` | Drafter ↔ critic loop orchestrator. `agenticDraftLoop({pdfBase64, community})` returns the converged final draft + iteration trace. Used by `app/api/draft-from-pdf`. |

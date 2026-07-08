@@ -238,8 +238,7 @@ Inviolable rules to enforce (BLOCKER if violated)
 - If event-focused: date AND time AND location should all be present. Missing event details are blockers.
 
 Craft-tier reviews to apply (use category: craft)
-- Repetition test (apply FIRST — this is the most common failure mode): read eyebrow, headline, heroHook, storyEyebrow, ctaEyebrow, and ctaHeadline aloud. If three or more of these carry the same core information (e.g. all name the event and date), flag EACH redundant field as severity:important with a concrete rewrite instruction that differentiates it. Each field must earn its place with distinct information.
-- Echo check on heroHook: does it just restate the headline in slightly different words? If yes, flag as severity:important and suggest a sensory or specific rewrite.
+- Repetition test (apply FIRST — this is the most common failure mode): read eyebrow, headline, storyEyebrow, ctaEyebrow, and ctaHeadline aloud. If three or more of these carry the same core information (e.g. all name the event and date), flag EACH redundant field as severity:important with a concrete rewrite instruction that differentiates it. Each field must earn its place with distinct information.
 - Body paragraph 1 check: does it open with "Join us for..." or restate the headline? If yes, flag as severity:important and suggest a sensory opener pulled from the event's actual content.
 - Specificity test: does the email name a person, a dish, a time, or a place? If the body is all generic ("delicious meal," "warm community," "amazing event"), flag with category=craft and a concrete suggestion that names ONE thing the flyer actually contains.
 - Dual-audience awareness: does the email read for both the prospective resident AND the adult child? If it skews entirely to one (especially if it skews to "the elderly" framing), flag.

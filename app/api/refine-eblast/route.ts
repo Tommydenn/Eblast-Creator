@@ -27,7 +27,6 @@ function getChangedFields(before: ExtractedFlyer, after: ExtractedFlyer): string
     ["eyebrow", "Eyebrow"],
     ["headline", "Headline"],
     ["scriptSubheadline", "Script subheadline"],
-    ["heroHook", "Hero hook"],
     ["storyEyebrow", "Story eyebrow"],
     ["storyScriptTitle", "Story title"],
     ["ctaEyebrow", "CTA eyebrow"],

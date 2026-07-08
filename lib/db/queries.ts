@@ -22,7 +22,7 @@ import {
  * The composed Community shape returned to the rest of the app. JSONB columns
  * are surfaced as their nested types; senders are joined in.
  */
-export interface Community extends Omit<CommunityRow, "address" | "brand" | "socials" | "hubspot" | "voice" | "marketingDirector" | "logos" | "photoLibrary" | "brandGuideExtracted"> {
+export interface Community extends Omit<CommunityRow, "address" | "brand" | "socials" | "hubspot" | "marketingDirector" | "logos" | "photoLibrary" | "brandGuideExtracted"> {
   address: Address;
   brand: CommunityBrand;
   socials: CommunitySocials;
@@ -107,19 +107,6 @@ export async function listCommunities(): Promise<Community[]> {
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-// ---------- legacy compat shim --------------------------------------------
-//
-// Existing code accesses `community.sender.name` / `community.sender.email`.
-// Provide a virtual `sender` getter on the returned object so callsites keep
-// working while we incrementally migrate to `community.senders[0]`. This is
-// declared as a separate helper instead of mutating the Community type so the
-// Postgres-backed shape stays correct.
-
-export interface CommunityWithLegacySender extends Community {
-  /** Deprecated. Use `senders[0]` directly. Kept for backward compat. */
-  sender: { name: string; email: string; title?: string };
-}
-
 // ---------- sender CRUD ---------------------------------------------------
 
 export async function addSender(
@@ -202,12 +189,3 @@ export async function updateCommunitySegments(
   return result.length > 0;
 }
 
-export function withLegacySender(c: Community): CommunityWithLegacySender {
-  const primary = c.senders[0];
-  return {
-    ...c,
-    sender: primary
-      ? { name: primary.name, email: primary.email, title: primary.title ?? undefined }
-      : { name: c.displayName, email: c.email ?? "" },
-  };
-}

@@ -14,9 +14,6 @@ export interface ExtractedFlyer {
   headline: string;
   /** Optional script-styled subhead under the headline. */
   scriptSubheadline?: string;
-  /** @deprecated No longer rendered. Always empty string on new drafts. */
-  heroHook: string;
-
   // Event detail (only present when the flyer is for an event)
   eventDate?: string;       // "Wednesday, May 13"
   eventTime?: string;       // "2:00 PM"

@@ -190,7 +190,6 @@ DRAFT (key fields):
 - Preview (drafter): ${JSON.stringify(opts.flyer.previewText)}
 - Eyebrow: ${JSON.stringify(opts.flyer.eyebrow)}
 - Headline: ${JSON.stringify(opts.flyer.headline)}
-- Hero hook: ${JSON.stringify(opts.flyer.heroHook)}
 - Event date: ${JSON.stringify(opts.flyer.eventDate ?? "")}
 - Event time: ${JSON.stringify(opts.flyer.eventTime ?? "")}
 - Body: ${opts.flyer.bodyParagraphs.join("\n\n")}

@@ -8,9 +8,8 @@ interface Props {
 }
 
 export default function ApprovalModal({ onClose }: Props) {
-  const { fields, community, buildHtml, save, isSaving } = useDraft();
+  const { fields, community, save, isSaving, sendForApproval } = useDraft();
   const [recipientEmail, setRecipientEmail] = useState("jwalls@greatlakesmc.com");
-  const [notes, setNotes] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,27 +22,10 @@ export default function ApprovalModal({ onClose }: Props) {
     setError(null);
     try {
       await save();
-      const html = buildHtml();
-      const res = await fetch("/api/send-approval", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipientEmail: recipientEmail.trim(),
-          notes: notes.trim(),
-          communitySlug: community!.slug,
-          communityName: community!.displayName,
-          subject: fields!.subject,
-          html,
-        }),
-      });
-      const data = await res.json().catch(() => ({ ok: false, error: "Unexpected response" }));
-      if (data.ok) {
-        setSent(true);
-      } else {
-        setError(data.error ?? "Failed to send approval request.");
-      }
+      await sendForApproval({ recipientEmail: recipientEmail.trim() });
+      setSent(true);
     } catch (e) {
-      setError(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSending(false);
     }
@@ -90,19 +72,6 @@ export default function ApprovalModal({ onClose }: Props) {
                 onChange={(e) => setRecipientEmail(e.target.value)}
                 className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538]"
                 placeholder="reviewer@example.com"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">
-                Notes <span className="normal-case font-normal text-[#9aaba4]">(optional)</span>
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-                className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] resize-none"
-                placeholder="Any context for the reviewer…"
               />
             </div>
 

@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { pastSends } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
 import { SendersPanel } from "@/components/SendersPanel";
+import { ContactPanel } from "@/components/ContactPanel";
 import { RecentSendsPanel } from "@/components/RecentSendsPanel";
 
 export const dynamic = "force-dynamic";
@@ -350,24 +351,15 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
 
             {/* Contact & Identity */}
             <Section title="Contact &amp; identity">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Phone (public)">
-                  {c.phone ?? <span className="text-clay-600">not set</span>}
-                </Field>
-                <Field label="Tracking phone (CallRail)" highlight={!!c.trackingPhone}>
-                  {c.trackingPhone ?? <span className="text-clay-600">not set</span>}
-                </Field>
-              </div>
-              <Field label="Email">{c.email ?? <span className="text-clay-600">not set</span>}</Field>
-              <Field label="Website">
-                {websiteHref ? (
-                  <a href={websiteHref} target="_blank" rel="noreferrer" className="hover:underline" style={{ color: c.brand.accent }}>
-                    {c.websiteUrl!.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                  </a>
-                ) : (
-                  <span className="text-clay-600">not set</span>
-                )}
-              </Field>
+              <ContactPanel
+                slug={c.slug}
+                initialDisplayName={c.displayName}
+                initialAddress={c.address}
+                initialPhone={c.phone ?? null}
+                initialTrackingPhone={c.trackingPhone ?? null}
+                initialEmail={c.email ?? null}
+                initialWebsiteUrl={c.websiteUrl ?? null}
+              />
               {c.nameAbbreviation && (
                 <Field label="Abbreviation">{c.nameAbbreviation}</Field>
               )}

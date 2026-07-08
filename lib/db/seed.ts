@@ -24,7 +24,11 @@ async function main() {
     const isNew = existing.length === 0;
     if (!isNew) {
       communityId = existing[0].id;
-      await db.update(communities).set({ ...community, updatedAt: new Date() }).where(eq(communities.id, communityId));
+      // Exclude user-editable contact fields from seed updates so manual
+      // changes made through the UI are never overwritten.
+      const { displayName, address, phone, trackingPhone, email, websiteUrl, ...seedFields } = community;
+      void displayName; void address; void phone; void trackingPhone; void email; void websiteUrl;
+      await db.update(communities).set({ ...seedFields, updatedAt: new Date() }).where(eq(communities.id, communityId));
       console.log(`  updated  ${community.slug}`);
     } else {
       const inserted = await db.insert(communities).values(community).returning({ id: communities.id });

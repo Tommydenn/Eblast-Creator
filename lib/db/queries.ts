@@ -161,6 +161,32 @@ export async function deleteSender(id: string): Promise<boolean> {
   return result.length > 0;
 }
 
+export async function updateCommunityContact(
+  slug: string,
+  data: {
+    displayName?: string;
+    address?: Address;
+    phone?: string | null;
+    trackingPhone?: string | null;
+    email?: string | null;
+    websiteUrl?: string | null;
+  }
+): Promise<boolean> {
+  const patch: Partial<typeof communities.$inferInsert> = { updatedAt: new Date() };
+  if (data.displayName !== undefined) patch.displayName = data.displayName;
+  if ("address" in data) patch.address = data.address;
+  if ("phone" in data) patch.phone = data.phone;
+  if ("trackingPhone" in data) patch.trackingPhone = data.trackingPhone;
+  if ("email" in data) patch.email = data.email;
+  if ("websiteUrl" in data) patch.websiteUrl = data.websiteUrl;
+  const result = await db
+    .update(communities)
+    .set(patch)
+    .where(eq(communities.slug, slug))
+    .returning({ id: communities.id });
+  return result.length > 0;
+}
+
 export async function updateCommunitySegments(
   slug: string,
   includedListIds: number[],

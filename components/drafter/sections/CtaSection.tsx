@@ -62,7 +62,7 @@ export default function CtaSection() {
         />
       </Field>
 
-      <Field label="Call Button Label" hint="The primary action button at the bottom of the email">
+      <Field label="Call Button Label" hint="The primary action button at the bottom of the email. Also appears in the hero section.">
         <RichInput
           value={fields.ctaButtonLabel}
           onValueChange={(html) => setField("ctaButtonLabel", html)}
@@ -75,7 +75,30 @@ export default function CtaSection() {
         />
       </Field>
 
-      <Field label="Footer Name" hint="Defaults to the community display name">
+      <Field label="Visit Website URL" hint="URL for the 'Visit Website' button in the footer. Defaults to the community's configured website.">
+        <input
+          type="text"
+          value={fields.footerWebsiteUrl ?? ""}
+          onChange={(e) => setField("footerWebsiteUrl", e.target.value || undefined)}
+          placeholder="e.g. mycommunityliving.com"
+          className={baseInput}
+        />
+      </Field>
+
+      <Field label="Thank You Text" hint="Closing salutation displayed in the email footer. Defaults to 'Thank You!'">
+        <RichInput
+          value={fields.thankYouText ?? ""}
+          onValueChange={(html) => setField("thankYouText", html || undefined)}
+          placeholder="Thank You!"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="thankYouText"
+        />
+      </Field>
+
+      <Field label="Footer Signature" hint="Name appearing below 'Thank You!' in the email footer. Defaults to the community display name.">
         <RichInput
           value={fields.footerName ?? ""}
           onValueChange={(html) => setField("footerName", html || undefined)}

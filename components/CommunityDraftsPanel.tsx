@@ -124,10 +124,12 @@ export function CommunityDraftsPanel({ communitySlug }: { communitySlug: string 
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-sand-900">{d.subject || "(no subject)"}</p>
             <p className="mt-0.5 text-[11px] text-sand-500">
-              {new Date(d.savedAt).toLocaleDateString(undefined, {
+              {new Date(d.savedAt).toLocaleString(undefined, {
                 month: "short",
                 day: "numeric",
                 year: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
               })}
               {d.imageCount > 0 ? ` · ${d.imageCount} image${d.imageCount === 1 ? "" : "s"}` : ""}
             </p>

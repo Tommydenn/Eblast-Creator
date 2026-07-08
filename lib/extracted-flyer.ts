@@ -62,6 +62,13 @@ export interface ExtractedFlyer {
   footerName?: string;     // default: community.displayName
   footerAddress?: string;  // default: "{street} · {city}, {state} {zip}"
 
+  /** Override for the address line shown in the hero section beneath the event date. */
+  heroAddress?: string;
+  /** Override for the "Thank You!" text in the email footer. */
+  thankYouText?: string;
+  /** Override for the "Visit Website" button URL in the footer. */
+  footerWebsiteUrl?: string;
+
   /**
    * 1–3 generic words classifying the event type — used for the HubSpot email
    * name so the list view is scannable. e.g. "Open House", "Social Event",

@@ -88,6 +88,32 @@ export default function HeroSection() {
         />
       </Field>
 
+      <Field label="Address Line" hint="Shown beneath the event date in the hero section. Defaults to the community name and address.">
+        <RichInput
+          value={fields.heroAddress ?? ""}
+          onValueChange={(html) => setField("heroAddress", html || undefined)}
+          placeholder="e.g. Arbor Crossing, 1234 Oak St, Green Bay, WI 54301"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="heroAddress"
+        />
+      </Field>
+
+      <Field label="Call Button Label" hint="Text on the primary call-to-action button. Appears in both the hero and footer sections.">
+        <RichInput
+          value={fields.ctaButtonLabel}
+          onValueChange={(html) => setField("ctaButtonLabel", html)}
+          placeholder="e.g. Call 920.504.3443"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="ctaButtonLabel"
+        />
+      </Field>
+
     </div>
   );
 }

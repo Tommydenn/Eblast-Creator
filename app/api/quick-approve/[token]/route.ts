@@ -180,8 +180,8 @@ export async function GET(
 
     const segments = await resolveSegmentsFromRecentSend({
       communityId: community.id,
-      fallbackIncluded: community.hubspot.includedListIds ?? (community.hubspot.listId ? [community.hubspot.listId] : []),
-      fallbackExcluded: community.hubspot.excludedListIds ?? [],
+      fallbackIncluded: [],
+      fallbackExcluded: [],
     });
     const create = await createEmail({
       name: generateHubspotEmailName({

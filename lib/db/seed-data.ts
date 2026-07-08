@@ -698,43 +698,9 @@ export const seedCommunities: SeedCommunity[] = [
   },
 ];
 
-// ── HubSpot eblast segments (Lists) per community ────────────────────────────
-// Pulled from Great Lakes Management's HubSpot (account 8818180) in June 2026.
-// Each community's segments are named "{ACRONYM} eBlasts | {funnel stage}".
-//   included = active prospects to email (New / Contacted / Qualified /
-//              Subscriber, Toured / Qualified / Waitlist / Unit Reserved /
-//              Assessment Requested / Application Complete, and broad "Leads"/
-//              "Deals New" lists)
-//   excluded = suppress (Moved In / Moved Out / Closed Lost / Cancelled
-//              Reservation / Lease Signed, and Persona: Referral Source)
-// Values are HubSpot hs_list_id numbers. If segments change in HubSpot, update
-// here and re-seed. Cottagewood Mankato has no segments yet (intentionally absent).
-const EBLAST_SEGMENTS: Record<string, { included: number[]; excluded: number[] }> = {
-  CB: { included: [1564, 1568, 1572, 2092, 2093, 2094, 2095], excluded: [1588, 1592, 1704] },
-  CEC: { included: [9490, 9492, 9495, 9505, 9506, 9507, 9508, 9512], excluded: [9499, 9501, 9510] },
-  CH: { included: [1562, 1566, 1570, 1612, 2088, 2089, 2090, 2091, 6126, 9604, 9605, 9653], excluded: [1586, 1590, 1702] },
-  CM: { included: [9752, 9754, 9756, 9760, 9761, 9762, 9763, 9768], excluded: [9758, 9764, 9766] },
-  TSC: { included: [1444, 1450, 1456, 1598, 2072, 2073, 2074, 2075], excluded: [1480, 1486, 1688, 2130] },
-  TSP: { included: [1446, 1452, 1458, 2068, 2069, 2070, 2071], excluded: [1482, 1488, 1690, 2131] },
-  TW: { included: [1448, 1454, 1460, 2064, 2065, 2066, 2067, 9886, 9888, 9890, 9892], excluded: [1484, 1490, 1602, 1692] },
-  HGB: { included: [1498, 1502, 1508, 1606, 2076, 2077, 2078, 2079, 2790], excluded: [1522, 1526, 1696] },
-  HGSA: { included: [1500, 1504, 1506, 1516, 2080, 2081, 2082, 2083], excluded: [1520, 1524, 1528, 1698] },
-  TGB: { included: [1620, 1627, 1639, 2053, 2057, 2058, 2059], excluded: [1663, 1667, 1671] },
-  TGH: { included: [1616, 1622, 1629, 1635, 2043, 2044, 2045, 2046, 9468], excluded: [1659, 1665, 1673] },
-  TGM: { included: [1618, 1625, 1631, 1637, 2048, 2049, 2050, 2051], excluded: [1661, 1669, 1675] },
-  TGWSTP: { included: [10335, 10337, 10345, 10346, 10347, 10349], excluded: [10339, 10341, 10343] },
-  CWR: { included: [2143, 2144, 2145, 2146, 2159, 2163, 2165], excluded: [2147, 2151] },
-  ACA: { included: [9305, 9306, 9307, 9308, 9311, 9313, 9315], excluded: [9309, 9317, 9319] },
-  ACB: { included: [9438, 9439, 9440, 9441, 9442, 9444, 9446], excluded: [9448, 9450, 9452, 9454] },
-  GP: { included: [1544, 1546, 1548, 2084, 2085, 2086, 2087], excluded: [1556, 1558, 1700] },
-  SH: { included: [1425, 1428, 1430, 2060, 2061, 2062, 2063], excluded: [1438, 1440, 1694] },
-  OM: { included: [10360, 10361, 10364, 10366, 10368], excluded: [10356, 10358, 10362] },
-  PGR: { included: [10318, 10324, 10325, 10328, 10330, 10332], excluded: [10320, 10322, 10326] },
-};
-
-// HubSpot acronym per community slug. The Glenn Buffalo AL & MC intentionally
-// share the single TGB segment set. Cottagewood Mankato is intentionally absent
-// (no HubSpot segments exist for it yet).
+// HubSpot acronym per community slug. Used to label emails in HubSpot
+// ("{ACRONYM} eBlasts | {funnel stage}"). Segments are resolved at push time
+// from the community's most recent HubSpot send — nothing is hardcoded here.
 const ACRONYM_BY_SLUG: Record<string, string> = {
   "caretta-bellevue": "CB",
   "caretta-eau-claire": "CEC",
@@ -766,18 +732,11 @@ const ACRONYM_BY_SLUG: Record<string, string> = {
   "the-pillars-of-grand-rapids": "PGR",
 };
 
-// Attach resolved segments to each community's hubspot config (preserving any
-// other hubspot fields). Runs once at module load.
+// Attach HubSpot acronym to each community's hubspot config.
 for (const sc of seedCommunities) {
   const acronym = ACRONYM_BY_SLUG[sc.community.slug];
   if (!acronym) continue;
-  const seg = EBLAST_SEGMENTS[acronym];
-  sc.community.hubspot = {
-    ...sc.community.hubspot,
-    acronym,
-    includedListIds: seg?.included ?? [],
-    excludedListIds: seg?.excluded ?? [],
-  };
+  sc.community.hubspot = { ...sc.community.hubspot, acronym };
 }
 
 // Sender identities recovered from each community's actual HubSpot send history

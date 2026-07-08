@@ -146,16 +146,14 @@ export async function POST(req: NextRequest) {
   }
 
   // 2) Create the marketing email pointing at it.
-  // Pull segments from the most recent published send for this community so
-  // new emails automatically inherit the same lists. Falls back to the
-  // community's static config if no past send is found or the API call fails.
-  // Bug: resolveSegmentsFromRecentSend had no try/catch — a failure would produce an unhandled rejection
+  // Segments are resolved solely from the community's most recent HubSpot send.
+  // If no prior send exists, the email is created with no lists attached.
   let segments: Awaited<ReturnType<typeof resolveSegmentsFromRecentSend>>;
   try {
     segments = await resolveSegmentsFromRecentSend({
       communityId: community.id,
-      fallbackIncluded: community.hubspot.includedListIds ?? (community.hubspot.listId ? [community.hubspot.listId] : []),
-      fallbackExcluded: community.hubspot.excludedListIds ?? [],
+      fallbackIncluded: [],
+      fallbackExcluded: [],
     });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: `Segment resolution failed: ${e.message ?? String(e)}` }, { status: 500 });

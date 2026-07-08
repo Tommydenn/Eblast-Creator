@@ -899,15 +899,16 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (!draftId) throw new Error("Save the draft first before sending for approval.");
     const c = communityRef.current;
     if (!c) throw new Error("No community selected.");
+    const html = buildHtml();
     const res = await fetch("/api/draft-approval", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ savedDraftId: draftId, communitySlug: c.slug, ...opts }),
+      body: JSON.stringify({ savedDraftId: draftId, communitySlug: c.slug, html, ...opts }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error ?? "Failed to send approval");
     setApprovalStatus({ decision: "pending", sentAt: new Date().toISOString() });
-  }, [draftId]);
+  }, [draftId, buildHtml]);
 
   // ─── Subject swap ─────────────────────────────────────────────────────────
   const swapSubjectLine = useCallback((subject: string, previewText: string) => {

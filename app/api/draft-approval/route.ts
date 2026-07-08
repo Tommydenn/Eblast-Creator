@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     recipientEmail: string;
     recipientName?: string;
     notifyEmail?: string;
+    html?: string;
   };
   try {
     body = await req.json();
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Body must be JSON" }, { status: 400 });
   }
 
-  const { savedDraftId, communitySlug, recipientEmail, recipientName, notifyEmail } = body;
+  const { savedDraftId, communitySlug, recipientEmail, recipientName, notifyEmail, html: bodyHtml } = body;
   if (!savedDraftId || !communitySlug || !recipientEmail) {
     return NextResponse.json({ ok: false, error: "Missing required fields" }, { status: 400 });
   }
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   const draftData = draftRow.data as Record<string, any>;
-  const draftHtml: string = draftData?.html ?? "";
+  const draftHtml: string = bodyHtml || draftData?.html || "";
   const draftSubject: string = draftRow.subject ?? draftData?.subject ?? "(no subject)";
 
   // Bug: getCommunity had no try/catch — a failure would produce an unhandled rejection
@@ -91,6 +92,10 @@ export async function POST(req: NextRequest) {
     });
     if (swap.failures.length === 0) {
       emailHtml = swap.html;
+      // Persist clean HTML so quick-approve can use it without re-uploading images.
+      await db.update(savedDrafts)
+        .set({ data: { ...(draftRow.data as object), html: emailHtml } })
+        .where(eq(savedDrafts.id, savedDraftId));
     }
   } catch {
     // Fall back to raw HTML if HubSpot upload fails — email sends but images may be missing.

@@ -34,15 +34,16 @@ function DraftCard({
   onDelete: () => void;
 }) {
   const isLegacy = !draft.isNewFormat;
-  const date = new Date(draft.savedAt).toLocaleDateString(undefined, {
-    month: "short",
+  // Exact save timestamp — e.g. "7/9/2026, 9:45 AM" — not a relative "2d ago"
+  // bucket, since the precise moment matters for telling similarly-named
+  // drafts apart.
+  const relTime = new Date(draft.savedAt).toLocaleString(undefined, {
+    month: "numeric",
     day: "numeric",
     year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
-  const now = Date.now();
-  const ageMs = now - new Date(draft.savedAt).getTime();
-  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-  const relTime = ageDays === 0 ? "Today" : ageDays === 1 ? "Yesterday" : ageDays < 7 ? `${ageDays}d ago` : date;
 
   return (
     <div

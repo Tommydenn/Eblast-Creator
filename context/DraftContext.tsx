@@ -209,6 +209,37 @@ export function useDraft(): DraftContextValue {
 
 const EMPTY_IMAGES: DraftImages = { hero: null, secondary: null, gallery: [] };
 
+// Batches image POSTs to /api/saved-drafts/[id]/images so multiple small
+// items share a request while staying safely under Vercel's ~4.5 MB route
+// body limit. Any single item over the cap is skipped (logged, not silently
+// dropped) rather than risk a failed request — in practice no observed
+// original/cropped image has come close to this.
+const IMAGE_BATCH_MAX_CHARS = 3_500_000;
+async function postImageBatches(draftId: string, items: Array<{ idx: number; url: string }>): Promise<void> {
+  let batch: Array<{ idx: number; url: string }> = [];
+  let batchChars = 0;
+  const flush = async () => {
+    if (batch.length === 0) return;
+    await fetch(`/api/saved-drafts/${draftId}/images`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ images: batch }),
+    }).catch(() => null);
+    batch = [];
+    batchChars = 0;
+  };
+  for (const item of items) {
+    if (item.url.length > IMAGE_BATCH_MAX_CHARS) {
+      console.warn(`[postImageBatches] skipping oversized image at idx ${item.idx} (${item.url.length} chars)`);
+      continue;
+    }
+    if (batchChars + item.url.length > IMAGE_BATCH_MAX_CHARS) await flush();
+    batch.push(item);
+    batchChars += item.url.length;
+  }
+  await flush();
+}
+
 export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Community list
   const [communities, setCommunities] = useState<ClientCommunity[]>([]);
@@ -467,40 +498,22 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ draft: initDraft }),
         })
           .then(async () => {
-            // Send each slot image individually — cropped data URIs are ~100-200KB each.
-            // Skip originalUrl when it's a data URI (raw PDF pages are 2-5MB).
-            const isDataUri = (u: string) => u.startsWith("data:");
+            // originalUrl must be saved even as a data URI — see postImageBatches
+            // for why (it's what repositionImage() re-crops from after a reload).
             const slotItems: Array<{ idx: number; url: string }> = [];
             if (newImages.hero?.url) slotItems.push({ idx: -1, url: newImages.hero.url });
-            if (newImages.hero?.originalUrl && !isDataUri(newImages.hero.originalUrl)) slotItems.push({ idx: -2, url: newImages.hero.originalUrl });
+            if (newImages.hero?.originalUrl) slotItems.push({ idx: -2, url: newImages.hero.originalUrl });
             if (newImages.secondary?.url) slotItems.push({ idx: -3, url: newImages.secondary.url });
-            if (newImages.secondary?.originalUrl && !isDataUri(newImages.secondary.originalUrl)) slotItems.push({ idx: -4, url: newImages.secondary.originalUrl });
+            if (newImages.secondary?.originalUrl) slotItems.push({ idx: -4, url: newImages.secondary.originalUrl });
             newImages.gallery.forEach((g, i) => {
               if (g.url) slotItems.push({ idx: -(10 + i * 2), url: g.url });
-              if (g.originalUrl && !isDataUri(g.originalUrl)) slotItems.push({ idx: -(11 + i * 2), url: g.originalUrl });
+              if (g.originalUrl) slotItems.push({ idx: -(11 + i * 2), url: g.originalUrl });
             });
-            for (const item of slotItems) {
-              await fetch(`/api/saved-drafts/${newDraftId}/images`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ images: [item] }),
-              }).catch(() => null);
-            }
-            // imageBank — HTTPS URLs only (skip data URIs)
             const bankEntries: Array<{ idx: number; url: string }> = [];
             bank.forEach((url, i) => {
-              if (url && url.startsWith("http")) bankEntries.push({ idx: i, url });
+              if (url) bankEntries.push({ idx: i, url });
             });
-            const CHUNK = 20;
-            const doChunk = (offset: number): Promise<void> => {
-              if (offset >= bankEntries.length) return Promise.resolve();
-              return fetch(`/api/saved-drafts/${newDraftId}/images`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ images: bankEntries.slice(offset, offset + CHUNK) }),
-              }).then(() => doChunk(offset + CHUNK));
-            };
-            return doChunk(0);
+            return postImageBatches(newDraftId, [...slotItems, ...bankEntries]);
           })
           .catch(() => null);
       }
@@ -653,40 +666,33 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const imgs = imagesRef.current;
     const bank = imageBankRef.current;
 
-    // Send each slot image in its own POST — cropped data URIs are ~100-200KB each,
-    // well under the 4.5 MB Vercel limit when sent individually.
-    // Skip originalUrl when it's a data URI (raw PDF pages are 2-5MB each).
-    const isDataUri = (u: string) => u.startsWith("data:");
+    // originalUrl (the full, uncropped photo) MUST be saved even as a data URI —
+    // it's the only way repositionImage() can ever crop to a different part of
+    // the photo after a reload. Previously this was skipped whenever it was a
+    // data URI (i.e. almost always, since images aren't hosted until push/
+    // approval), so every reopened draft lost the ability to reposition/re-crop
+    // and effectively "lost" any part of the photo outside the saved crop.
+    // Every observed original/cropped image so far is well under 1.5 MB as a
+    // data URI, so batch multiple per request instead of one-per-request.
     const slotItems: Array<{ idx: number; url: string }> = [];
     if (imgs.hero?.url) slotItems.push({ idx: -1, url: imgs.hero.url });
-    if (imgs.hero?.originalUrl && !isDataUri(imgs.hero.originalUrl)) slotItems.push({ idx: -2, url: imgs.hero.originalUrl });
+    if (imgs.hero?.originalUrl) slotItems.push({ idx: -2, url: imgs.hero.originalUrl });
     if (imgs.secondary?.url) slotItems.push({ idx: -3, url: imgs.secondary.url });
-    if (imgs.secondary?.originalUrl && !isDataUri(imgs.secondary.originalUrl)) slotItems.push({ idx: -4, url: imgs.secondary.originalUrl });
+    if (imgs.secondary?.originalUrl) slotItems.push({ idx: -4, url: imgs.secondary.originalUrl });
     imgs.gallery.forEach((g, i) => {
       if (g.url) slotItems.push({ idx: -(10 + i * 2), url: g.url });
-      if (g.originalUrl && !isDataUri(g.originalUrl)) slotItems.push({ idx: -(11 + i * 2), url: g.originalUrl });
+      if (g.originalUrl) slotItems.push({ idx: -(11 + i * 2), url: g.originalUrl });
     });
-    for (const item of slotItems) {
-      await fetch(`/api/saved-drafts/${draftId}/images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: [item] }),
-      }).catch(() => null);
-    }
 
-    // Save imageBank HTTPS URLs only — skip data URIs (too large for 4.5 MB limit)
+    // imageBank (the "pick a different extracted photo" pool) was HTTPS-only
+    // before, same bug — pre-hosting, every entry is a data URI, so the pool
+    // was always saved empty. Include data URIs here too.
     const bankEntries: Array<{ idx: number; url: string }> = [];
     bank.forEach((url, i) => {
-      if (url && url.startsWith("http")) bankEntries.push({ idx: i, url });
+      if (url) bankEntries.push({ idx: i, url });
     });
-    const CHUNK = 20;
-    for (let i = 0; i < bankEntries.length; i += CHUNK) {
-      await fetch(`/api/saved-drafts/${draftId}/images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: bankEntries.slice(i, i + CHUNK) }),
-      }).catch(() => null);
-    }
+
+    await postImageBatches(draftId, [...slotItems, ...bankEntries]);
   }, []);
 
   // ─── Save (explicit — shows "Saving…" indicator) ─────────────────────────

@@ -71,6 +71,18 @@ function extractBody(html: string): string {
   return m ? m[1].trim() : html;
 }
 
+// The eblast's own <head> (with the color-scheme meta tags AND the
+// data-ogsc/data-ogsb Outlook dark-mode override rules generated per-render
+// in render-email.ts) is discarded by extractBody() above. Since this wrapper
+// embeds only the eblast's <body>, it needs its own copy of that <style>
+// block re-injected into ITS <head> — the glm-bg-* classes are already
+// present on the extracted markup, they just need the matching CSS to exist
+// somewhere in the document Outlook actually renders.
+function extractEblastStyleBlock(html: string): string {
+  const m = html.match(/<style[^>]*>[\s\S]*?<\/style>/i);
+  return m ? m[0] : "";
+}
+
 function firstName(name: string | null | undefined): string {
   if (!name) return "there";
   return name.trim().split(/\s+/)[0];
@@ -93,6 +105,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
   const editsUrl = `${APP_URL}/approve/${token}/edits`;
   const greeting = firstName(recipientName);
   const eblastBody = extractBody(draftHtml);
+  const eblastStyleBlock = extractEblastStyleBlock(draftHtml);
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -102,14 +115,24 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <meta name="color-scheme" content="light only">
 <meta name="supported-color-schemes" content="light only">
 <title>Draft Review: ${draftSubject}</title>
+<style>
+  /* Same Outlook dark-mode override technique as the eblast itself (see
+     render-email.ts) — this wrapper chrome is near-white and gets force-
+     darkened by Outlook's own repaint the same way the eblast would without it. */
+  [data-ogsc] .wrap-bg-shell, [data-ogsb] .wrap-bg-shell { background-color: #f5f4f1 !important; }
+  [data-ogsc] .wrap-bg-card, [data-ogsb] .wrap-bg-card { background-color: #ffffff !important; }
+  [data-ogsc] .wrap-bg-subject, [data-ogsb] .wrap-bg-subject { background-color: #f7f5f0 !important; }
+  [data-ogsc] .wrap-bg-divider, [data-ogsb] .wrap-bg-divider { background-color: #f0ece4 !important; }
+</style>
+${eblastStyleBlock}
 </head>
-<body style="margin:0;padding:0;background:#f5f4f1;font-family:Georgia,'Times New Roman',serif;" bgcolor="#f5f4f1">
+<body class="wrap-bg-shell" style="margin:0;padding:0;background:#f5f4f1;font-family:Georgia,'Times New Roman',serif;" bgcolor="#f5f4f1">
 
 <!-- Header / intro -->
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" bgcolor="#f5f4f1">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-shell" bgcolor="#f5f4f1">
   <tr>
     <td align="center" style="padding:32px 16px 0;">
-      <table width="600" cellpadding="0" cellspacing="0" role="presentation" bgcolor="#ffffff"
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-card" bgcolor="#ffffff"
              style="background:#ffffff;border-radius:8px 8px 0 0;padding:40px 48px 32px;border:1px solid #e0ddd7;border-bottom:none;">
         <tr>
           <td>
@@ -150,7 +173,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
             <!-- Subject line box -->
             <table cellpadding="0" cellspacing="0" role="presentation" width="100%">
               <tr>
-                <td bgcolor="#f7f5f0" style="background:#f7f5f0;border:1px solid #e0ddd7;border-radius:6px;padding:12px 16px;">
+                <td class="wrap-bg-subject" bgcolor="#f7f5f0" style="background:#f7f5f0;border:1px solid #e0ddd7;border-radius:6px;padding:12px 16px;">
                   <table cellpadding="0" cellspacing="0" role="presentation" width="100%">
                     <tr>
                       <td width="28" valign="middle" style="padding-right:10px;">
@@ -181,7 +204,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
     <td align="center" style="padding:0 16px;">
-      <table width="600" cellpadding="0" cellspacing="0" role="presentation" bgcolor="#f0ece4"
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-divider" bgcolor="#f0ece4"
              style="background:#f0ece4;border-left:1px solid #e0ddd7;border-right:1px solid #e0ddd7;padding:10px 48px;">
         <tr>
           <td>
@@ -200,7 +223,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
     <td align="center" style="padding:0 16px 32px;">
-      <table width="600" cellpadding="0" cellspacing="0" role="presentation" bgcolor="#ffffff"
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-card" bgcolor="#ffffff"
              style="background:#ffffff;border:1px solid #e0ddd7;border-top:none;
                     border-radius:0 0 8px 8px;padding:0;">
         <tr>

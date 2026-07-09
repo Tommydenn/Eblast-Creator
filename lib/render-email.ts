@@ -230,7 +230,7 @@ export function buildEblastHtml(
 
   const header = `
   <tr data-section="Header">
-    <td bgcolor="${headerBg}" style="padding: 22px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
+    <td class="glm-bg-header" bgcolor="${headerBg}" style="padding: 22px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
       ${logoContent}
     </td>
   </tr>`;
@@ -246,7 +246,7 @@ export function buildEblastHtml(
           </td>
         </tr>` : ""}
         <tr>
-          <td bgcolor="${brand.primary}" style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
+          <td class="glm-bg-primary" bgcolor="${brand.primary}" style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
             ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
             <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
@@ -265,7 +265,7 @@ export function buildEblastHtml(
             </table>` : ""}
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
-                <td width="${ctaBtnWidth}" bgcolor="${brand.accent}" align="center" style="background:${brand.accent};">
+                <td width="${ctaBtnWidth}" class="glm-bg-accent" bgcolor="${brand.accent}" align="center" style="background:${brand.accent};">
                   <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
                 </td>
               </tr>
@@ -348,14 +348,14 @@ export function buildEblastHtml(
   const finalCta = `
   <tr data-section="Call to Action">
     <td>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="${brand.accent}" style="background:${brand.accent};">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-accent" bgcolor="${brand.accent}" style="background:${brand.accent};">
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? ` · <span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
-                <td width="${ctaBtnWidth}" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">
+                <td width="${ctaBtnWidth}" class="glm-bg-primary" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">
                   <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
                 </td>
               </tr>
@@ -374,11 +374,11 @@ export function buildEblastHtml(
 
   const footer = `
   <tr data-section="Footer">
-    <td bgcolor="#FFFFFF" style="padding: 40px 36px 32px 36px; background: #FFFFFF;" align="center">
+    <td class="glm-bg-white" bgcolor="#FFFFFF" style="padding: 40px 36px 32px 36px; background: #FFFFFF;" align="center">
       ${websiteHref ? `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
-          <td width="220" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">
+          <td width="220" class="glm-bg-primary" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">
             <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Website"}</a>
           </td>
         </tr>
@@ -398,12 +398,30 @@ export function buildEblastHtml(
 <meta name="color-scheme" content="light only">
 <meta name="supported-color-schemes" content="light only">
 <title>${escapeHtml(flyer.subject)}</title>
+<style>
+  /*
+    Outlook (new Outlook / Outlook.com) applies its own automatic dark-mode
+    repaint that treats near-white surfaces as "unstyled chrome" and force-
+    darkens them — this happens even with a bgcolor attribute set, and even
+    with the color-scheme meta tags above. Outlook's own dark-mode docs
+    describe tagging repainted elements with data-ogsc/data-ogsb attributes;
+    author CSS targeting those attributes is the documented way to pin the
+    original color back. One rule per distinct brand color actually used in
+    this render — kept as classes (not inline !important) because Outlook's
+    repaint targets inline style values directly.
+  */
+  [data-ogsc] .glm-bg-outer, [data-ogsb] .glm-bg-outer { background-color: #f5f5f5 !important; }
+  [data-ogsc] .glm-bg-white, [data-ogsb] .glm-bg-white { background-color: #ffffff !important; }
+  [data-ogsc] .glm-bg-header, [data-ogsb] .glm-bg-header { background-color: ${headerBg} !important; }
+  [data-ogsc] .glm-bg-primary, [data-ogsb] .glm-bg-primary { background-color: ${brand.primary} !important; }
+  [data-ogsc] .glm-bg-accent, [data-ogsb] .glm-bg-accent { background-color: ${brand.accent} !important; }
+</style>
 </head>
-<body style="margin:0; padding:0; background:#f5f5f5;" bgcolor="#f5f5f5">
+<body class="glm-bg-outer" style="margin:0; padding:0; background:#f5f5f5;" bgcolor="#f5f5f5">
 <span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(flyer.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f5f5f5" style="background:#f5f5f5;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-outer" bgcolor="#f5f5f5" style="background:#f5f5f5;">
   <tr><td align="center" style="padding:32px 0;">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" bgcolor="#ffffff" style="width:600px; max-width:100%; margin:0 auto; background:#ffffff;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="glm-bg-white" bgcolor="#ffffff" style="width:600px; max-width:100%; margin:0 auto; background:#ffffff;">
       ${header}
       ${hero}
       ${story}

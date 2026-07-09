@@ -109,8 +109,11 @@ export default function HeroSection() {
         />
       </Field>
 
-      <Field label="Call Button Label" hint="Text on the primary call-to-action button. Appears in both the hero and footer sections. Select text to format it (bold, color, size…) — the number stays locked.">
+      <Field label="Call Button Label" hint="Text on the hero's call-to-action button. Independent from the bottom Call Button Label — select text to format it (bold, color, size…), the number stays locked.">
         <CallButtonField
+          value={fields.ctaButtonLabel ?? ""}
+          onValueChange={(html) => setField("ctaButtonLabel", html)}
+          fieldName="ctaButtonLabel"
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}

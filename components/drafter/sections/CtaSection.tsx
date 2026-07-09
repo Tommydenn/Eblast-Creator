@@ -66,8 +66,11 @@ export default function CtaSection() {
         />
       </Field>
 
-      <Field label="Call Button Label" hint="The primary action button at the bottom of the email. Also appears in the hero section. Select text to format it — the number stays locked.">
+      <Field label="Call Button Label" hint="The action button at the bottom of the email. Generates the same as the Hero's button, but is independently editable/formattable from here on — the number stays locked.">
         <CallButtonField
+          value={fields.finalCtaButtonLabel ?? fields.ctaButtonLabel ?? ""}
+          onValueChange={(html) => setField("finalCtaButtonLabel", html || undefined)}
+          fieldName="finalCtaButtonLabel"
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}

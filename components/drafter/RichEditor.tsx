@@ -299,16 +299,25 @@ const PHONE_RE = /\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/;
  * tracking number, it behaves like a normal rich field.
  */
 export function CallButtonField({
+  value: rawValue,
+  onValueChange,
+  fieldName,
   className,
   activeEditorRef,
   activeEditorCallback,
   activeFieldNameRef,
-}: { className?: string } & Omit<ActiveEditorProps, "fieldName">) {
-  const { fields, setField, community } = useDraft();
+}: {
+  /** Raw stored value for this specific call-button field (caller resolves any fallback, e.g. `fields.finalCtaButtonLabel ?? fields.ctaButtonLabel`). */
+  value: string;
+  onValueChange: (html: string) => void;
+  fieldName: string;
+  className?: string;
+} & Omit<ActiveEditorProps, "fieldName">) {
+  const { community } = useDraft();
   const tracking = community?.trackingPhone ?? null;
   const formatted = tracking ? formatPhone(tracking) : null;
 
-  const stored = fields?.ctaButtonLabel ?? "";
+  const stored = rawValue ?? "";
 
   // The value shown in the box always contains the correct tracking number,
   // reconciling any legacy/placeholder number without a write until the user edits.
@@ -327,14 +336,14 @@ export function CallButtonField({
     <div>
       <RichInput
         value={value}
-        onValueChange={(html) => setField("ctaButtonLabel", html)}
+        onValueChange={onValueChange}
         guardPlain={guardPlain}
         placeholder="e.g. Call 920.504.3443"
         className={className}
         activeEditorRef={activeEditorRef}
         activeEditorCallback={activeEditorCallback}
         activeFieldNameRef={activeFieldNameRef}
-        fieldName="ctaButtonLabel"
+        fieldName={fieldName}
       />
       {formatted && (
         <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#7a8c85]">
@@ -370,6 +379,7 @@ const FIELD_FONT_SIZES: Record<string, number> = {
   heroAddress: 12,
   galleryLabel: 11,
   ctaButtonLabel: 14,
+  finalCtaButtonLabel: 14,
   footerButtonLabel: 13,
 };
 
@@ -380,6 +390,7 @@ const FIELD_DEFAULTS: Record<string, { bold?: boolean; italic?: boolean }> = {
   storyEyebrow: { bold: true },
   galleryLabel: { bold: true },
   ctaButtonLabel: { bold: true },
+  finalCtaButtonLabel: { bold: true },
   footerButtonLabel: { bold: true },
   scriptSubheadline: { italic: true },
   storyScriptTitle: { italic: true },

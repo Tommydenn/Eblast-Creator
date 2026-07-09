@@ -438,6 +438,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       if (!data.ok) throw new Error(data.error ?? "Generation failed");
 
       const newFields: ExtractedFlyer = data.extracted;
+      // Bake the "date · time" separator into the time text itself, rather than
+      // the template inserting it between two independently-editable fields —
+      // that's the only way it can pick up whatever bold/color/size the user
+      // applies when editing the event time (render-email.ts falls back to its
+      // own literal separator for older drafts saved before this existed).
+      if (newFields.eventTime && !newFields.eventTime.trim().startsWith("·")) {
+        newFields.eventTime = `· ${newFields.eventTime}`;
+      }
       const bank: string[] = data.allExtractedImageUrls ?? [];
 
       // Build images from the API response
@@ -808,25 +816,35 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         const compactBank = bank.filter(Boolean);
         if (compactBank.length) setImageBank(compactBank);
 
+        // draft_image_bank rows for a removed slot aren't deleted when that
+        // slot is removed (only the current slots get re-upserted on save) —
+        // so a removed hero/secondary/gallery image can still have a stale
+        // row here. The main draft blob (`draft.images`, captured above) IS
+        // authoritative for which slots actually exist: null means no hero/
+        // secondary, and the gallery array's length is trimmed on removal.
+        // Only apply a slot's stale-or-not image data if the blob agrees that
+        // slot still exists — otherwise a removed image would reappear on load.
+        const gallerySlotCount = draft.images?.gallery?.length ?? 0;
         const hasSlotImages =
-          heroUrl || heroOrigUrl || secUrl || secOrigUrl || Object.keys(gallerySlots).length > 0;
+          (draft.images?.hero && (heroUrl || heroOrigUrl)) ||
+          (draft.images?.secondary && (secUrl || secOrigUrl)) ||
+          Object.keys(gallerySlots).some((s) => parseInt(s) < gallerySlotCount);
         if (hasSlotImages) {
           setImages((prev) => {
             const next = { ...prev };
-            if (heroUrl || heroOrigUrl) {
+            if (draft.images?.hero && (heroUrl || heroOrigUrl)) {
               next.hero = { url: heroUrl || heroOrigUrl, originalUrl: heroOrigUrl || heroUrl };
             }
-            if (secUrl || secOrigUrl) {
+            if (draft.images?.secondary && (secUrl || secOrigUrl)) {
               next.secondary = { url: secUrl || secOrigUrl, originalUrl: secOrigUrl || secUrl };
             }
-            if (Object.keys(gallerySlots).length > 0) {
-              const gallery = [...prev.gallery];
-              Object.entries(gallerySlots).forEach(([s, { url: u, origUrl: o }]) => {
-                const i = parseInt(s);
-                gallery[i] = { url: u || o || "", originalUrl: o || u || "" };
-              });
-              next.gallery = gallery;
-            }
+            const gallery = [...prev.gallery];
+            Object.entries(gallerySlots).forEach(([s, { url: u, origUrl: o }]) => {
+              const i = parseInt(s);
+              if (i >= gallerySlotCount) return; // stale row for a removed gallery slot
+              gallery[i] = { url: u || o || "", originalUrl: o || u || "" };
+            });
+            next.gallery = gallery;
             return next;
           });
         }

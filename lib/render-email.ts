@@ -204,24 +204,42 @@ export function buildEblastHtml(
   // the phone number to the community tracking line, then render it inline so
   // formatting survives. Uppercasing is done in CSS (text-transform), and the
   // plain-text form is used only for width/length sizing.
-  const rawLabelHtml = flyer.ctaButtonLabel && flyer.ctaButtonLabel.trim()
-    ? flyer.ctaButtonLabel
-    : (formattedTracking ? `Call ${formattedTracking}` : "Call Us");
-  const reconciledLabelHtml = formattedTracking
-    ? (PHONE_RE.test(stripHtml(rawLabelHtml))
-        ? rawLabelHtml.replace(PHONE_RE, formattedTracking)
-        : `${rawLabelHtml} ${formattedTracking}`)
-    : rawLabelHtml;
-  const ctaDisplayText = stripHtml(reconciledLabelHtml);
-  const ctaDisplayHtml = renderInlineField(reconciledLabelHtml);
+  //
+  // Hero and the bottom "Call to Action" section each have their OWN call
+  // button field (ctaButtonLabel / finalCtaButtonLabel) — they generate with
+  // the same text by default (finalCtaButtonLabel falls back to ctaButtonLabel
+  // until a user explicitly edits it) but are independently editable/formattable
+  // from that point on, same pattern as ctaEventDate/ctaRsvpLabel overriding
+  // eventDate/rsvpLabel. Each needs its own size/width/letter-spacing since
+  // their text can diverge in length once edited separately.
+  function reconcileCtaLabel(raw: string | undefined) {
+    const rawLabelHtml = raw && raw.trim()
+      ? raw
+      : (formattedTracking ? `Call ${formattedTracking}` : "Call Us");
+    const reconciledLabelHtml = formattedTracking
+      ? (PHONE_RE.test(stripHtml(rawLabelHtml))
+          ? rawLabelHtml.replace(PHONE_RE, formattedTracking)
+          : `${rawLabelHtml} ${formattedTracking}`)
+      : rawLabelHtml;
+    const displayText = stripHtml(reconciledLabelHtml);
+    const displayHtml = renderInlineField(reconciledLabelHtml);
+    // Two font sizes only. Long labels wrap to a second line rather than shrinking.
+    const fontSize = displayText.length <= 32 ? 14 : 13;
+    const letterSpacing = fontSize >= 14 ? "2.5px" : "2px";
+    // Explicit pixel width for CTA button tables. Outlook/Word auto-sizes tables
+    // with no width attribute, and white-space:nowrap causes the cell to grow
+    // wider on each forward/reply cycle. A fixed width prevents this accumulation.
+    const width = displayText.length <= 24 ? 240 : displayText.length <= 36 ? 300 : 340;
+    return { displayText, displayHtml, fontSize, letterSpacing, width };
+  }
 
-  // Two font sizes only. Long labels wrap to a second line rather than shrinking.
-  const ctaBtnFontSize = ctaDisplayText.length <= 32 ? 14 : 13;
-  const ctaBtnLetterSpacing = ctaBtnFontSize >= 14 ? "2.5px" : "2px";
-  // Explicit pixel width for CTA button tables. Outlook/Word auto-sizes tables with
-  // no width attribute, and white-space:nowrap causes the cell to grow wider on
-  // each forward/reply cycle. A fixed width prevents this accumulation.
-  const ctaBtnWidth = ctaDisplayText.length <= 24 ? 240 : ctaDisplayText.length <= 36 ? 300 : 340;
+  const heroCta = reconcileCtaLabel(flyer.ctaButtonLabel);
+  const finalCtaLabel = reconcileCtaLabel(flyer.finalCtaButtonLabel ?? flyer.ctaButtonLabel);
+  // Legacy aliases kept so the hero markup below (unchanged) still reads correctly.
+  const ctaDisplayHtml = heroCta.displayHtml;
+  const ctaBtnFontSize = heroCta.fontSize;
+  const ctaBtnLetterSpacing = heroCta.letterSpacing;
+  const ctaBtnWidth = heroCta.width;
 
   // Component fragments — kept as inline HTML because email clients reward
   // redundancy and table-based layouts. CSS variables/classes don't survive Outlook.
@@ -258,7 +276,7 @@ export function buildEblastHtml(
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto;">
               <tr>
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
-                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? ` · <span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
+                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
                   ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 1px; color: #E8DDC4; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
                 </td>
               </tr>
@@ -352,11 +370,11 @@ export function buildEblastHtml(
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
-            ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? ` · <span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
+            ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>
-                <td width="${ctaBtnWidth}" class="glm-bg-primary" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
+                <td width="${finalCtaLabel.width}" class="glm-bg-primary" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${finalCtaLabel.fontSize}px; letter-spacing:${finalCtaLabel.letterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${finalCtaLabel.displayHtml}</a>
                 </td>
               </tr>
             </table>

@@ -95,6 +95,15 @@ export interface ExtractedFlyer {
   ctaRsvpLabel?: string;
 
   /**
+   * Independent override for the bottom call-to-action band's call button.
+   * Generates with the same text as ctaButtonLabel (the Hero's call button)
+   * until the user explicitly edits this one — from that point on the two
+   * buttons are fully independent (text and formatting), same pattern as
+   * ctaEventDate/ctaEventTime/ctaRsvpLabel above.
+   */
+  finalCtaButtonLabel?: string;
+
+  /**
    * 1–2 sentences from the drafter explaining which past-send patterns or
    * brand rules they leaned on. Surfaced in the UI under "Intelligence
    * applied" so the user can see how the agent's memory shaped the draft.

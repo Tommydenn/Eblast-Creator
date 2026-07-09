@@ -10,6 +10,7 @@ interface Props {
 export default function ApprovalModal({ onClose }: Props) {
   const { fields, community, save, isSaving, sendForApproval } = useDraft();
   const [recipientEmail, setRecipientEmail] = useState("jwalls@greatlakesmc.com");
+  const [notifyEmail, setNotifyEmail] = useState("jwalls@greatlakesmc.com");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +23,10 @@ export default function ApprovalModal({ onClose }: Props) {
     setError(null);
     try {
       await save();
-      await sendForApproval({ recipientEmail: recipientEmail.trim() });
+      await sendForApproval({
+        recipientEmail: recipientEmail.trim(),
+        notifyEmail: notifyEmail.trim() || undefined,
+      });
       setSent(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -73,6 +77,22 @@ export default function ApprovalModal({ onClose }: Props) {
                 className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538]"
                 placeholder="reviewer@example.com"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">
+                Notify (marketing team)
+              </label>
+              <input
+                type="email"
+                value={notifyEmail}
+                onChange={(e) => setNotifyEmail(e.target.value)}
+                className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538]"
+                placeholder="marketing@greatlakesmc.com"
+              />
+              <p className="mt-1 text-[11px] text-[#9aaba4]">
+                If the reviewer requests edits our AI can&rsquo;t apply automatically, this address gets the notes so a human can make the change.
+              </p>
             </div>
 
             <div className="bg-[#f5f3ef] rounded-lg px-3 py-2.5 text-xs text-[#7a8c85] space-y-0.5">

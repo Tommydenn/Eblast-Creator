@@ -236,7 +236,7 @@ const refineFlyerToolSchema = {
         gallery: {
           type: "array",
           items: { type: "integer" },
-          description: "Indices of the photos to show in the gallery grid, in order. Leave an index out to remove that photo.",
+          description: "Indices of the photos to show in the gallery grid, in order. Leave an index out to remove that photo — a removal request should result in FEWER indices than before, never the same count or more, unless the user also explicitly asked to add or swap in a specific replacement photo.",
         },
       },
     },
@@ -288,8 +288,9 @@ Photos in this email
 Each photo has a NAME (in quotes) that the user sees when hovering it in the preview, and an index. The user will refer to photos by these names (e.g. "swap Gallery image 1 and Gallery image 2", "remove the Secondary image"). Map the named photos the user mentions to their indices below:
 ${opts.imageManifestText}
 - ONLY change photos if the user explicitly asks to remove, reorder, swap, or change which photo appears. Match the photo NAME(s) in their instruction to the indices above, then return \`imageLayout\` with the desired final arrangement: \`hero\` = the index to show as the hero (or -1 for none), \`secondary\` = the index for the inline image (or -1 for none), \`gallery\` = the list of indices for the gallery grid, in order (leave an index out to remove that photo).
+- REMOVAL MEANS FEWER PHOTOS, PERIOD. If the user asks to remove a photo, \`imageLayout\` must show one fewer photo placed than before. Do NOT promote an "Original image" (an unused full-resolution photo, listed but not currently placed) into the gap left behind — that is adding a photo the user never asked for, which is just as wrong as ignoring the removal request. Only bring an "Original image" into hero/secondary/gallery when the user's instruction explicitly names or clearly points at that specific unused photo (e.g. "use the barbecue photo instead", "swap in the third original photo").
 - If the user does NOT mention photos/images, OMIT \`imageLayout\` entirely — the photos must stay exactly as they are.
-- You can only rearrange or remove the photos listed above. You cannot add new photos, recolor them, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.
+- You can only rearrange, remove, or (when explicitly requested) bring in an already-listed "Original image." You cannot add a photo that isn't in this manifest, recolor a photo, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.
 - If the user asks to crop, reframe, or shift a photo (e.g. "show more of the top", "crop lower"), use BOTH: (1) \`imageLayout\` to place the corresponding "Original image" in the desired slot, AND (2) \`imageCropInstructions\` with that Original image's index and the focus direction. Only reference "Original image" indices (labeled "full-resolution original" above) in \`imageCropInstructions\` — never already-placed indices.`
     : "";
 

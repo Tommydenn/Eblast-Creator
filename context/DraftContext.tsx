@@ -209,6 +209,23 @@ export function useDraft(): DraftContextValue {
 
 const EMPTY_IMAGES: DraftImages = { hero: null, secondary: null, gallery: [] };
 
+// The bottom CTA/Footer band's date, time, RSVP label, and call button are
+// each independent fields that generate with the same text as their Hero
+// counterpart — but that must be a ONE-TIME snapshot at creation, not a live
+// fallback. A live fallback (`fields.ctaEventDate ?? fields.eventDate`) means
+// editing the Hero field keeps changing what the Footer shows for as long as
+// the Footer field itself is untouched, which reads as "these are still
+// linked" even though they're stored separately. Snapshotting them onto real,
+// independent values the moment a draft is created/loaded means editing
+// Hero afterward never again affects what Footer displays, in either
+// direction, from the very start.
+function snapshotFooterOverrides(fields: ExtractedFlyer): void {
+  if (fields.ctaEventDate === undefined) fields.ctaEventDate = fields.eventDate;
+  if (fields.ctaEventTime === undefined) fields.ctaEventTime = fields.eventTime;
+  if (fields.ctaRsvpLabel === undefined) fields.ctaRsvpLabel = fields.rsvpLabel;
+  if (fields.finalCtaButtonLabel === undefined) fields.finalCtaButtonLabel = fields.ctaButtonLabel;
+}
+
 // Batches image POSTs to /api/saved-drafts/[id]/images so multiple small
 // items share a request while staying safely under Vercel's ~4.5 MB route
 // body limit. Any single item over the cap is skipped (logged, not silently
@@ -446,6 +463,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       if (newFields.eventTime && !newFields.eventTime.trim().startsWith("·")) {
         newFields.eventTime = `· ${newFields.eventTime}`;
       }
+      snapshotFooterOverrides(newFields);
       const bank: string[] = data.allExtractedImageUrls ?? [];
 
       // Build images from the API response
@@ -765,6 +783,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Load saved draft ─────────────────────────────────────────────────────
   const loadSavedDraft = useCallback((draft: SavedDraft) => {
+    // Older drafts saved before the Footer override fields existed still have
+    // them undefined (live-fallback era) — snapshot them now so reopening an
+    // old draft also gets independent Hero/Footer fields going forward.
+    if (draft.fields) snapshotFooterOverrides(draft.fields);
     setFields_(draft.fields ?? null);
     setImages(draft.images ?? EMPTY_IMAGES);
     setImageBank([]);

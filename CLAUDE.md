@@ -1,183 +1,128 @@
 # Eblast Drafter — Claude Code context
 
-A Next.js app that automates senior-living eblast creation for ~20 communities under Great Lakes Management. PDF flyer in → AI-drafted email → HubSpot draft.
+A Next.js app that automates senior-living eblast creation for ~22+ communities under Great Lakes Management. PDF flyer in → AI-drafted email → salesperson approval → HubSpot draft.
 
 - **Live:** <https://eblast-creator-git-main-tommydenns-projects.vercel.app>
 - **Repo:** <https://github.com/Tommydenn/Eblast-Creator>
 - **Owner:** Tommy Denn — tdenn@greatlakesmc.com
 - **Vercel team / project:** `tommydenns-projects` / `eblast-creator`
 
-Read `HANDOFF.md` once for the latest state of the build before starting work.
+**This file and `HANDOFF.md` must be kept current.** They previously described a much earlier state of the app (approval flow, magic-link, AI auto-refine on edits, etc. marked "not yet built" when they'd actually been shipped and iterated on for dozens of commits). Whenever a feature lands, update the relevant section here — don't let this drift again.
 
-## What it does
+## What it actually does (built, working, in production)
 
-Marketing creates a designed PDF flyer per upcoming event/announcement, per community. Pre-app, an intern hand-built each eblast in HubSpot from the flyer. This app:
-
-1. Takes a PDF flyer + community selection
-2. Has Claude (Anthropic API) extract structured fields (subject, headline, body, CTA, dates, audience) via tool-use schema
-3. Pulls the embedded photos out of the PDF — no rendering, no overlays, original byte streams
-4. Normalizes CMYK photos to sRGB using mupdf's color-managed Image rendering
-5. Renders a brand-themed HTML email (`lib/render-email.ts`) using one template that adapts to each community's brand
-6. Lets the user refine via chat ("make the headline shorter")
-7. Uploads images to HubSpot Files, then pushes the (slim) HTML as a coded email draft
+1. Marketing creates a designed PDF flyer per event/community. User picks a community, uploads the PDF.
+2. **Extraction + drafting** (`app/api/draft-from-pdf`): Claude extracts structured fields (subject, headline, body, CTA, dates, audience) via tool-use; embedded photos are pulled from the PDF (no rendering, no overlays) and CMYK-normalized via mupdf.
+3. **Multi-agent draft loop** (`lib/agentic-draft.ts::agenticDraftLoop`, capped at 2 rounds):
+   - A **Subject Specialist** (`lib/agents/subject-specialist.ts`) runs once up front and only overrides the drafter's subject/preview if it's genuinely different/better.
+   - **Drafter ↔ Critic** loop: critic (`lib/critic.ts`, single Claude call, forced tool-use) reviews text AND looks at the actual hero/secondary/gallery images (vision), flagging bad images separately from text findings. If flagged, those image slots get dropped and refilled. A severity-weighted stagnation/regression guard stops the loop early if a round doesn't improve things.
+   - Both drafter and critic are memory-aware — each pulls the last 12 sends for the community from `past_sends` for voice/style/performance reference.
+4. **Editor** (`app/page.tsx`, `context/DraftContext.tsx`, `components/drafter/*`): full rich-text editing on top of the draft. `fields` (ExtractedFlyer) is the source of truth; HTML is always computed on demand, never stored in editor state. 5-second debounced autosave.
+5. **Refine via chat**: free-form refinement instruction re-runs drafter + a critic pass.
+6. **Send for approval** (`app/api/draft-approval`): snapshots the rendered HTML immutably onto a `saved_draft_approvals` row (token = magic link) so a later autosave can't corrupt a pending approval. Emails the salesperson via Microsoft Graph.
+7. **Salesperson approval**: one-click **Approve** (`app/api/quick-approve/[token]`) pushes straight to HubSpot. **Request Edits** (`/approve/[token]/edits`) first tries an **AI auto-refine** of the salesperson's free-text notes — if it produces a real, in-scope change, it re-renders, mints a new approval token, and auto-sends a fresh approval email with no human in the loop. Falls back to a plain notification email only if auto-refine is skipped/no-op/errors.
+8. **Push to HubSpot** (`app/api/push-eblast` for the direct/manual path, or via approval): uploads images to HubSpot Files, uploads HTML as a coded email template, resolves recipient segments purely from the community's last HubSpot send (no manual segment picker), creates the marketing email draft.
 
 ## Stack
 
 - Next.js 14 App Router on Vercel
-- Anthropic API (Claude Sonnet 4.6) — `lib/anthropic.ts` (drafter), `lib/critic.ts` (reviewer)
+- Anthropic API (Claude Sonnet 4.6) — `lib/anthropic.ts` (drafter), `lib/critic.ts` (critic), `lib/agents/subject-specialist.ts` (subject line), `lib/agentic-draft.ts` (orchestration)
 - HubSpot Marketing Email API v3 — `lib/hubspot.ts`
 - pdf-lib (PDF object walking) + mupdf (color-managed image conversion) + sharp (encoder/fallback) — `lib/pdf-images.ts`
-- **Vercel Postgres (Neon-backed)** + Drizzle ORM — community registry, past sends, drafts, approvals. See `lib/db/`.
+- Microsoft Graph (app-only) for outbound approval/notification email — `lib/email.ts`
+- **Vercel Postgres (Neon-backed)** + Drizzle ORM — `lib/db/`
 
-## Database
+## Database (`lib/db/schema.ts`)
 
-Postgres is the source of truth for the registry. Schema in `lib/db/schema.ts`. Tables:
-- `communities` — 22 GLM communities (Caretta x4, Talamore x3, Hayden Grove x2, The Glenn x5, Cottagewood x2, Amira Choice x2, Global Pointe, Seven Hills, Orchards of Minnetonka, The Pillars of Grand Rapids). JSONB columns for nested objects (`brand`, `address`, `hubspot`, `socials`, `marketingDirector`, `logos`, `photoLibrary`, `brandGuideExtracted`).
-- `community_senders` — multiple senders per community (real data: Caretta locations share Becky Sobolik + Meranda Lelonek; Talamore St Cloud has Brian Glonek + Josie Brenny; etc.).
-- `past_sends` — HubSpot history mirror. Populated by `npm run sync:past-sends`. Keeps last 365 days of `BATCH_EMAIL` sends only. Each row has subject, preview text, from name+email, state, published_at, recipient/open/click/bounce/unsubscribe counts, and a `raw` JSONB blob with the full HubSpot snapshot.
-- `drafts` — eblasts the agent has produced, with status state machine (`drafting → awaiting_approval → edits_requested → approved → scheduled → sent`).
-- `approval_threads` — superseded by `savedDraftApprovals`. Kept in schema to avoid accidental drops; nothing writes to it.
+Postgres is the source of truth for the community registry and the drafting/approval flow. Live tables:
 
-Reads through `lib/db/queries.ts` (`getCommunity(slug)`, `listCommunities()`). All async. Legacy import path `@/data/communities` re-exports the same.
+- **`communities`** — 31 seeded (`lib/db/seed-data.ts`). JSONB columns: `brand`, `address`, `hubspot`, `socials`, `marketingDirector`, `logos`, `photoLibrary`, `brandGuideExtracted`.
+- **`community_senders`** — multiple senders per community, UI-editable in production (not just seed data — `addSender`/`updateSender`/`deleteSender` in `lib/db/queries.ts`).
+- **`past_sends`** — HubSpot history mirror (`npm run sync:past-sends`, also nightly via Vercel cron `/api/cron/sync-past-sends`). Feeds the critic, subject specialist, and `community-intelligence` panel.
+- **`saved_drafts`** — the real work-in-progress store (NOT the `drafts` table below). Text PK, `data` JSONB holds fields/subject/etc. Images are stripped out before saving (see `draft_image_bank`). Capped at 8 per community.
+- **`draft_image_bank`** — one row per image per draft (composite PK `draftId, idx`), kept out of the main payload to stay under Vercel's 4.5 MB body limit.
+- **`saved_draft_approvals`** — the real approval-flow table. Token (magic-link) as text PK. Has its own immutable `html` snapshot column, independent of the mutable draft.
+- **`pdf_chunks`** — staging table for the chunked-PDF-upload workaround (PDFs >4MB), reassembled and purged by `draft-from-pdf`.
+- **`drafts`** and **`approval_threads`** — **dead/legacy tables.** Defined in schema, nothing reads or writes them. `approval_threads` is explicitly commented as superseded in the schema file; `drafts` isn't commented but is equally unused — the real flow uses `saved_drafts`/`saved_draft_approvals`. Don't write new code against either.
 
-Scripts:
-- `npm run db:push` — push schema to DB (requires TTY; use generate+apply for non-TTY).
-- `npm run db:generate` — generate SQL migration files.
-- `npx tsx lib/db/apply-migrations.ts` — apply generated migrations.
-- `npm run db:seed` — idempotent seed of all 22 communities + senders.
-- `npm run db:studio` — Drizzle Studio (browser DB explorer).
-- `npx tsx scripts/sync-past-sends.ts` — pull last 365 days of BATCH_EMAIL marketing emails into `past_sends` (with stats). Idempotent.
-- `npx tsx scripts/enrich-communities.ts` — read each community's past sends and fill in missing community fields (tracking phone, website, email, senders).
-- `npx tsx scripts/extract-brand-guide.ts <slug> <path/to/pdf>` — read a brand-guide PDF and write `brand` + `taglines` + `amenities` onto the community.
+Reads through `lib/db/queries.ts`. Legacy import path `@/data/communities` is a 10-line re-export shim — new code should import `lib/db/queries` directly.
 
-Runs via Vercel cron daily (configured in `vercel.json`) — hits `/api/cron/sync-past-sends`.
+Scripts: `npm run db:push`, `npm run db:generate`, `npx tsx lib/db/apply-migrations.ts`, `npm run db:seed`, `npm run db:studio`, `npx tsx scripts/sync-past-sends.ts`, `npx tsx scripts/enrich-communities.ts`, `npx tsx scripts/extract-brand-guide.ts <slug> <pdf>`.
 
-Required env vars: see `.env.example` for all required variables (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `HUBSPOT_PRIVATE_APP_TOKEN`, `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `MAIL_FROM`, `NEXT_PUBLIC_APP_URL`). Production values live in Vercel project settings.
+Required env vars: see `.env.example` (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `HUBSPOT_PRIVATE_APP_TOKEN`, `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `MAIL_FROM`, `NEXT_PUBLIC_APP_URL`).
 
 Per-community fields worth knowing:
-- `trackingPhone` — CallRail number used in eblast CTAs. NEVER same as `phone` (which is the public/flyer number).
-- `brandFamily` — brand grouping ("Caretta", "Talamore", "The Glenn"). Communities under the same brand share visuals.
-- `brand.paletteSource` / `fontsSource` — `"default" | "manual" | "brand-guide-extracted"` so we know if a community has real brand data or is still using the placeholder.
-- `brandGuideExtracted` — populated when the brand-guide PDF has been auto-parsed by Claude (not yet wired up — Step 3b).
+- `trackingPhone` — CallRail number used in eblast CTAs. NEVER same as `phone` (public/flyer number).
+- `brandFamily` — brand grouping ("Caretta", "Talamore", "The Glenn", etc.).
+- `brand.paletteSource`/`fontsSource` — `"default" | "manual" | "brand-guide-extracted"`.
+- `hubspot.officeLocationId` — for the CAN-SPAM footer address; find candidates via `/api/admin/hubspot-office-locations`.
+- `hubspot.includedListIds`/`excludedListIds` — segments to send to / suppress. Resolved automatically from the community's last HubSpot send (`resolveSegmentsFromRecentSend`) — there is no manual segment picker anymore (removed in `42350fd`).
 
-## Agentic architecture (target)
+## Locked choices, don't relitigate
 
-The app is being shifted from "AI-assisted pipeline" to "marketing agent that replaces the intern role." Five stages:
+- Outbound email → **Microsoft Graph app-only**, not Resend/SMTP (Resend was fully removed in `c090647`).
+- Approvals → magic-link token in `saved_draft_approvals`, NOT reply-to-approve.
+- Edit requests → **AI auto-refine first**, human notification only as fallback. This is a deliberate design choice, not a shortcut — don't "simplify" it back to always-notify-a-human without checking with the user first.
+- Segments → resolved from the community's last HubSpot send only. No hardcoded/manual per-community segment lists (removed in `42350fd`).
+- Critic **surfaces**, does not auto-fix, in its standalone `/api/critique-eblast` call. (The agentic loop's automatic refine-on-critic-feedback during initial drafting is a separate, already-approved mechanism — don't confuse the two.)
+- PDF image extraction: pdf-lib walks indirect objects for embedded JPEG streams (no page rendering, no compositing); CMYK converts via `mupdf.Image(...).toPixmap(DeviceRGB)`; sharp is fallback only. Both "render the page" and "use sharp for CMYK" have been tried and produce worse output — push back if asked to revert to either.
+- HubSpot push is three steps: base64 images → HubSpot File Manager, HTML → Design Manager as a coded template (multipart, not JSON — JSON 415s), then create the marketing email referencing that template.
 
-1. **Drafter ↔ Critic loop** — `lib/agentic-draft.ts` orchestrates this server-side. Drafter writes initial draft from the PDF → critic reviews the draft AND looks at the actual hero/secondary/gallery images → if not ready, drafter applies critic's text findings AND the loop drops any flagged images → critic re-reviews. Up to 3 rounds, with stagnation/regression guards. **The user does not see a preview until the agents converge.**
+## Key implementation notes
 
-   The critic uses Claude Sonnet 4.6's vision: each image currently slotted into the rendered email is sent as a labeled image content block. The critic flags blank/corrupted/off-topic/off-brand images via `flaggedImages`. The loop reads that and excludes those slots from the next round (the next-largest available image fills the slot).
-
-   **Both drafter and critic are memory-aware.** Each request fetches the last 12 PUBLISHED sends for the target community via `lib/past-sends-retrieval.ts` and threads them into the agents' system prompts as voice/style/performance reference. The drafter uses them to match what's worked; the critic uses them to flag drift from high-performing patterns (category: `send_strategy`).
-
-   (Built — `lib/anthropic.ts` for the drafter, `lib/critic.ts` for the critic, `lib/agentic-draft.ts` for orchestration. `app/api/draft-from-pdf` runs it; `app/api/critique-eblast` is still exposed for ad-hoc post-refine reviews — note that endpoint is text-only, no images.)
-2. **Manual refinement** — User can still type a free-form refinement instruction; the existing single-shot refine + per-refine critic call handles this. (Built — `app/api/refine-eblast`.)
-3. **Approval email to site salesperson** — Outbound via **HubSpot single-send transactional email** (we already have the token). Email contains the HubSpot draft link, the critic's notes, and Approve / Edit links. (Not yet built.)
-4. **Magic-link approval form** — Salesperson clicks the link, lands on a one-page form, hits Approve or types edits. No inbound email parsing. (Not yet built.)
-5. **Scheduler** — Once approved, agent picks send time from history and schedules in HubSpot via API. (Not yet built.)
-
-Memory layer (Vercel Postgres) stores draft state, past-send analytics, approval threads. Nightly job pulls open/click rates so the critic has ground truth.
-
-**Locked choices, don't relitigate:**
-- Outbound from agent → HubSpot single-send transactional API (no Resend, no SMTP).
-- Approvals → magic-link form, NOT reply-to-approve (reply parsing is fragile).
-- Critic does NOT auto-fix. It surfaces. The user / salesperson decides what to apply.
-
-## Required environment variables
-
-See `.env.example`. Production values live in Vercel project settings.
-
-- `ANTHROPIC_API_KEY` — Anthropic Console
-- `HUBSPOT_PRIVATE_APP_TOKEN` — needs `content` AND `files` scopes
-- `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET` — Microsoft Graph app-only creds for outbound approval email
-- `MAIL_FROM` — licensed M365 mailbox to send from
-- `NEXT_PUBLIC_APP_URL` — base URL for magic links
-
-## Run / deploy
-
-```
-npm install
-npm run dev          # local dev server
-git push             # Vercel auto-deploys main in ~30s
-```
-
-The branch-alias URL stays the same across deploys.
-
-## Key decisions — don't relitigate
-
-### PDF image extraction is three tiers, in this order
-
-1. **pdf-lib walks indirect objects** to find image streams (`Subtype == /Image`, filter chain ends in `DCTDecode`). The stream content IS the embedded JPEG bytes. No rendering, no compositing.
-2. **RGB JPEGs**: pass through with original bytes unchanged.
-3. **CMYK JPEGs**: convert via `new mupdf.Image(bytes).toPixmap(DeviceRGB)`. Sharp is fallback only.
-
-**Why** — Sharp's bare CMYK conversion produces washed colors (no bundled ICC profiles). Page rendering bakes in text/overlay/color-block layers. mupdf's Image class has bundled CMYK and sRGB profiles + handles Adobe APP14/YCCK/inverted CMYK — same machinery as Acrobat's "Save Image As".
-
-If asked to "go back to page rendering" or "use sharp for CMYK," push back — both have been tried and produce worse output.
-
-### HubSpot push is three steps
-
-1. Find every `data:image/...;base64,...` URI in the rendered HTML, upload each unique image to HubSpot's File Manager (`POST /files/v3/files` multipart), replace the data URI with the hosted CDN URL.
-2. Upload the (now slim) HTML as a coded email template via the Design Manager source-code API (multipart, NOT JSON — JSON returns 415).
-3. Create the marketing email referencing the template (`POST /marketing/v3/emails`, `emailTemplateMode: "HTML"`).
-
-**Why the image upload step** — HubSpot's coded email templates have a hard 1.5 MiB limit. Inlining base64 images blows past it.
-
-### Coded email template wrapping
-
-Coded email templates need a HubL annotation header and a CAN-SPAM compliant footer. `wrapAsHubLEmailTemplate()` in `lib/hubspot.ts` does this. Critical bits:
-
-- `templateType: email` (NOT `email_base_template` — that throws "not a valid template type")
-- `isAvailableForNewContent: true`
-- A `{% module_block module "compliance_footer" path="@hubspot/email_footer" ... %}` for unsubscribe + address
-
-### Vercel-specific gotchas
-
-- `next.config.js` has `serverComponentsExternalPackages: ["sharp", "pdf-lib", "pdfjs-dist", "mupdf"]` — these ship native code/WASM and must NOT be bundled by webpack.
-- Sharp + libvips need their precompiled binaries; Vercel auto-installs.
-- TypeScript 5.7 is strict about `Buffer` vs `Uint8Array<ArrayBuffer>`. When passing bytes to a `Blob`, allocate a fresh `Uint8Array(byteLength)` and `.set()` into it — Buffer's underlying `ArrayBufferLike` isn't accepted directly.
-- mupdf-js is an ES module; dynamic-import it inside async functions, e.g. `const mupdfModule = await import("mupdf")`.
-- The egress allowlist for Vercel functions is permissive — they call `api.hubapi.com`, `api.anthropic.com`, etc. directly.
+- **Sentinel placeholders**: `draft-from-pdf` and `render-email` return HTML with `SENTINEL_HERO`/`SENTINEL_SECONDARY`/gallery sentinels instead of embedding base64 directly — actual image data URIs travel as separate JSON fields and get injected client-side. Keeps response payloads manageable.
+- **Chunked PDF upload**: PDFs >4MB get POSTed in chunks to `/api/pdf-chunk`, staged in `pdf_chunks`, reassembled by `draft-from-pdf` via an `uploadId`.
+- **Rich-text engine** (`lib/rich-text/inline-format.ts`) — from-scratch replacement for `document.execCommand` (`6a44282`). Formatting is inline `<span style="...">` only; tri-state bold/italic/underline (true/false/undefined) so explicit "off" can override a template-forced default; `escAttr()` escapes multi-word font names. `FIELD_DEFAULTS`/`FIELD_FONT_SIZES` in `components/drafter/RichEditor.tsx` must stay in sync with what `lib/render-email.ts` hardcodes per field.
+- **Call button locking** (`CallButtonField` in RichEditor.tsx) — label text is formattable, but any edit that removes the community's tracking number from the plain text is reverted via a `guardPlain` check.
+- Vercel-specific: `next.config.js` externalizes `sharp`/`pdf-lib`/`pdfjs-dist`/`mupdf` from webpack bundling. TypeScript 5.7 wants a fresh `Uint8Array(byteLength)` + `.set()` when handing Buffer bytes to a `Blob`. mupdf-js is ESM — dynamic-import inside async functions.
 
 ## Where things live
 
 | Path | Purpose |
 |---|---|
-| `data/communities.ts` | Backward-compat re-export shim. Community registry now lives in Postgres — import from `@/lib/db/queries` in new code. |
-| `data/communities/{slug}/` | Per-community asset folder placeholders. Real assets live on HubSpot Files. |
-| `lib/anthropic.ts` | Claude PDF extraction with structured tool output + the chat refinement function. |
-| `lib/critic.ts` | Reviewer agent. Takes ExtractedFlyer + Community → severity-tagged findings, suggestions, subject alternatives. |
-| `lib/agentic-draft.ts` | Drafter ↔ critic loop orchestrator. `agenticDraftLoop({pdfBase64, community})` returns the converged final draft + iteration trace. Used by `app/api/draft-from-pdf`. |
+| `lib/db/queries.ts` | Community registry reads/writes — the real source of truth. |
+| `lib/db/schema.ts` | Full DB schema — read this, not this doc, for exact columns. |
+| `lib/anthropic.ts` | Claude PDF extraction (tool-use) + chat refinement. |
+| `lib/critic.ts` | Reviewer agent — single call, vision-aware, forced tool-use. |
+| `lib/agents/subject-specialist.ts` | Subject-line specialist, runs once per draft-from-pdf. |
+| `lib/agentic-draft.ts` | Drafter↔critic orchestration loop with stagnation/regression guards. |
 | `lib/hubspot.ts` | HubSpot API client — marketing emails, file manager, design manager. |
-| `lib/pdf-images.ts` | Embedded image extraction + CMYK normalization. |
+| `lib/email.ts` | Microsoft Graph outbound email (approval + notification). |
+| `lib/pdf-images.ts` | Embedded image extraction + CMYK normalization + cropping. |
 | `lib/render-email.ts` | The HTML email template — one template, brand-adapted per community. |
-| `lib/extracted-flyer.ts` | The `ExtractedFlyer` type Claude populates. |
+| `lib/rich-text/inline-format.ts` | Custom rich-text formatting engine. |
+| `context/DraftContext.tsx` | Editor state machine — fields as source of truth, autosave, image bank sync. |
+| `components/drafter/RichEditor.tsx` | RichInput/RichBodyEditor/CallButtonField/FormatToolbar + FIELD_DEFAULTS/FIELD_FONT_SIZES. |
+| `components/drafter/sections/*` | Per-section field wiring (Hero, Story, CTA, Images, Subject). |
 | `app/page.tsx` | Main drafter UI. |
-| `app/communities/page.tsx` | Registry dashboard. |
-| `app/communities/[slug]/page.tsx` | Per-community detail page. |
-| `app/api/draft-from-pdf/route.ts` | Extract + render endpoint. |
-| `app/api/refine-eblast/route.ts` | Chat refinement. |
-| `app/api/critique-eblast/route.ts` | Reviewer endpoint. POST `{ extracted, communitySlug }` → `{ review }`. |
-| `app/api/push-eblast/route.ts` | Push to HubSpot (image upload + template upload + email create). |
-| `app/api/marketing-emails/recent/route.ts` | Read past sends from HubSpot for analysis. |
-| `app/api/communities/route.ts` | JSON registry endpoint for client-side rendering. |
-| `push-to-github.cmd` | Windows convenience script Tommy uses to commit + push. Optional. |
+| `app/approve/[token]/page.tsx` | Salesperson confirmation UI (secondary path; edits page links back here). |
+| `app/api/draft-from-pdf` | Extract + agentic-draft + render. |
+| `app/api/refine-eblast` | Chat refinement. |
+| `app/api/critique-eblast` | Standalone critic call (text-only, on-demand from editor). |
+| `app/api/community-intelligence` | Read-only past-sends stats panel (no AI call). |
+| `app/api/draft-approval` + `[token]/edits` | Send-for-approval, AI auto-refine-on-edit-request. |
+| `app/api/quick-approve/[token]` | One-click approve → push to HubSpot. |
+| `app/api/push-eblast` | Manual/direct push to HubSpot from the editor. |
+| `app/api/saved-drafts` + `[id]` + `[id]/images` | Draft persistence + image bank. |
+| `app/api/pdf-chunk` | Chunked-upload staging. |
+| `app/api/crop-image` | Drag-to-reposition / focus-based cropping. |
+| `app/api/admin/hubspot-office-locations` | One-off diagnostic probe for CAN-SPAM office-location IDs. |
+| `app/api/marketing-emails/recent` | Read past sends from HubSpot (feeds `sync:past-sends`). |
+| `push-to-github.cmd` | Windows convenience script for commit + push. |
 
 ## Conventions
 
-- **Sender vs. marketing director.** `Community.sender` is the `From:` identity recipients see. `Community.marketingDirector` is the person actually building/scheduling eblasts in HubSpot (typically Amelia Ozell at Great Lakes Management). They differ.
-- **`Community.nameAbbreviation`** matches the prefix the team uses in past eblast names — e.g. `ACB - Memory Care - Apr 2026`. Used to link new drafts to historical sends.
-- **Brand colors** — `primary` (dark, used for hero blocks), `accent` (warm, used for CTA buttons), `background` (cream/off-white).
-- **Image handling** — every flyer is CMYK because they're print-export PDFs from Adobe products. Always assume CMYK and normalize.
-- **HubSpot Private App scopes** — currently just `content` and `files`. Adding `crm.lists.read` planned (for resolving recipient list IDs by name) but not yet in use.
+- **Sender vs. marketing director.** `sender` is the `From:` identity recipients see; `marketingDirector` is who actually builds/schedules eblasts (typically Amelia Ozell). They differ.
+- **`nameAbbreviation`** matches the historical eblast-naming prefix (e.g. `ACB - Memory Care - Apr 2026`), used to link drafts to past sends.
+- **Brand colors** — `primary` (dark, hero blocks), `accent` (warm, CTA buttons), `background` (cream/off-white).
+- Every flyer is CMYK (print-export PDFs from Adobe) — always assume CMYK and normalize.
+- HubSpot Private App scopes: `content`, `files`.
 
-## Build order for remaining agent stages
+## What's genuinely still open / rough edges
 
-1. **Postgres + analytics ingestion** — Vercel Postgres, schema for `drafts`, `past_sends`, `approval_threads`. Scheduled job pulls HubSpot open/click rates per email (`/marketing/v3/emails/{id}/statistics` or analytics API). Once this lands, the critic gains a `lookup_past_sends_for_community(slug)` tool and becomes a real tool-use loop.
-2. **Outbound approval email** — `lib/hubspot.ts` adds `sendSingleSendTransactional()`. New `lib/approval-email.ts` builds the salesperson email body (critic notes + draft link + magic-link buttons).
-3. **Magic-link approval form** — `/approve/[token]` page. Token-signed URL maps to a draft. Page shows preview + Approve / Request Edits buttons + free-text edit box.
-4. **Edit handler** — Salesperson types edits → reuses existing refine flow → critic re-runs → second approval email goes out.
-5. **Scheduler** — `lib/scheduler.ts` picks send time from past-send patterns, calls HubSpot's email-schedule API.
-6. **Pipeline dashboard** — Draft / Awaiting approval / Approved / Scheduled / Sent kanban.
-
-Strategic note: the highest-leverage feature is the feedback loop (sends → analytics → next draft context). The critic is shipped as a v1 single-call agent; it stays useful but becomes substantially better once Postgres + analytics ingestion (Step 1) is wired up.
+- Recently fixed, not yet manually end-to-end retested by Tommy: the approval-HTML-snapshot fix (`44808dd`) — send → let an autosave fire → approve → confirm full content lands in HubSpot (not just the footer).
+- Scheduler (agent picks send time and schedules via HubSpot API) — not built.
+- Pipeline/kanban dashboard (Draft/Awaiting approval/Approved/Scheduled/Sent) — not built.
+- No batch flyer processing.
+- No analytics view surfaced in the UI yet (data exists in `past_sends`, just not visualized for the user).
+- HubSpot Private App token has been in chat history multiple times — rotation is hygiene, not urgent.

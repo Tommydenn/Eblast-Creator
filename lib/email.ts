@@ -7,6 +7,23 @@ const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ??
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
+/**
+ * Vercel's Deployment Protection (team SSO) gates every URL on this project —
+ * there's no app-level auth of our own. Salespeople clicking links from the
+ * approval email aren't on the Vercel team, so their first click would hit a
+ * "You need access" wall without this. `x-vercel-protection-bypass` is Vercel's
+ * supported mechanism for exactly this case; `x-vercel-set-bypass-cookie=true`
+ * makes the bypass "stick" for subsequent same-site navigation/requests (e.g.
+ * the edits page's iframe preview, or clicking through to /approve/[token]).
+ * See https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation
+ */
+function withProtectionBypass(url: string): string {
+  const secret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (!secret) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}x-vercel-protection-bypass=${secret}&x-vercel-set-bypass-cookie=true`;
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 async function getGraphToken(): Promise<string> {
@@ -89,8 +106,8 @@ export interface SendApprovalEmailParams {
 
 export async function sendApprovalEmail(params: SendApprovalEmailParams) {
   const { to, recipientName, communityName, draftSubject, draftHtml, token } = params;
-  const approveUrl = `${APP_URL}/api/quick-approve/${token}`;
-  const editsUrl = `${APP_URL}/approve/${token}/edits`;
+  const approveUrl = withProtectionBypass(`${APP_URL}/api/quick-approve/${token}`);
+  const editsUrl = withProtectionBypass(`${APP_URL}/approve/${token}/edits`);
   const greeting = firstName(recipientName);
   const eblastBody = extractBody(draftHtml);
 

@@ -1,105 +1,70 @@
-# Handoff — current state
+# Handoff — current state (rewritten 2026-07-09, corrected from stale prior version)
 
 One-time read for the next Claude session inheriting this project. After reading, work from `CLAUDE.md` for ongoing context.
 
-## Where we are
+**Heads up:** a previous version of this file (and CLAUDE.md) described the approval email, magic-link approval, and AI-refine-on-edit as future work ("not yet built"). That was wrong by the time it was written — they're built, shipped, and have had dozens of bugfix commits on top of them. Don't trust old summaries in chat history over the actual code/git log.
 
-The PDF → eblast → HubSpot pipeline works end-to-end. Tommy can:
+## Where we really are
 
-1. Pick a community on the homepage
-2. Upload a flyer PDF
-3. Click "Generate eblast draft" — Claude extracts copy + we pull embedded photos
-4. Get a brand-themed email preview with the actual flyer photos (CMYK-normalized)
-5. Refine via chat instruction
-6. Push to HubSpot — images upload to File Manager, HTML uploads as coded template, draft is created
+The full pipeline works end-to-end and has been in active use, not just built-and-untested:
 
-The community dashboard (`/communities`) was just shipped — read-only view of registry data, with per-community detail pages.
+1. Pick a community, upload a flyer PDF.
+2. `draft-from-pdf` runs a real multi-agent loop: Subject Specialist → Drafter↔Critic (up to 2 rounds, with vision-based image review and a stagnation/regression guard) → renders HTML.
+3. Editor opens with a custom rich-text engine (bold/italic/underline, locked call-button number, template-forced field defaults). Autosaves every 5s.
+4. User can refine via chat, or send straight for approval.
+5. **Send for Approval** emails the salesperson (Microsoft Graph) with a one-click Approve link and a Request Edits link.
+6. **Request Edits** first tries an AI auto-refine of the salesperson's notes — if it produces a real change, it re-renders and auto-sends a new approval email, no human touches it. Falls back to a plain notification only when auto-refine can't handle it.
+7. **Approve** pushes straight to HubSpot: images → File Manager, HTML → Design Manager as a coded template, segments resolved from the community's last HubSpot send, marketing email created.
 
-## Recent fixes (last few sessions)
+Community registry, senders, past-sends history, saved drafts, image bank, and the approval flow are all in Postgres (Neon via Vercel). 31 communities seeded.
 
-| What broke / what we built | Resolution |
+## Recently fixed (most recent first)
+
+| Commit | What broke / what shipped |
 |---|---|
-| Page rendering baked in text overlays | Switched to embedded image extraction via pdf-lib |
-| CMYK photos rendered with purple foliage | Switched to mupdf.Image color-managed conversion |
-| Bare sharp CMYK conversion was washed out | Same — mupdf has bundled ICC profiles, sharp doesn't |
-| HubSpot rejected our 3.7 MB email template | Upload images to HubSpot Files first, embed CDN URLs |
-| Files API needed a scope we didn't have | Added `files` scope to the Private App |
-| TypeScript 5.7 build errors on Buffer→Blob | Allocate fresh `Uint8Array(byteLength)` + `.set()` |
-| Past-emails endpoint returned only 1 result | Bumped pagination to 60 × 100 = 6000 emails |
+| `44808dd` | Approval push occasionally sent an empty email to HubSpot (footer only) — root cause: HTML was read from the mutable draft, and an autosave between "send for approval" and "approve" could wipe it. Fixed by snapshotting HTML immutably onto the `saved_draft_approvals` row at send time; push route now refuses to push empty HTML. **Not yet manually end-to-end retested by Tommy** — see test steps below. |
+| `be66583`, `d73f46f`, `e62d46f` | Rich-text editor: template-forced bold/italic override behavior, footer button text, gallery px sizing, font corruption, sidebar formatting leakage, locked-but-formattable call button. |
+| `6a44282` | Full rewrite of the rich-text formatting engine, replacing `document.execCommand` with a from-scratch inline-span engine (`lib/rich-text/inline-format.ts`). Everything editor-formatting-related downstream of this. |
+| `c090647`, `abbb40d` | Dead code removal: `voice`/`heroHook` fields, Resend/nodemailer (email is Microsoft Graph only now), orphaned `push-caretta` route and manual `SegmentManager` UI. |
+| `42350fd` | Removed hardcoded per-community segment lists — segments are now resolved purely from the community's last HubSpot send. |
+| `0830e9f` | Switched approval email transport from Resend to Microsoft Graph. |
 
-These are all in `CLAUDE.md` under "key decisions — don't relitigate."
+Older but structurally foundational (stable, not recently touched):
+- `92e119e` — introduced the whole salesperson approval flow (send-for-approval, magic-link pages, edit requests).
+- `9b1a653` — moved community registry to Postgres, introduced the agentic drafter↔critic loop and 365-day past-sends memory.
+- `ef6a95c` — chunked PDF upload to bypass Vercel's 4.5 MB body limit.
+- `ecb3813` — persisted the image bank to Postgres for cross-device access.
 
-## Open tasks (priority-ish)
+## How to test the still-unverified fix
 
-**Agent build order (continue from Step 2):**
+Send a draft for approval → make one edit in the editor to arm autosave → wait for the "Auto-saving…" chip (~5s) → THEN approve → confirm the full eblast (not just the compliance footer) appears in HubSpot.
 
-3. **Postgres + analytics ingestion.** Provision Vercel Postgres. Schema: `drafts` (id, community_slug, hubspot_email_id, status, extracted_flyer JSONB, html, created_at, scheduled_for), `past_sends` (hubspot email id, community_slug, subject, sent_at, recipient_count, open_rate, click_rate, list_id), `approval_threads` (draft_id, salesperson_email, sent_at, magic_token, decision, notes, decided_at). Scheduled job (Vercel Cron) pulls open/click rates nightly via HubSpot analytics API. Once landed, give the critic a `lookup_past_sends(community_slug)` tool — it becomes a real tool-use loop.
-4. **Outbound approval email.** Add `sendSingleSendTransactional()` to `lib/hubspot.ts`. New `lib/approval-email.ts` composes the salesperson email — critic notes + HubSpot draft link + magic-link Approve/Edit buttons.
-5. **Magic-link approval form.** `/approve/[token]/page.tsx`. Signed token (HMAC) maps to a draft. Page shows preview + Approve / Request Edits buttons + free-text edit box.
-6. **Edit handler.** Salesperson submits edits → reuses refine flow → critic re-runs → second approval email.
-7. **Scheduler.** `lib/scheduler.ts` picks send time from past-send patterns, calls HubSpot's email-schedule API.
+## Open tasks
 
-**Independent open tasks:**
-
-1. **Onboard remaining 19 communities.** CSV template at `data/communities-onboarding.csv`. Use `/api/marketing-emails/recent?days=365` to map `nameAbbreviation` prefixes (ACB, HGB, OM, SH, etc.) to communities. Tommy mentioned the prefixes but the full mapping isn't done.
-2. **Brand guide upload UI.** Backend (`uploadImageToFileManager` in `lib/hubspot.ts`) is built and works. Need a form UI on `/communities/[slug]` to upload PDF + photos and store the URLs back into `data/communities.ts` (or a database when we add one).
-3. **Wire HubSpot list IDs per community.** `Community.hubspot.listId` field exists; just need the actual list IDs from HubSpot for each community. Without these, the email creates with no recipient list set.
-4. **Token rotation.** The HubSpot Private App token has been in chat history multiple times. Rotate, update Vercel env var. Old token still works — just hygiene.
-
-## What I just shipped (last working session)
-
-**Step 2 of the agentic plan: the Critic / Reviewer agent.**
-
-- `lib/critic.ts` — `reviewDraft({ flyer, community })`. Single Claude call with structured tool output. Returns `{ verdict, summary, findings[], subjectLineAlternatives, sendTimeRecommendation, recipientListNote }`. Findings are severity-tagged (`blocker` / `important` / `nice_to_have`) and category-tagged (`voice` / `subject_line` / `cta` / etc.) with optional concrete suggestions phrased as refinement instructions.
-- `app/api/critique-eblast/route.ts` — POST endpoint exposing the reviewer.
-- `app/page.tsx` — Reviewer panel in the sidebar (above refinement chat). Auto-runs after every draft generation and after every refinement. Shows verdict pill, summary, findings list. Each finding's suggestion is a clickable button that loads the suggestion text into the refine box — one click triggers the existing refinement loop. Alternative subject lines work the same way.
-
-**Architecture decisions locked this session:**
-- Outbound approval email → HubSpot single-send transactional (we already have the token).
-- Approval mechanism → magic-link in the email, NOT reply-parsing. Salesperson clicks → lands on a one-page Approve/Edit form.
-- Critic does NOT auto-fix. It surfaces; user/salesperson decides what to apply.
-
-### Previously shipped
-
-- Expanded `Community` type with `nameAbbreviation`, `careTypes`, `socials`, `marketingDirector`, `brandGuideUrl`, `logoUrl`, `photoLibrary`, `taglines`, `amenities`, `additionalListIds`
-- `app/communities/page.tsx` — list view of all communities
-- `app/communities/[slug]/page.tsx` — detail view with brand swatches, sender info, asset slots, voice/positioning
-- "Communities →" button added to homepage header for navigation
-- Caretta Bellevue (the only fully-populated community) updated with example values for new fields
-- `app/api/marketing-emails/recent/route.ts` upgraded with full distribution stats + pagination bump
+1. **Scheduler.** Nothing exists yet — agent picking a send time from past-send patterns and calling HubSpot's schedule API is still fully open.
+2. **Pipeline/kanban dashboard** (Draft / Awaiting approval / Approved / Scheduled / Sent) — not built. `saved_drafts`/`saved_draft_approvals` have everything needed to build this; just no UI yet.
+3. **Analytics view.** `past_sends` has open/click/bounce data (nightly cron already syncs it), but there's no UI surfacing it beyond the read-only `community-intelligence` stats panel shown before generating a draft.
+4. **Batch flyer processing** — still one-at-a-time.
+5. **Token rotation** — HubSpot Private App token has been in chat history multiple times. Low urgency, still a hygiene item.
+6. **Two parallel approval-confirmation surfaces** worth eventually consolidating: the email's Approve button goes straight to `quick-approve` (one-click, no confirmation screen), but `app/approve/[token]/page.tsx` is a separate full confirmation-page-with-preview that duplicates similar push logic and is only reachable via the "go back" link on the edits page. Not broken, just redundant — worth simplifying if touching that area again.
+7. Legacy DB tables `drafts` and `approval_threads` are dead (superseded by `saved_drafts`/`saved_draft_approvals`) but still in the schema. Fine to leave — don't write new code against them, and don't be surprised they're unused if you go looking for where drafts are stored.
 
 ## Tommy's preferences (observed across many sessions)
 
-- Wants results that look real / final-quality, not "good enough" placeholder vibes. When CMYK extraction was washed out, he kept pushing until it matched what Acrobat shows. Don't ship saturation hacks as "the fix."
-- Prefers code-driven solutions over manual workflows. `push-to-github.cmd` was specifically requested to skip PowerShell typing.
-- Values pragmatic honesty over hype. Push back when something he proposes won't work.
-- Shows patience for iteration but doesn't want to relitigate decided things.
-- Plans to evolve into agentic patterns later but wants the current setup solid first.
-
-## MCP / tooling notes
-
-In the Cowork sessions where this was built, we used:
-
-- **Vercel MCP** — checking deployments, fetching runtime logs, build error inspection. Genuinely useful. In Claude Code: `claude mcp add` it.
-- **HubSpot MCP** — mostly unused. We hit the HubSpot API directly via `lib/hubspot.ts`.
-- **Claude in Chrome** — used twice for proof-of-concept HubSpot UI driving. Not needed for this codebase.
-
-The Vercel MCP is the only one I'd recommend wiring up immediately for this project.
-
-## Current rough edges (low-priority)
-
-- Refinement chat preserves images across refinements but isn't persisted across page reloads.
-- No undo on refinement — forward only.
-- No way to download the rendered HTML without pushing to HubSpot.
-- No batch flyer processing.
-- No analytics view yet.
+- Wants results that look real/final-quality, not "good enough" placeholder vibes. Don't ship saturation hacks or shortcuts as "the fix" — he'll push until it matches source quality (e.g. CMYK extraction had to match what Acrobat shows).
+- Prefers code-driven solutions over manual workflows (`push-to-github.cmd` exists specifically to skip PowerShell typing).
+- Values pragmatic honesty over hype — push back when something proposed won't work, and don't overstate confidence about what's built vs. not. **This file was previously wrong about that exact thing — verify against code/git log, not memory or older docs, before describing project state.**
+- Wants git pushes to happen automatically after commits, no confirmation needed.
+- Wants the full workflow followed for multi-issue work: read all affected files first, parallel edits, `npx tsc --noEmit` before committing, push, then poll Vercel until `READY` and confirm the build log shows a clean compile — don't stop at "pushed."
 
 ## Read order for catching up
 
-1. This file (`HANDOFF.md`) — done if you're reading this
-2. `CLAUDE.md` — persistent project context
-3. `data/communities.ts` — see the data shape
-4. `lib/pdf-images.ts` — the most non-obvious piece of the codebase
-5. `app/api/push-eblast/route.ts` — the orchestration layer
+1. This file — done if you're reading this.
+2. `CLAUDE.md` — persistent project context, kept in sync with actual code as of 2026-07-09.
+3. `lib/db/schema.ts` — the real data model; more trustworthy than prose descriptions of it.
+4. `lib/agentic-draft.ts` + `lib/critic.ts` — the drafting/review loop.
+5. `app/api/draft-approval/[token]/edits/route.ts` — the AI-auto-refine-on-edit-request logic, the most non-obvious piece of the approval flow.
+6. `lib/pdf-images.ts` — the most non-obvious piece of the extraction pipeline.
+7. `context/DraftContext.tsx` — the editor's state machine and autosave/image-bank sync logic.
 
-After that, you'll have the full picture.
+After that, you'll have the full picture. If anything here contradicts the code, trust the code and fix this file.

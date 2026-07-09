@@ -136,6 +136,13 @@ export function buildEblastHtml(
   const ctaDate = flyer.ctaEventDate ?? flyer.eventDate;
   const ctaTime = flyer.ctaEventTime ?? flyer.eventTime;
   const ctaDateLine = [ctaDate, ctaTime].filter(Boolean).join(" · ");
+  // This line is a single no-wrap row at a large display size. A long combined
+  // date+time string can force it wider than the 600px template, which grows
+  // the whole table and leaves a gap beside the fixed-width hero/secondary/
+  // gallery images (measured: a 38-char line rendered ~540px against a 528px
+  // budget). Shrink with a small safety margin below that measured failure
+  // point — short lines (the normal case) keep the original 28px unchanged.
+  const ctaDateFontSize = stripHtml(ctaDateLine).length >= 36 ? 22 : 28;
 
   // Header color rule: the header must ALWAYS be a light, non-gray surface —
   // white (matching the story section's white body), or the community's own
@@ -370,7 +377,7 @@ export function buildEblastHtml(
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
-            ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: 28px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
+            ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>
                 <td width="${finalCtaLabel.width}" class="glm-bg-primary" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">

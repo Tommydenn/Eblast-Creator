@@ -17,8 +17,16 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
 export default function HeroSection() {
-  const { fields, setField, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
+  const { fields, setField, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   if (!fields) return null;
+
+  // Default address line shown in the box when the field hasn't been overridden
+  // (matches the renderer's fallback), so the box is pre-filled rather than blank.
+  const communityAddressLine = community
+    ? [community.displayName, community.address?.street, community.address?.city,
+       [community.address?.state, community.address?.zip].filter(Boolean).join(" ")]
+        .filter(Boolean).join(", ")
+    : "";
 
   return (
     <div className="space-y-5">
@@ -90,7 +98,7 @@ export default function HeroSection() {
 
       <Field label="Address Line" hint="Shown beneath the event date in the hero section. Defaults to the community name and address.">
         <RichInput
-          value={fields.heroAddress ?? ""}
+          value={fields.heroAddress ?? communityAddressLine}
           onValueChange={(html) => setField("heroAddress", html || undefined)}
           placeholder="e.g. Arbor Crossing, 1234 Oak St, Green Bay, WI 54301"
           className={baseInput}
@@ -101,8 +109,13 @@ export default function HeroSection() {
         />
       </Field>
 
-      <Field label="Call Button Label" hint="Text on the primary call-to-action button. Appears in both the hero and footer sections.">
-        <CallButtonField className={baseInput} />
+      <Field label="Call Button Label" hint="Text on the primary call-to-action button. Appears in both the hero and footer sections. Select text to format it (bold, color, size…) — the number stays locked.">
+        <CallButtonField
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+        />
       </Field>
 
     </div>

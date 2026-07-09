@@ -199,11 +199,21 @@ export function buildEblastHtml(
   const formattedTracking = ctaPhone
     ? ctaPhone.replace(/\D/g, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1.$2.$3")
     : null;
-  // Strip HTML from ctaButtonLabel before phone-replacement & uppercasing
-  const rawLabel = stripHtml(flyer.ctaButtonLabel) || (formattedTracking ? `Call ${formattedTracking}` : "Call Us");
-  const ctaDisplayText = formattedTracking
-    ? rawLabel.replace(/\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/, formattedTracking).toUpperCase()
-    : rawLabel.toUpperCase();
+  const PHONE_RE = /\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/;
+  // The button label is rich HTML (bold/color/font/size all render). Reconcile
+  // the phone number to the community tracking line, then render it inline so
+  // formatting survives. Uppercasing is done in CSS (text-transform), and the
+  // plain-text form is used only for width/length sizing.
+  const rawLabelHtml = flyer.ctaButtonLabel && flyer.ctaButtonLabel.trim()
+    ? flyer.ctaButtonLabel
+    : (formattedTracking ? `Call ${formattedTracking}` : "Call Us");
+  const reconciledLabelHtml = formattedTracking
+    ? (PHONE_RE.test(stripHtml(rawLabelHtml))
+        ? rawLabelHtml.replace(PHONE_RE, formattedTracking)
+        : `${rawLabelHtml} ${formattedTracking}`)
+    : rawLabelHtml;
+  const ctaDisplayText = stripHtml(reconciledLabelHtml);
+  const ctaDisplayHtml = renderInlineField(reconciledLabelHtml);
 
   // Two font sizes only. Long labels wrap to a second line rather than shrinking.
   const ctaBtnFontSize = ctaDisplayText.length <= 32 ? 14 : 13;
@@ -256,7 +266,7 @@ export function buildEblastHtml(
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
                 <td width="${ctaBtnWidth}" align="center" style="background:${brand.accent};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${escapeHtml(ctaDisplayText)}</a>
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
                 </td>
               </tr>
             </table>
@@ -309,7 +319,7 @@ export function buildEblastHtml(
     return `
   <tr data-section="Photo Gallery">
     <td style="padding: 44px 36px 12px 36px;" align="center">
-      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${escapeHtml((flyer.galleryLabel ?? `A Look Around ${community.shortName}`).toUpperCase())}</p>
+      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${flyer.galleryLabel ? renderInlineField(flyer.galleryLabel) : escapeHtml(`A Look Around ${community.shortName}`)}</p>
     </td>
   </tr>
   <tr data-section="Photo Gallery">
@@ -346,7 +356,7 @@ export function buildEblastHtml(
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
                 <td width="${ctaBtnWidth}" align="center" style="background:${brand.primary};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${escapeHtml(ctaDisplayText)}</a>
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
                 </td>
               </tr>
             </table>

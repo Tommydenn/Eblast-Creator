@@ -28,9 +28,11 @@ const baseInput =
   "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
 export default function StorySection() {
-  const { fields, setField, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
+  const { fields, setField, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
 
   if (!fields) return null;
+
+  const galleryDefault = community?.shortName ? `A Look Around ${community.shortName}` : "";
 
   return (
     <div className="space-y-5">
@@ -76,16 +78,17 @@ export default function StorySection() {
 
       <Field
         label="Gallery Label"
-        hint={`Small label above the photo gallery (defaults to "A Look Around {Community}")`}
+        hint="Small label above the photo gallery. Select text to format it."
       >
-        <input
-          type="text"
-          value={fields.galleryLabel ?? ""}
-          onChange={(e) =>
-            setField("galleryLabel", e.target.value || undefined)
-          }
+        <RichInput
+          value={fields.galleryLabel ?? galleryDefault}
+          onValueChange={(html) => setField("galleryLabel", html || undefined)}
+          placeholder="e.g. A Look Around Our Community"
           className={baseInput}
-          placeholder="Leave blank to use default"
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="galleryLabel"
         />
       </Field>
     </div>

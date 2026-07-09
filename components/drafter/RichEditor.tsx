@@ -97,6 +97,20 @@ function useEditorEvents(
   }, [ref, singleLine, serialize]);
 }
 
+// Plain text of an HTML string (tags stripped, nbsp normalized).
+function plainFromHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, "").replace(/ /g, " ");
+}
+
+function placeCaretEnd(el: HTMLElement) {
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  r.collapse(false);
+  const s = window.getSelection();
+  s?.removeAllRanges();
+  s?.addRange(r);
+}
+
 // ── RichInput — single-line rich field ──────────────────────────────────────────
 
 interface RichInputProps extends ActiveEditorProps {
@@ -104,6 +118,12 @@ interface RichInputProps extends ActiveEditorProps {
   onValueChange: (html: string) => void;
   placeholder?: string;
   className?: string;
+  /**
+   * Optional constraint on the field's plain text. When it returns false for an
+   * edit, that edit is reverted (formatting is unaffected because it doesn't
+   * change the text). Used to lock the tracking number into the call button.
+   */
+  guardPlain?: (plainText: string) => boolean;
 }
 
 export function RichInput({
@@ -115,28 +135,53 @@ export function RichInput({
   activeEditorCallback,
   activeFieldNameRef,
   fieldName,
+  guardPlain,
 }: RichInputProps) {
   const ref = useRef<HTMLDivElement>(null);
   const isFocused = useRef(false);
   const onValueChangeRef = useRef(onValueChange);
   onValueChangeRef.current = onValueChange;
+  const guardRef = useRef(guardPlain);
+  guardRef.current = guardPlain;
+  // What we last handed upward — lets the external-sync effect ignore our own
+  // echoed change so the field never re-renders (and loses caret) from its own
+  // edit, even when a focus-stealing control (font size / hex input) applied it.
+  const lastEmitted = useRef<string | null>(null);
+  // Last accepted live innerHTML, restored when a guarded edit is rejected.
+  const lastGoodHtml = useRef<string>("");
 
   const serialize = useCallback(() => {
-    if (!ref.current) return;
-    onValueChangeRef.current(serializeInline(ref.current));
+    const el = ref.current;
+    if (!el) return;
+    const html = serializeInline(el);
+    const guard = guardRef.current;
+    if (guard && !guard(plainFromHtml(el.innerHTML))) {
+      el.innerHTML = lastGoodHtml.current;
+      placeCaretEnd(el);
+      return;
+    }
+    lastGoodHtml.current = el.innerHTML;
+    lastEmitted.current = html;
+    onValueChangeRef.current(html);
   }, []);
 
   // Initial content.
   useEffect(() => {
-    if (ref.current) ref.current.innerHTML = normalizeInlineHtml(value ?? "");
+    if (ref.current) {
+      ref.current.innerHTML = normalizeInlineHtml(value ?? "");
+      lastGoodHtml.current = ref.current.innerHTML;
+      lastEmitted.current = serializeInline(ref.current);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync external changes (AI refine, undo/redo) — never while the user types.
+  // Sync genuine external changes (AI refine, undo/redo, changed defaults) —
+  // never while the user types, and never for our own echoed output.
   useEffect(() => {
-    if (!isFocused.current && ref.current) {
-      ref.current.innerHTML = normalizeInlineHtml(value ?? "");
-    }
+    if (isFocused.current || !ref.current) return;
+    if (value === lastEmitted.current) return;
+    ref.current.innerHTML = normalizeInlineHtml(value ?? "");
+    lastGoodHtml.current = ref.current.innerHTML;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
@@ -188,9 +233,12 @@ export function RichBodyEditor({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  const lastEmitted = useRef<string | null>(null);
   const serialize = useCallback(() => {
     if (!ref.current) return;
-    onChangeRef.current(serializeBlocks(ref.current));
+    const paras = serializeBlocks(ref.current);
+    lastEmitted.current = paras.join(" ");
+    onChangeRef.current(paras);
   }, []);
 
   useEffect(() => {
@@ -198,11 +246,11 @@ export function RichBodyEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const extKey = paragraphs.join("");
+  const extKey = paragraphs.join(" ");
   useEffect(() => {
-    if (!isFocused.current && ref.current) {
-      ref.current.innerHTML = blocksToHtml(paragraphs);
-    }
+    if (isFocused.current || !ref.current) return;
+    if (extKey === lastEmitted.current) return;
+    ref.current.innerHTML = blocksToHtml(paragraphs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extKey]);
 
@@ -244,53 +292,56 @@ function formatPhone(raw: string): string {
 const PHONE_RE = /\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/;
 
 /**
- * The call button renders as "{WORDS} {NUMBER}", uppercased, with the number
- * always forced to the community's tracking phone at render time. So we let the
- * user edit only the words; the number is shown as a locked chip.
+ * The call button is a fully formattable rich field that includes the tracking
+ * number as text. The digits are locked: any edit that removes the number from
+ * the text is reverted (formatting never changes the text, so bold/italic/color/
+ * font/size all apply freely — including to the number). If the community has no
+ * tracking number, it behaves like a normal rich field.
  */
-export function CallButtonField({ className }: { className?: string }) {
+export function CallButtonField({
+  className,
+  activeEditorRef,
+  activeEditorCallback,
+  activeFieldNameRef,
+}: { className?: string } & Omit<ActiveEditorProps, "fieldName">) {
   const { fields, setField, community } = useDraft();
   const tracking = community?.trackingPhone ?? null;
   const formatted = tracking ? formatPhone(tracking) : null;
 
-  // Derive the editable "words" from the stored label by removing the number.
-  const raw = (fields?.ctaButtonLabel ?? "").replace(/<[^>]+>/g, "");
-  const derivedWords = raw.replace(PHONE_RE, "").replace(/\s+/g, " ").trim();
+  const stored = fields?.ctaButtonLabel ?? "";
 
-  const [words, setWords] = useState(derivedWords);
-  const lastDerived = useRef(derivedWords);
-  useEffect(() => {
-    // Adopt external changes (AI refine / undo) without clobbering local typing.
-    if (derivedWords !== lastDerived.current) {
-      lastDerived.current = derivedWords;
-      setWords(derivedWords);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [derivedWords]);
+  // The value shown in the box always contains the correct tracking number,
+  // reconciling any legacy/placeholder number without a write until the user edits.
+  const value = (() => {
+    if (!formatted) return stored || "Call Us";
+    const plain = stored.replace(/<[^>]+>/g, "");
+    if (stored && plain.includes(formatted)) return stored;
+    if (stored && PHONE_RE.test(plain)) return stored.replace(PHONE_RE, formatted);
+    if (stored) return `${stored} ${formatted}`;
+    return `Call ${formatted}`;
+  })();
 
-  const commit = (next: string) => {
-    setWords(next);
-    const clean = next.trim();
-    const composed = formatted ? `${clean} ${formatted}`.trim() : clean;
-    lastDerived.current = clean;
-    setField("ctaButtonLabel", composed);
-  };
+  const guardPlain = formatted ? (t: string) => t.includes(formatted) : undefined;
 
   return (
     <div>
-      <input
-        type="text"
-        value={words}
-        onChange={(e) => commit(e.target.value)}
-        placeholder="e.g. Call"
+      <RichInput
+        value={value}
+        onValueChange={(html) => setField("ctaButtonLabel", html)}
+        guardPlain={guardPlain}
+        placeholder="e.g. Call 920.504.3443"
         className={className}
+        activeEditorRef={activeEditorRef}
+        activeEditorCallback={activeEditorCallback}
+        activeFieldNameRef={activeFieldNameRef}
+        fieldName="ctaButtonLabel"
       />
       {formatted && (
         <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#7a8c85]">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
           </svg>
-          Number <span className="font-semibold text-[#5a6b63]">{formatted}</span> is locked to this community&rsquo;s tracking line.
+          <span><span className="font-semibold text-[#5a6b63]">{formatted}</span> is locked — you can format it, but the digits can&rsquo;t be changed.</span>
         </div>
       )}
     </div>

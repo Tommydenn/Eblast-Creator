@@ -273,10 +273,10 @@ export function RichBodyEditor({
         serialize();
       }}
       onInput={serialize}
-      className={
+      className={`rich-body-display ${
         className ??
         "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2.5 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors leading-relaxed"
-      }
+      }`}
       style={{ minHeight: 200, outline: "none" }}
     />
   );

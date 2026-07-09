@@ -136,11 +136,15 @@
 }
 .eb-toast { animation: eb-toast 3.5s ease-in-out both; }
 
-/* Sidebar RichInput: suppress all inline formatting so toolbar edits don't
-   visually affect the sidebar fields. HTML is preserved in innerHTML for
-   email output — only the visual rendering is locked down. */
+/* Sidebar editors: suppress all inline formatting so toolbar edits don't
+   visually affect the sidebar fields — formatting only shows in the live email
+   preview. HTML is preserved in innerHTML for email output; only the visual
+   rendering in the sidebar is locked down. Applies to both the single-line
+   RichInput fields and the multi-paragraph Body Copy editor. */
 .rich-input-display,
-.rich-input-display * {
+.rich-input-display *,
+.rich-body-display,
+.rich-body-display * {
   font-size: 14px !important;
   color: #1a1a1a !important;
   font-weight: 400 !important;

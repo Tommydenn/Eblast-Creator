@@ -88,6 +88,14 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Escape a value going into a double-quoted attribute. Critical for the style
+// attribute: multi-word font-family values come back from the browser wrapped
+// in double quotes (e.g. font-family: "Times New Roman"), which would otherwise
+// break out of style="…" and corrupt the span.
+function escAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
 // ── reading effective style from the DOM ───────────────────────────────────────
 
 // Extract whatever formatting a single element declares — via semantic tag or
@@ -180,7 +188,7 @@ function runsToHtml(runs: Run[]): string {
     .filter((r) => r.text !== "")
     .map((r) => {
       const style = styleToString(r.style);
-      return style ? `<span style="${style}">${esc(r.text)}</span>` : esc(r.text);
+      return style ? `<span style="${escAttr(style)}">${esc(r.text)}</span>` : esc(r.text);
     })
     .join("");
 }

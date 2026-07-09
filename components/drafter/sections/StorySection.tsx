@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React from "react";
 import { useDraft } from "@/context/DraftContext";
-import { RichInput } from "@/components/drafter/RichEditor";
+import { RichInput, RichBodyEditor } from "@/components/drafter/RichEditor";
 
 function Field({
   label,
@@ -27,54 +27,10 @@ function Field({
 const baseInput =
   "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
-function toHtml(paras: string[]) {
-  return paras.map((p) => "<div>" + (p || "<br>") + "</div>").join("");
-}
-
-function fromHtml(el: HTMLDivElement): string[] {
-  const divs = Array.from(el.querySelectorAll(":scope > div"));
-  if (divs.length === 0) {
-    const html = el.innerHTML.replace(/<br\s*\/?>/gi, "").trim();
-    return html ? [html] : [""];
-  }
-  const paras = divs
-    .map((d) => (d as HTMLElement).innerHTML.replace(/<br\s*\/?>$/i, "").trim())
-    .filter((p) => p !== "" && p !== "<br>");
-  return paras.length > 0 ? paras : [""];
-}
-
 export default function StorySection() {
   const { fields, setField, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
-  const editorRef = useRef<HTMLDivElement>(null);
-  const isFocused = useRef(false);
 
   if (!fields) return null;
-
-  function handleBodyInput() {
-    const el = editorRef.current;
-    if (!el) return;
-    setField("bodyParagraphs", fromHtml(el));
-  }
-
-  // Initialize editor on mount
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (editorRef.current) {
-      document.execCommand("defaultParagraphSeparator", false, "div");
-      editorRef.current.innerHTML = toHtml(fields.bodyParagraphs);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Sync external field changes (e.g. from AI refine) without overwriting while user is editing
-  const extKey = fields.bodyParagraphs.join(" ");
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!isFocused.current && editorRef.current) {
-      editorRef.current.innerHTML = toHtml(fields.bodyParagraphs);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extKey]);
 
   return (
     <div className="space-y-5">
@@ -106,30 +62,15 @@ export default function StorySection() {
 
       <Field
         label="Body Copy"
-        hint="Select text, then use the formatting toolbar above the preview to apply bold, color, or font."
+        hint="Press Enter for a new paragraph. Select text, then use the formatting toolbar above the preview to apply bold, color, or font."
       >
-        <div
-          ref={editorRef}
-          contentEditable={true}
-          suppressContentEditableWarning={true}
-          onFocus={() => {
-            isFocused.current = true;
-            activeEditorRef.current = editorRef.current;
-            activeEditorCallback.current = handleBodyInput;
-            activeFieldNameRef.current = "bodyParagraphs";
-          }}
-          onBlur={() => {
-            isFocused.current = false;
-            handleBodyInput();
-          }}
-          onInput={handleBodyInput}
-          onPaste={(e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData("text/plain");
-            document.execCommand("insertText", false, text);
-          }}
-          className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2.5 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors leading-relaxed"
-          style={{ minHeight: 200, outline: "none" }}
+        <RichBodyEditor
+          paragraphs={fields.bodyParagraphs}
+          onChange={(paras) => setField("bodyParagraphs", paras)}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="bodyParagraphs"
         />
       </Field>
 

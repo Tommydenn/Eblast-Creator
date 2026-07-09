@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
-import { RichInput } from "@/components/drafter/RichEditor";
+import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -102,16 +102,7 @@ export default function HeroSection() {
       </Field>
 
       <Field label="Call Button Label" hint="Text on the primary call-to-action button. Appears in both the hero and footer sections.">
-        <RichInput
-          value={fields.ctaButtonLabel}
-          onValueChange={(html) => setField("ctaButtonLabel", html)}
-          placeholder="e.g. Call 920.504.3443"
-          className={baseInput}
-          activeEditorRef={activeEditorRef}
-          activeEditorCallback={activeEditorCallback}
-          activeFieldNameRef={activeFieldNameRef}
-          fieldName="ctaButtonLabel"
-        />
+        <CallButtonField className={baseInput} />
       </Field>
 
     </div>

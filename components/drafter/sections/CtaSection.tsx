@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
-import { RichInput } from "@/components/drafter/RichEditor";
+import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -63,16 +63,7 @@ export default function CtaSection() {
       </Field>
 
       <Field label="Call Button Label" hint="The primary action button at the bottom of the email. Also appears in the hero section.">
-        <RichInput
-          value={fields.ctaButtonLabel}
-          onValueChange={(html) => setField("ctaButtonLabel", html)}
-          placeholder="e.g. Call 920.504.3443"
-          className={baseInput}
-          activeEditorRef={activeEditorRef}
-          activeEditorCallback={activeEditorCallback}
-          activeFieldNameRef={activeFieldNameRef}
-          fieldName="ctaButtonLabel"
-        />
+        <CallButtonField className={baseInput} />
       </Field>
 
       <Field label="Visit Website URL" hint="URL for the 'Visit Website' button in the footer. Defaults to the community's configured website.">

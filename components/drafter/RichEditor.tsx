@@ -1,18 +1,109 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
+import { useDraft } from "@/context/DraftContext";
+import {
+  applyFormat,
+  queryFormatState,
+  serializeInline,
+  serializeBlocks,
+  normalizeInlineHtml,
+  blocksToHtml,
+  setPendingToggle,
+  getPending,
+  clearPending,
+  insertTextWithPending,
+  type FormatCommand,
+  type FormatState,
+  type ToggleType,
+} from "@/lib/rich-text/inline-format";
 
-// ── RichInput — single-line contentEditable for toolbar-compatible fields ──────
+// ── shared editor wiring ────────────────────────────────────────────────────────
+// Both the single-line field and the multi-paragraph body register themselves as
+// the "active editor" on focus, so the one shared toolbar (mounted above the
+// preview) targets whichever field the user is editing.
 
-interface RichInputProps {
-  value: string;
-  onValueChange: (html: string) => void;
-  placeholder?: string;
-  className?: string;
+interface ActiveEditorProps {
   activeEditorRef: React.MutableRefObject<HTMLDivElement | null>;
   activeEditorCallback: React.MutableRefObject<(() => void) | null>;
   activeFieldNameRef: React.MutableRefObject<string | null>;
   fieldName: string;
+}
+
+// Insert plain text at the current selection (paste / typing fallback). Never
+// inserts HTML, so pasted markup can't leak in as literal tags.
+function insertPlainText(text: string, singleLine: boolean) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const clean = singleLine ? text.replace(/[\r\n]+/g, " ") : text.replace(/\r\n/g, "\n");
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const node = document.createTextNode(clean);
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+// Shared native-event wiring for a contentEditable region: pending-mark aware
+// typing, plain-text paste, and pending cleanup on caret navigation.
+function useEditorEvents(
+  ref: React.RefObject<HTMLDivElement>,
+  singleLine: boolean,
+  serialize: () => void,
+) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const onBeforeInput = (e: InputEvent) => {
+      if (e.isComposing) return;
+      if (e.inputType === "insertText" && e.data && getPending(el)) {
+        if (insertTextWithPending(el, e.data)) {
+          e.preventDefault();
+          serialize();
+        }
+      }
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      insertPlainText(text, singleLine);
+      serialize();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (singleLine && e.key === "Enter") {
+        e.preventDefault();
+        return;
+      }
+      // Caret navigation abandons any queued pending marks.
+      if (
+        e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" ||
+        e.key === "ArrowDown" || e.key === "Home" || e.key === "End" || e.key === "Escape"
+      ) {
+        clearPending(el);
+      }
+    };
+
+    el.addEventListener("beforeinput", onBeforeInput as EventListener);
+    el.addEventListener("paste", onPaste as EventListener);
+    el.addEventListener("keydown", onKeyDown as EventListener);
+    return () => {
+      el.removeEventListener("beforeinput", onBeforeInput as EventListener);
+      el.removeEventListener("paste", onPaste as EventListener);
+      el.removeEventListener("keydown", onKeyDown as EventListener);
+    };
+  }, [ref, singleLine, serialize]);
+}
+
+// ── RichInput — single-line rich field ──────────────────────────────────────────
+
+interface RichInputProps extends ActiveEditorProps {
+  value: string;
+  onValueChange: (html: string) => void;
+  placeholder?: string;
+  className?: string;
 }
 
 export function RichInput({
@@ -28,66 +119,187 @@ export function RichInput({
   const ref = useRef<HTMLDivElement>(null);
   const isFocused = useRef(false);
   const onValueChangeRef = useRef(onValueChange);
-  useEffect(() => { onValueChangeRef.current = onValueChange; });
+  onValueChangeRef.current = onValueChange;
 
-  useEffect(() => {
-    if (ref.current) {
-      document.execCommand("defaultParagraphSeparator", false, "div");
-      ref.current.innerHTML = value ?? "";
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const serialize = useCallback(() => {
+    if (!ref.current) return;
+    onValueChangeRef.current(serializeInline(ref.current));
   }, []);
 
+  // Initial content.
+  useEffect(() => {
+    if (ref.current) ref.current.innerHTML = normalizeInlineHtml(value ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync external changes (AI refine, undo/redo) — never while the user types.
   useEffect(() => {
     if (!isFocused.current && ref.current) {
-      ref.current.innerHTML = value ?? "";
+      ref.current.innerHTML = normalizeInlineHtml(value ?? "");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
-  function readValue() {
-    if (!ref.current) return;
-    let html = ref.current.innerHTML;
-    const divMatch = html.match(/^<div>([\s\S]*)<\/div>$/i);
-    if (divMatch) html = divMatch[1];
-    html = html.replace(/<br\s*\/?>$/i, "");
-    // Browser inserts &nbsp; in empty contentEditable — normalize to regular spaces
-    html = html.replace(/&nbsp;/g, " ").trim();
-    onValueChangeRef.current(html);
-  }
+  useEditorEvents(ref, true, serialize);
 
   return (
     <div
       ref={ref}
-      contentEditable={true}
-      suppressContentEditableWarning={true}
+      contentEditable
+      suppressContentEditableWarning
       data-placeholder={placeholder ?? ""}
       onFocus={() => {
         isFocused.current = true;
         activeEditorRef.current = ref.current;
-        activeEditorCallback.current = readValue;
+        activeEditorCallback.current = serialize;
         activeFieldNameRef.current = fieldName;
       }}
       onBlur={() => {
         isFocused.current = false;
-        readValue();
+        if (ref.current) clearPending(ref.current);
+        serialize();
       }}
-      onInput={readValue}
-      onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
-      onPaste={(e) => {
-        e.preventDefault();
-        const text = e.clipboardData.getData("text/plain");
-        document.execCommand("insertText", false, text);
-      }}
+      onInput={serialize}
       className={`rich-input-display${className ? ` ${className}` : ""}`}
       style={{ outline: "none", minHeight: "2rem" }}
     />
   );
 }
 
-// ── Toolbar ───────────────────────────────────────────────────────────────────
+// ── RichBodyEditor — multi-paragraph body ───────────────────────────────────────
 
-// Default font sizes as rendered in the email template, keyed by field name
+interface RichBodyEditorProps extends ActiveEditorProps {
+  paragraphs: string[];
+  onChange: (paras: string[]) => void;
+  className?: string;
+}
+
+export function RichBodyEditor({
+  paragraphs,
+  onChange,
+  className,
+  activeEditorRef,
+  activeEditorCallback,
+  activeFieldNameRef,
+  fieldName,
+}: RichBodyEditorProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const isFocused = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const serialize = useCallback(() => {
+    if (!ref.current) return;
+    onChangeRef.current(serializeBlocks(ref.current));
+  }, []);
+
+  useEffect(() => {
+    if (ref.current) ref.current.innerHTML = blocksToHtml(paragraphs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const extKey = paragraphs.join("");
+  useEffect(() => {
+    if (!isFocused.current && ref.current) {
+      ref.current.innerHTML = blocksToHtml(paragraphs);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extKey]);
+
+  useEditorEvents(ref, false, serialize);
+
+  return (
+    <div
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      onFocus={() => {
+        isFocused.current = true;
+        activeEditorRef.current = ref.current;
+        activeEditorCallback.current = serialize;
+        activeFieldNameRef.current = fieldName;
+      }}
+      onBlur={() => {
+        isFocused.current = false;
+        if (ref.current) clearPending(ref.current);
+        serialize();
+      }}
+      onInput={serialize}
+      className={
+        className ??
+        "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2.5 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors leading-relaxed"
+      }
+      style={{ minHeight: 200, outline: "none" }}
+    />
+  );
+}
+
+// ── Call button field — editable label words, locked tracking number ────────────
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  const m = digits.match(/^1?(\d{3})(\d{3})(\d{4})$/);
+  return m ? `${m[1]}.${m[2]}.${m[3]}` : raw;
+}
+const PHONE_RE = /\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/;
+
+/**
+ * The call button renders as "{WORDS} {NUMBER}", uppercased, with the number
+ * always forced to the community's tracking phone at render time. So we let the
+ * user edit only the words; the number is shown as a locked chip.
+ */
+export function CallButtonField({ className }: { className?: string }) {
+  const { fields, setField, community } = useDraft();
+  const tracking = community?.trackingPhone ?? null;
+  const formatted = tracking ? formatPhone(tracking) : null;
+
+  // Derive the editable "words" from the stored label by removing the number.
+  const raw = (fields?.ctaButtonLabel ?? "").replace(/<[^>]+>/g, "");
+  const derivedWords = raw.replace(PHONE_RE, "").replace(/\s+/g, " ").trim();
+
+  const [words, setWords] = useState(derivedWords);
+  const lastDerived = useRef(derivedWords);
+  useEffect(() => {
+    // Adopt external changes (AI refine / undo) without clobbering local typing.
+    if (derivedWords !== lastDerived.current) {
+      lastDerived.current = derivedWords;
+      setWords(derivedWords);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedWords]);
+
+  const commit = (next: string) => {
+    setWords(next);
+    const clean = next.trim();
+    const composed = formatted ? `${clean} ${formatted}`.trim() : clean;
+    lastDerived.current = clean;
+    setField("ctaButtonLabel", composed);
+  };
+
+  return (
+    <div>
+      <input
+        type="text"
+        value={words}
+        onChange={(e) => commit(e.target.value)}
+        placeholder="e.g. Call"
+        className={className}
+      />
+      {formatted && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#7a8c85]">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          Number <span className="font-semibold text-[#5a6b63]">{formatted}</span> is locked to this community&rsquo;s tracking line.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Toolbar ─────────────────────────────────────────────────────────────────────
+
+// Default font sizes as rendered in the email template, keyed by field name.
 const FIELD_FONT_SIZES: Record<string, number> = {
   headline: 36,
   scriptSubheadline: 36,
@@ -100,8 +312,9 @@ const FIELD_FONT_SIZES: Record<string, number> = {
   ctaEventDate: 28,
   ctaEventTime: 28,
   ctaRsvpLabel: 11,
-  ctaButtonLabel: 14,
   footerName: 14,
+  thankYouText: 26,
+  heroAddress: 12,
 };
 
 interface ToolbarProps {
@@ -113,12 +326,29 @@ interface ToolbarProps {
   className?: string;
 }
 
-export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, activeFieldNameRef, className }: ToolbarProps) {
+const EMPTY_STATE: FormatState = {
+  bold: false,
+  italic: false,
+  underline: false,
+  color: null,
+  fontFamily: null,
+  fontSize: null,
+};
+
+export function FormatToolbar({
+  editorRef,
+  brandColors,
+  brandFonts,
+  onInput,
+  activeFieldNameRef,
+  className,
+}: ToolbarProps) {
   const [colorOpen, setColorOpen] = useState(false);
   const [fontOpen, setFontOpen] = useState(false);
   const [customColors, setCustomColors] = useState<string[]>([]);
-  const [fontSizeInput, setFontSizeInput] = useState("");
   const [hexInput, setHexInput] = useState("");
+  const [fontSizeInput, setFontSizeInput] = useState("");
+  const [state, setState] = useState<FormatState>(EMPTY_STATE);
   const colorPanelRef = useRef<HTMLDivElement>(null);
   const fontPanelRef = useRef<HTMLDivElement>(null);
   const fontSizeInputRef = useRef<HTMLInputElement>(null);
@@ -140,55 +370,59 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
+  // Reflect the current selection's formatting in the toolbar (active states +
+  // font size/family read-outs) so it behaves like a real word processor.
   useEffect(() => {
-    function onSelectionChange() {
+    function refresh() {
       if (document.activeElement === fontSizeInputRef.current) return;
-      const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return;
-      if (!sel.isCollapsed) {
-        savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
-      }
-      let node: Node | null = sel.anchorNode;
-      while (node) {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          const fs = (node as HTMLElement).style.fontSize;
-          if (fs && fs.endsWith("px")) { setFontSizeInput(parseInt(fs, 10).toString()); return; }
-        }
-        node = node.parentNode;
-      }
-      const fieldName = activeFieldNameRef?.current;
-      if (fieldName && FIELD_FONT_SIZES[fieldName]) {
-        setFontSizeInput(FIELD_FONT_SIZES[fieldName].toString());
+      const el = editorRef.current;
+      if (!el || !el.isConnected) {
+        setState(EMPTY_STATE);
         return;
       }
-      setFontSizeInput("");
+      const st = queryFormatState(el, getPending(el));
+      setState(st);
+      const fieldName = activeFieldNameRef?.current;
+      const fallback = fieldName ? FIELD_FONT_SIZES[fieldName] : undefined;
+      setFontSizeInput(st.fontSize != null ? String(st.fontSize) : fallback != null ? String(fallback) : "");
     }
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, [activeFieldNameRef]);
+    document.addEventListener("selectionchange", refresh);
+    return () => document.removeEventListener("selectionchange", refresh);
+  }, [editorRef, activeFieldNameRef]);
 
-  // Bold/italic/underline/removeFormat: styleWithCSS false → semantic <b>/<i>/<u>, properly togglable
-  function execFormat(cmd: string) {
-    if (!editorRef.current) return;
-    editorRef.current.focus();
-    document.execCommand("styleWithCSS", false, "false");
-    document.execCommand(cmd, false, undefined);
+  function run(cmd: FormatCommand, savedRange?: Range | null) {
+    const el = editorRef.current;
+    if (!el) return;
+    applyFormat(el, cmd, savedRange ?? undefined);
     onInput();
+    setState(queryFormatState(el, getPending(el)));
   }
 
-  // Color only: styleWithCSS true → inline <span style="color:…">
+  // Bold / Italic / Underline: toggle on a selection, or queue a pending mark
+  // when the caret is collapsed (type-then-it's-bold behavior).
+  function toggle(type: ToggleType) {
+    const el = editorRef.current;
+    if (!el) return;
+    const sel = window.getSelection();
+    const collapsed = !sel || sel.rangeCount === 0 || sel.getRangeAt(0).collapsed;
+    if (collapsed) {
+      setPendingToggle(el, type);
+      setState(queryFormatState(el, getPending(el)));
+    } else {
+      run({ type });
+    }
+  }
+
   function execColor(hex: string) {
-    if (!editorRef.current) return;
-    editorRef.current.focus();
-    document.execCommand("styleWithCSS", false, "true");
-    document.execCommand("foreColor", false, hex);
-    onInput();
+    run({ type: "color", value: hex }, savedSelectionRef.current);
   }
 
   function addCustomColor(hex: string) {
-    setCustomColors(prev => {
-      const next = [hex, ...prev.filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 10);
-      try { localStorage.setItem("eblast_custom_colors", JSON.stringify(next)); } catch {}
+    setCustomColors((prev) => {
+      const next = [hex, ...prev.filter((c) => c.toLowerCase() !== hex.toLowerCase())].slice(0, 10);
+      try {
+        localStorage.setItem("eblast_custom_colors", JSON.stringify(next));
+      } catch {}
       return next;
     });
   }
@@ -203,69 +437,21 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
     setHexInput("");
   }
 
-  // Font family: handles cross-paragraph selections in the body editor without corrupting
-  // paragraph structure (execCommand("fontName") wraps multi-div selections in a span,
-  // which breaks fromHtml()'s :scope > div query and collapses all paragraphs into one).
   function applyFontFamily(fontFamily: string) {
-    if (!editorRef.current) return;
-    editorRef.current.focus();
-
-    const divs = Array.from(editorRef.current.querySelectorAll<HTMLDivElement>(":scope > div"));
-
-    if (divs.length > 1) {
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount > 0) {
-        const range = sel.getRangeAt(0);
-
-        function getTopLevelEl(node: Node): Element | null {
-          let n: Node | null = node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode;
-          while (n && n.parentNode !== editorRef.current) n = n.parentNode;
-          return (n && n !== editorRef.current && n.nodeType === Node.ELEMENT_NODE) ? n as Element : null;
-        }
-
-        const startEl = getTopLevelEl(range.startContainer);
-        const endEl = getTopLevelEl(range.endContainer);
-
-        if (startEl && endEl && startEl !== endEl) {
-          const startIdx = divs.indexOf(startEl as HTMLDivElement);
-          const endIdx = divs.indexOf(endEl as HTMLDivElement);
-          for (let i = Math.max(0, startIdx); i <= Math.min(divs.length - 1, endIdx); i++) {
-            divs[i].style.fontFamily = fontFamily;
-          }
-          onInput();
-          return;
-        }
-      }
-    }
-
-    // Single paragraph or flat single-line editor — safe to use execCommand
-    document.execCommand("styleWithCSS", false, "true");
-    document.execCommand("fontName", false, fontFamily);
-    onInput();
+    run({ type: "fontFamily", value: fontFamily }, savedSelectionRef.current);
   }
 
   function applyFontSize(px: number) {
+    run({ type: "fontSize", value: px }, savedSelectionRef.current);
+  }
+
+  // Preserve the editor selection when focus moves to the font-size/hex inputs
+  // (real <input>s steal focus and would otherwise collapse the selection).
+  function saveSelection() {
     const sel = window.getSelection();
-    let range: Range | null = null;
-    if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
-      range = sel.getRangeAt(0);
-    } else if (savedSelectionRef.current) {
-      range = savedSelectionRef.current;
-      sel?.removeAllRanges();
-      sel?.addRange(range);
+    if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed) {
+      savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
     }
-    if (!range || range.collapsed) return;
-    const span = document.createElement("span");
-    span.style.fontSize = `${px}px`;
-    // Always extractContents — surroundContents throws on cross-element boundaries
-    const frag = range.extractContents();
-    span.appendChild(frag);
-    range.insertNode(span);
-    const newRange = document.createRange();
-    newRange.selectNodeContents(span);
-    window.getSelection()?.removeAllRanges();
-    window.getSelection()?.addRange(newRange);
-    onInput();
   }
 
   const uniqueColors: string[] = [];
@@ -301,28 +487,32 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
     }
   }
 
+  const btn = (active: boolean, extra = "") =>
+    `w-7 h-6 rounded text-[13px] transition-colors ${
+      active ? "bg-[#1F4538] text-white" : "text-[#5a6b63] hover:bg-white hover:text-[#1F4538]"
+    } ${extra}`;
+
   return (
     <div className={className ?? "flex items-center gap-0.5 px-2 py-1.5 bg-[#f5f3ef] rounded-t-lg border border-b-0 border-[#ddd8d0] flex-wrap"}>
-      {/* Bold / Italic / Underline */}
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); execFormat("bold"); }}
-        className="w-7 h-6 rounded text-[13px] font-bold text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors"
+        onMouseDown={(e) => { e.preventDefault(); toggle("bold"); }}
+        className={btn(state.bold, "font-bold")}
         title="Bold"
       >B</button>
 
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); execFormat("italic"); }}
-        className="w-7 h-6 rounded text-[13px] italic text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors"
+        onMouseDown={(e) => { e.preventDefault(); toggle("italic"); }}
+        className={btn(state.italic, "italic")}
         style={{ fontFamily: "Georgia, serif" }}
         title="Italic"
       >I</button>
 
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); execFormat("underline"); }}
-        className="w-7 h-6 rounded text-[13px] underline text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors"
+        onMouseDown={(e) => { e.preventDefault(); toggle("underline"); }}
+        className={btn(state.underline, "underline")}
         title="Underline"
       >U</button>
 
@@ -332,15 +522,11 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
       <div className="relative" ref={colorPanelRef}>
         <button
           type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            setColorOpen((v) => !v);
-            setFontOpen(false);
-          }}
+          onMouseDown={(e) => { e.preventDefault(); saveSelection(); setColorOpen((v) => !v); setFontOpen(false); }}
           className="w-7 h-6 rounded text-[13px] font-bold text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center justify-center"
           title="Font color"
         >
-          <span style={{ borderBottom: "2.5px solid #c0392b", lineHeight: 1 }}>A</span>
+          <span style={{ borderBottom: `2.5px solid ${state.color ?? "#c0392b"}`, lineHeight: 1 }}>A</span>
         </button>
 
         {colorOpen && (
@@ -397,7 +583,6 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
               ))}
             </div>
 
-            {/* Hex color input */}
             <div className="flex items-center gap-1 mt-2 border-t border-[#f0ede7] pt-2">
               <input
                 type="text"
@@ -417,9 +602,9 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
 
             <button
               type="button"
-              onMouseDown={(e) => { e.preventDefault(); execColor("#3A3A3A"); setColorOpen(false); }}
+              onMouseDown={(e) => { e.preventDefault(); execColor(""); setColorOpen(false); }}
               className="w-full flex items-center gap-1.5 text-[10px] text-[#9aaba4] hover:text-[#5a6b63] px-1 py-1 rounded hover:bg-[#f5f3ef] transition-colors mt-0.5"
-              title="Reset to default"
+              title="Reset to default color"
             >
               <svg width="9" height="9" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <line x1="1" y1="1" x2="7" y2="7" /><line x1="7" y1="1" x2="1" y2="7" />
@@ -430,11 +615,11 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
         )}
       </div>
 
-      {/* Font family picker */}
+      {/* Font family */}
       <div className="relative" ref={fontPanelRef}>
         <button
           type="button"
-          onMouseDown={(e) => { e.preventDefault(); setFontOpen((v) => !v); setColorOpen(false); }}
+          onMouseDown={(e) => { e.preventDefault(); saveSelection(); setFontOpen((v) => !v); setColorOpen(false); }}
           className="h-6 px-2 rounded text-[10px] font-medium text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center gap-1"
           title="Font family"
         >
@@ -470,7 +655,7 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
         )}
       </div>
 
-      {/* Font size input */}
+      {/* Font size */}
       <input
         ref={fontSizeInputRef}
         type="number"
@@ -490,106 +675,21 @@ export function FormatToolbar({ editorRef, brandColors, brandFonts, onInput, act
           const px = parseInt(fontSizeInput, 10);
           if (!isNaN(px) && px >= 6 && px <= 120) applyFontSize(px);
         }}
-        onMouseDown={(e) => {
-          const sel = window.getSelection();
-          if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
-            savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
-          }
-          e.stopPropagation();
-        }}
+        onMouseDown={(e) => { saveSelection(); e.stopPropagation(); }}
         className="w-14 h-6 text-center text-[11px] border border-[#ddd8d0] rounded bg-white text-[#1a1a1a] outline-none focus:border-[#1F4538] focus:ring-1 focus:ring-[#1F4538]/20"
-        title="Font size (px) — shows current selection size; type to change"
+        title="Font size (px) — shows the current selection's size; type to change"
       />
 
       <div className="w-px h-4 bg-[#ddd8d0] mx-0.5" />
 
       <button
         type="button"
-        onMouseDown={(e) => { e.preventDefault(); execFormat("removeFormat"); }}
+        onMouseDown={(e) => { e.preventDefault(); run({ type: "clear" }); }}
         className="h-6 px-2 rounded text-[10px] font-medium text-[#9aaba4] hover:bg-white hover:text-[#5a6b63] transition-colors"
         title="Clear all formatting"
       >
         Clear
       </button>
-    </div>
-  );
-}
-
-// ── Rich body editor ──────────────────────────────────────────────────────────
-
-interface RichBodyEditorProps {
-  paragraphs: string[];
-  onChange: (paras: string[]) => void;
-  brandColors: string[];
-  brandFonts: string[];
-}
-
-export function RichBodyEditor({ paragraphs, onChange, brandColors, brandFonts }: RichBodyEditorProps) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const isFocused = useRef(false);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  function toHtml(paras: string[]) {
-    return paras.map((p) => "<div>" + (p || "<br>") + "</div>").join("");
-  }
-
-  function fromHtml(): string[] {
-    const el = editorRef.current;
-    if (!el) return [""];
-    const divs = Array.from(el.querySelectorAll(":scope > div"));
-    if (divs.length === 0) {
-      const html = el.innerHTML.replace(/<br\s*\/?>/gi, "").replace(/&nbsp;/g, " ").trim();
-      return html ? [html] : [""];
-    }
-    const paras = divs
-      .map((d) => {
-        let html = (d as HTMLElement).innerHTML.replace(/<br\s*\/?>$/i, "").trim();
-        html = html.replace(/&nbsp;/g, " ").trim();
-        return html;
-      })
-      .filter((p) => p !== "" && p !== "<br>");
-    return paras.length > 0 ? paras : [""];
-  }
-
-  useEffect(() => {
-    if (editorRef.current) {
-      document.execCommand("defaultParagraphSeparator", false, "div");
-      editorRef.current.innerHTML = toHtml(paragraphs);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const extKey = paragraphs.join(" ");
-  useEffect(() => {
-    if (!isFocused.current && editorRef.current) {
-      editorRef.current.innerHTML = toHtml(paragraphs);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extKey]);
-
-  function handleInput() {
-    onChangeRef.current(fromHtml());
-  }
-
-  return (
-    <div>
-      <FormatToolbar editorRef={editorRef} brandColors={brandColors} brandFonts={brandFonts} onInput={handleInput} />
-      <div
-        ref={editorRef}
-        contentEditable={true}
-        suppressContentEditableWarning={true}
-        onFocus={() => { isFocused.current = true; }}
-        onBlur={() => { isFocused.current = false; handleInput(); }}
-        onInput={handleInput}
-        onPaste={(e) => {
-          e.preventDefault();
-          const text = e.clipboardData.getData("text/plain");
-          document.execCommand("insertText", false, text);
-        }}
-        className="w-full rounded-b-lg border border-[#ddd8d0] bg-white px-3 py-2.5 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors leading-relaxed"
-        style={{ minHeight: 200, outline: "none" }}
-      />
     </div>
   );
 }

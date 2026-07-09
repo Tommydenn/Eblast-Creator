@@ -158,7 +158,15 @@ export async function GET(
   try {
     if (!draftRow) throw new Error("Draft not found");
 
-    const rawHtml: string = draftData?.html ?? "";
+    // Authoritative source is the HTML snapshotted on the approval when it was
+    // sent (immune to later draft autosaves). Fall back to the draft's html for
+    // approvals created before this field existed.
+    const rawHtml: string = (approval.html ?? draftData?.html ?? "").trim();
+    // Never push an empty body — that would create a HubSpot email showing only
+    // the default compliance footer. Fail loudly instead so it can be re-sent.
+    if (!rawHtml) {
+      throw new Error("Approved draft has no content to push. Please re-send the draft for approval and approve again.");
+    }
     const community = await getCommunity(approval.communitySlug);
     if (!community) throw new Error("Community not found");
     displayName = community.displayName;

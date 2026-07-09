@@ -95,7 +95,9 @@ export async function POST(req: NextRequest) {
     });
     if (swap.failures.length === 0) {
       emailHtml = swap.html;
-      // Persist clean HTML so quick-approve can use it without re-uploading images.
+      // Persist clean HTML on the draft too (used by the edits route's image
+      // fallback). This copy can be wiped by a later autosave — which is why the
+      // authoritative copy for the push is stored on the approval record below.
       await db.update(savedDrafts)
         .set({ data: { ...(draftRow.data as object), html: emailHtml } })
         .where(eq(savedDrafts.id, savedDraftId));
@@ -103,6 +105,13 @@ export async function POST(req: NextRequest) {
   } catch {
     // Fall back to raw HTML if HubSpot upload fails — email sends but images may be missing.
   }
+
+  // Snapshot the exact approved HTML on the approval record. This is what
+  // quick-approve pushes to HubSpot, so it must survive any later draft save.
+  await db.update(savedDraftApprovals)
+    .set({ html: emailHtml })
+    .where(eq(savedDraftApprovals.token, token))
+    .catch(() => null);
 
   try {
     await sendApprovalEmail({

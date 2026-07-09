@@ -298,6 +298,13 @@ export const savedDraftApprovals = pgTable("saved_draft_approvals", {
   notifyEmail: text("notify_email"),
   /** Subject line of the draft — for context in notification emails. */
   draftSubject: text("draft_subject"),
+  /**
+   * Snapshot of the exact email HTML that was sent for approval (images already
+   * uploaded to HubSpot and swapped to hosted URLs). This is what gets pushed to
+   * HubSpot on approval. Stored here — not on the mutable saved draft — so a
+   * later autosave of the draft can't wipe it out from under the pending approval.
+   */
+  html: text("html"),
   /** "pending" | "approved" | "edits_requested" */
   decision: text("decision").notNull().default("pending"),
   editNotes: text("edit_notes"),

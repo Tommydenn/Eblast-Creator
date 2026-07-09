@@ -249,6 +249,9 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
           recipientEmail: approval.recipientEmail,
           notifyEmail: approval.notifyEmail,
           draftSubject: mergedExtracted.subject,
+          // Snapshot the exact HTML emailed for this new approval so the eventual
+          // push matches what the salesperson approved (survives draft saves).
+          html: emailHtml,
           decision: "pending",
         });
 

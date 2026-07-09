@@ -303,6 +303,7 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
 - Apply the user's specific instruction. Touch only what they ask about.
 - Leave every other field exactly as the user has it. Do not "improve" things you weren't asked to improve.
 - To REMOVE the text in a field (e.g. "remove the pull quote"), set that field to an empty string "" — do not invent a replacement.
+- A field's current value may already contain inline HTML formatting markup (e.g. \`<span style="font-weight:700">\`, \`<b>\`, \`<i>\`, \`<u>\`, color/font spans) applied by the user in the editor. PRESERVE that markup exactly around any text you don't change. If your edit falls inside a formatted span, keep the same wrapping tag(s) around the new words instead of dropping them — never flatten formatted HTML down to plain text, and never add formatting that wasn't already there.
 - If the user's instruction implies a small cascading change (e.g. shortening a headline that a script subhead quotes), make the minimum cascading change and explain nothing.
 - Always return the FULL updated object via the extract_flyer tool (every text field), so nothing is accidentally dropped.
 - Set \`refineNote\` to one short sentence describing what you changed (or an "I couldn't ..." explanation if part of the request is out of scope).
@@ -335,4 +336,65 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
     imageCropInstructions: Array.isArray(imageCropInstructions) ? imageCropInstructions as Array<{ imageIndex: number; focus: string }> : undefined,
     isOutOfScope: isOutOfScope === true ? true : undefined,
   };
+}
+
+// ── Salesperson edit-request triage ─────────────────────────────────────────
+// When a salesperson requests edits through the approval email, only requests
+// that are purely about the wording/copy get auto-applied by the AI — every
+// other kind of change (formatting, color, font, size, images, section colors,
+// spacing, layout, or an explicit "have marketing do this") routes to a human
+// instead. This is a separate, narrower gate from refineFlyerContent's own
+// isOutOfScope (which governs the broader in-app "refine via chat" tool used
+// directly in the editor, and still allows image/layout changes there).
+
+export interface EditRequestClassification {
+  scope: "text_content" | "other";
+  /** One short sentence explaining the classification — surfaced to marketing
+   *  in the fallback notification email so they know why it landed with them. */
+  reason: string;
+}
+
+export async function classifyEditRequestScope(instruction: string): Promise<EditRequestClassification> {
+  const c = client();
+
+  try {
+    const response = await c.messages.create({
+      model: MODEL,
+      max_tokens: 300,
+      system: `You triage change requests submitted against a marketing email draft. Classify by INTENT, not literal keywords — phrasing varies a lot.
+
+Classify as "text_content" ONLY when the request is entirely about changing the actual words/copy: rewording, shortening, lengthening, correcting a fact, changing tone, updating a date/time/name/detail that appears in the copy, adding or removing a sentence, etc. Examples of text_content: "make this shorter", "tighten up the second paragraph", "the RSVP note should say 9am not 10am", "soften the tone", "the event is now in the ballroom, not the patio".
+
+Classify as "other" when the request involves ANY of: bold/italic/underline/color/font/size or any other visual formatting, photos/images (adding, removing, replacing, reordering, cropping), section or background colors, spacing, layout, or when the salesperson explicitly asks for marketing/a human/someone to make the change manually. Also classify as "other" if the request is mixed (part text, part something else) or genuinely ambiguous about what's being asked — when in doubt, choose "other" rather than guessing.`,
+      tools: [
+        {
+          name: "classify_request",
+          description: "Classify the scope of a salesperson's edit request.",
+          input_schema: {
+            type: "object",
+            required: ["scope", "reason"],
+            properties: {
+              scope: { type: "string", enum: ["text_content", "other"] },
+              reason: { type: "string", description: "One short sentence explaining the classification." },
+            },
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "classify_request" },
+      messages: [{ role: "user", content: `Salesperson's request: "${instruction}"` }],
+    });
+
+    const toolUseBlock = response.content.find((b: any) => b.type === "tool_use");
+    if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
+      return { scope: "other", reason: "Could not classify the request automatically." };
+    }
+    const input = toolUseBlock.input as any;
+    return {
+      scope: input.scope === "text_content" ? "text_content" : "other",
+      reason: typeof input.reason === "string" && input.reason ? input.reason : "Involves more than wording changes.",
+    };
+  } catch {
+    // Fail safe toward a human, never toward an unreviewed auto-apply.
+    return { scope: "other", reason: "Classification failed; routed to marketing team as a safe default." };
+  }
 }

@@ -253,10 +253,12 @@ export interface SendEditNotificationParams {
   draftSubject: string;
   editNotes: string;
   savedDraftId: string;
+  /** Why this landed with marketing instead of being auto-applied (strike limit, out of scope, etc.). */
+  reason?: string | null;
 }
 
 export async function sendEditNotificationEmail(params: SendEditNotificationParams) {
-  const { to, recipientName, communityName, draftSubject, editNotes, savedDraftId } = params;
+  const { to, recipientName, communityName, draftSubject, editNotes, savedDraftId, reason } = params;
   const senderFirst = firstName(recipientName);
 
   const html = `<!DOCTYPE html>
@@ -283,6 +285,13 @@ export async function sendEditNotificationEmail(params: SendEditNotificationPara
                     color:#9e9484;">Their notes:</p>
           <p style="margin:0;font-size:15px;line-height:1.6;color:#2d2926;white-space:pre-wrap;">${editNotes}</p>
         </div>
+        ${reason ? `
+        <div style="background:#fdf6ec;border-left:3px solid #d6a95c;border-radius:0 6px 6px 0;
+                    padding:14px 20px;margin:0 0 24px;">
+          <p style="margin:0 0 4px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;
+                    color:#a5762f;">Why this needs a human</p>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#3d3530;">${reason}</p>
+        </div>` : ""}
         <p style="margin:0;font-size:14px;color:#7a7066;">
           Draft ID for reference: <code style="font-size:12px;color:#5c4a3a;">${savedDraftId}</code>
         </p>

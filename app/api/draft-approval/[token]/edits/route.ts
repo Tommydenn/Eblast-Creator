@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { savedDraftApprovals, savedDrafts, draftImageBank } from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { sendEditNotificationEmail, sendApprovalEmail } from "@/lib/email";
 import { swapDataUrisForHostedImages } from "@/lib/hubspot";
-import { refineFlyerContent } from "@/lib/anthropic";
+import { refineFlyerContent, classifyEditRequestScope } from "@/lib/anthropic";
 import { buildEblastHtml } from "@/lib/render-email";
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
@@ -15,6 +15,13 @@ import { randomBytes } from "node:crypto";
 export const runtime = "nodejs";
 // Auto-refine can take up to 30 s for the Claude call + image processing.
 export const maxDuration = 60;
+
+// A salesperson's edit request only ever gets auto-applied by the AI when
+// it's purely about wording/copy — never formatting, color, images, spacing,
+// layout, or an explicit request for a human to make the change. Anything
+// else (including mixed or ambiguous requests) routes straight to the
+// marketing-team notification. See classifyEditRequestScope in lib/anthropic.ts.
+const MAX_AUTO_REFINE_ROUNDS = 3;
 
 /** Extract the src of the first img with the given data-img-label. */
 function extractImgSrc(html: string, label: string): string | undefined {
@@ -75,6 +82,59 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     return NextResponse.json({ ok: false, error: "This draft has already been decided" }, { status: 409 });
   }
 
+  // ── Fallback: route to the marketing team, with a reason for context ───────
+  async function notifyMarketing(reason: string, refineNote: string | null = null) {
+    await db
+      .update(savedDraftApprovals)
+      .set({ decision: "edits_requested", editNotes, decidedAt: new Date() })
+      .where(eq(savedDraftApprovals.token, token));
+
+    if (approval.notifyEmail) {
+      try {
+        const community = await getCommunity(approval.communitySlug);
+        await sendEditNotificationEmail({
+          to: approval.notifyEmail,
+          recipientName: approval.recipientName,
+          communityName: community?.displayName ?? approval.communitySlug,
+          draftSubject: approval.draftSubject ?? "(no subject)",
+          editNotes,
+          savedDraftId: approval.savedDraftId,
+          reason,
+        });
+      } catch (e) {
+        console.error("[draft-approval/edits] notification email failed:", e);
+      }
+    }
+
+    return NextResponse.json({ ok: true, autoRefined: false, refineNote });
+  }
+
+  // ── Strike limit: after this many prior edit-request rounds on this draft,
+  // stop attempting AI auto-refine entirely and always go to a human ─────────
+  // Every prior edit-request round (whether AI-handled or routed to a human)
+  // left exactly one approval row with decision="edits_requested" for this
+  // draft — count those, not unrelated fresh re-sends of the same draft.
+  const priorRounds = await db
+    .select({ token: savedDraftApprovals.token })
+    .from(savedDraftApprovals)
+    .where(and(
+      eq(savedDraftApprovals.savedDraftId, approval.savedDraftId),
+      eq(savedDraftApprovals.decision, "edits_requested"),
+    ));
+  const priorEditRequestCount = priorRounds.filter((r) => r.token !== token).length;
+
+  if (priorEditRequestCount >= MAX_AUTO_REFINE_ROUNDS) {
+    return notifyMarketing(
+      `This draft has already had ${priorEditRequestCount} rounds of edit requests — routing directly to the marketing team rather than attempting another automatic revision.`,
+    );
+  }
+
+  // ── Classify: is this purely a wording/copy request? ───────────────────────
+  const classification = await classifyEditRequestScope(editNotes);
+  if (classification.scope !== "text_content") {
+    return notifyMarketing(classification.reason);
+  }
+
   // ── Load the saved draft ────────────────────────────────────────────────────
   const [draftRow] = await db
     .select()
@@ -89,216 +149,121 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const currentHtml = (draftData.html as string) ?? "";
   const currentImages = draftData.images as { hero?: { url: string; originalUrl: string } | null; secondary?: { url: string; originalUrl: string } | null; gallery?: Array<{ url: string; originalUrl: string }> } | undefined;
 
-  // ── Attempt AI auto-refine ─────────────────────────────────────────────────
-  let autoRefined = false;
-  let refineNote: string | null = null;
-
-  if (currentExtracted && (currentHtml || isNewFormat)) {
-    try {
-      const community = await getCommunity(approval.communitySlug);
-      if (!community) throw new Error("Community not found");
-
-      const pastSends = await getRecentSendsForCommunity({ communityId: community.id, limit: 12 });
-
-      // Build image pool: prefer structured images (new format), fall back to HTML parsing.
-      let heroImageUrl: string | undefined;
-      let secondaryImageUrl: string | undefined;
-      let galleryImageUrls: string[];
-
-      if (isNewFormat && currentImages) {
-        // currentImages.url fields are empty strings when read from a draft saved by the
-        // client — buildDraftPayload clears them to avoid the 4.5 MB payload limit; the
-        // actual data URIs live in draftImageBank. Fall back to the CDN HTML (saved after
-        // the first successful approval send) so images are never lost.
-        heroImageUrl = currentImages.hero?.url || extractImgSrc(currentHtml, "Hero image");
-        secondaryImageUrl = currentImages.secondary?.url || extractImgSrc(currentHtml, "Secondary image");
-        galleryImageUrls = (currentImages.gallery ?? []).map((g) => g.url).filter(Boolean);
-        if (galleryImageUrls.length === 0) galleryImageUrls = extractGalleryImgs(currentHtml);
-      } else {
-        heroImageUrl = extractImgSrc(currentHtml, "Hero image");
-        secondaryImageUrl = extractImgSrc(currentHtml, "Secondary image");
-        galleryImageUrls = extractGalleryImgs(currentHtml);
-      }
-
-      const bankRows = await db
-        .select({ url: draftImageBank.url })
-        .from(draftImageBank)
-        .where(eq(draftImageBank.draftId, approval.savedDraftId))
-        .orderBy(asc(draftImageBank.idx));
-      const allExtractedImageUrls = bankRows.map((r) => r.url);
-
-      const pool: Array<{ url: string; name: string; isOriginal: boolean }> = [];
-      if (heroImageUrl) pool.push({ url: heroImageUrl, name: "Hero image", isOriginal: false });
-      if (secondaryImageUrl) pool.push({ url: secondaryImageUrl, name: "Secondary image", isOriginal: false });
-      galleryImageUrls.forEach((u, i) =>
-        pool.push({ url: u, name: `Gallery image ${i + 1}`, isOriginal: false }),
-      );
-      const placed = new Set(pool.map((p) => p.url));
-      allExtractedImageUrls.forEach((url) => {
-        if (!placed.has(url)) {
-          pool.push({ url, name: `Original image ${pool.length + 1}`, isOriginal: true });
-          placed.add(url);
-        }
-      });
-
-      const imageManifestText = pool.length
-        ? pool
-            .map((p, i) =>
-              p.isOriginal
-                ? `  [${i}] "${p.name}" — full-resolution original`
-                : `  [${i}] "${p.name}" — currently placed`,
-            )
-            .join("\n")
-        : "  (no photos in this email)";
-
-      const result = await refineFlyerContent({
-        current: currentExtracted,
-        instruction: editNotes,
-        community,
-        pastSends,
-        imageManifestText,
-      });
-
-      // If the model flagged this as out of scope (e.g. "use a different image",
-      // "add a new photo"), skip the apply path entirely and fall through to the
-      // human notification so no half-baked edit gets saved or emailed.
-      if (result.isOutOfScope) {
-        refineNote = result.refineNote ?? null;
-        throw new Error("out-of-scope");
-      }
-
-      const mergedExtracted: ExtractedFlyer = { ...currentExtracted, ...result.flyer };
-      const textChanged = stableStringify(mergedExtracted) !== stableStringify(currentExtracted);
-
-      // Resolve image arrangement after refinement.
-      let nextHero = heroImageUrl;
-      let nextSecondary = secondaryImageUrl;
-      let nextGallery = galleryImageUrls;
-      let imagesChanged = false;
-
-      if (result.imageLayout && pool.length) {
-        const at = (idx: number) =>
-          Number.isInteger(idx) && idx >= 0 && idx < pool.length ? pool[idx].url : undefined;
-        const newHero = at(result.imageLayout.hero ?? -1);
-        const newSecondary = at(result.imageLayout.secondary ?? -1);
-        const used = new Set([newHero, newSecondary].filter(Boolean) as string[]);
-        const newGallery = (result.imageLayout.gallery ?? [])
-          .map((i: number) => at(i))
-          .filter((u: string | undefined): u is string => !!u && !used.has(u))
-          .slice(0, 4);
-        if (newHero !== undefined) nextHero = newHero;
-        if (newSecondary !== undefined) nextSecondary = newSecondary;
-        nextGallery = newGallery;
-        imagesChanged =
-          nextHero !== heroImageUrl ||
-          nextSecondary !== secondaryImageUrl ||
-          JSON.stringify(nextGallery) !== JSON.stringify(galleryImageUrls);
-      }
-
-      refineNote = result.refineNote ?? null;
-
-      if (textChanged || imagesChanged) {
-        // Apply the refinement.
-        const newHtml = await inlineRelativeImages(buildEblastHtml(mergedExtracted, community, {
-          heroImageUrl: nextHero,
-          secondaryImageUrl: nextSecondary,
-          galleryImageUrls: nextGallery,
-        }));
-
-        // Update the saved draft with the refined content (write both formats for compatibility).
-        const updatedImages = isNewFormat ? {
-          hero: nextHero ? { url: nextHero, originalUrl: currentImages?.hero?.originalUrl || nextHero } : null,
-          secondary: nextSecondary ? { url: nextSecondary, originalUrl: currentImages?.secondary?.originalUrl || nextSecondary } : null,
-          gallery: nextGallery.map((url, i) => ({ url, originalUrl: currentImages?.gallery?.[i]?.originalUrl || url })),
-        } : undefined;
-        const updatedData = {
-          ...draftData,
-          ...(isNewFormat ? { fields: mergedExtracted } : {}),
-          extracted: mergedExtracted,
-          ...(updatedImages ? { images: updatedImages } : {}),
-          html: newHtml,
-        };
-        await db
-          .update(savedDrafts)
-          .set({ data: updatedData, subject: mergedExtracted.subject })
-          .where(eq(savedDrafts.id, approval.savedDraftId));
-
-        // Mark this approval as edits_requested (decided).
-        await db
-          .update(savedDraftApprovals)
-          .set({ decision: "edits_requested", editNotes, decidedAt: new Date() })
-          .where(eq(savedDraftApprovals.token, token));
-
-        // Upload images for the new approval email so they render in inbox.
-        let emailHtml = newHtml;
-        try {
-          const swap = await swapDataUrisForHostedImages({
-            html: newHtml,
-            folderPath: `/eblast-drafter/${approval.communitySlug}/approval-previews`,
-          });
-          if (swap.failures.length === 0) emailHtml = swap.html;
-        } catch { /* fall back to raw HTML */ }
-
-        // Create a new approval token and send a fresh review email.
-        const newToken = randomBytes(24).toString("base64url");
-        await db.insert(savedDraftApprovals).values({
-          token: newToken,
-          savedDraftId: approval.savedDraftId,
-          communitySlug: approval.communitySlug,
-          recipientName: approval.recipientName,
-          recipientEmail: approval.recipientEmail,
-          notifyEmail: approval.notifyEmail,
-          draftSubject: mergedExtracted.subject,
-          // Snapshot the exact HTML emailed for this new approval so the eventual
-          // push matches what the salesperson approved (survives draft saves).
-          html: emailHtml,
-          decision: "pending",
-        });
-
-        await sendApprovalEmail({
-          to: approval.recipientEmail,
-          recipientName: approval.recipientName,
-          communityName: community.displayName,
-          draftSubject: mergedExtracted.subject,
-          draftHtml: emailHtml,
-          token: newToken,
-        });
-
-        autoRefined = true;
-        return NextResponse.json({ ok: true, autoRefined: true, refineNote });
-      }
-
-      // Refinement produced no changes → treat as out-of-scope, fall through to notification.
-    } catch (e: any) {
-      if (e?.message !== "out-of-scope") {
-        console.error("[draft-approval/edits] auto-refine failed:", e);
-      }
-      // Fall through to manual notification.
-    }
+  if (!currentExtracted || (!currentHtml && !isNewFormat)) {
+    return notifyMarketing("Could not load this draft's content to apply an automatic text edit.");
   }
 
-  // ── Fallback: manual edit notification ─────────────────────────────────────
-  // Reaches here when auto-refine was skipped, produced no changes, or threw.
-  await db
-    .update(savedDraftApprovals)
-    .set({ decision: "edits_requested", editNotes, decidedAt: new Date() })
-    .where(eq(savedDraftApprovals.token, token));
-
-  if (approval.notifyEmail) {
-    try {
-      const community = await getCommunity(approval.communitySlug);
-      await sendEditNotificationEmail({
-        to: approval.notifyEmail,
-        recipientName: approval.recipientName,
-        communityName: community?.displayName ?? approval.communitySlug,
-        draftSubject: approval.draftSubject ?? "(no subject)",
-        editNotes,
-        savedDraftId: approval.savedDraftId,
-      });
-    } catch (e) {
-      console.error("[draft-approval/edits] notification email failed:", e);
-    }
+  // Current image arrangement is carried through UNCHANGED — this endpoint
+  // never edits images, so there's no layout to resolve, only to preserve.
+  let heroImageUrl: string | undefined;
+  let secondaryImageUrl: string | undefined;
+  let galleryImageUrls: string[];
+  if (isNewFormat && currentImages) {
+    // currentImages.url fields are empty strings when read from a draft saved by the
+    // client — buildDraftPayload clears them to avoid the 4.5 MB payload limit; the
+    // actual data URIs live in draftImageBank. Fall back to the CDN HTML (saved after
+    // the first successful approval send) so images are never lost.
+    heroImageUrl = currentImages.hero?.url || extractImgSrc(currentHtml, "Hero image");
+    secondaryImageUrl = currentImages.secondary?.url || extractImgSrc(currentHtml, "Secondary image");
+    galleryImageUrls = (currentImages.gallery ?? []).map((g) => g.url).filter(Boolean);
+    if (galleryImageUrls.length === 0) galleryImageUrls = extractGalleryImgs(currentHtml);
+  } else {
+    heroImageUrl = extractImgSrc(currentHtml, "Hero image");
+    secondaryImageUrl = extractImgSrc(currentHtml, "Secondary image");
+    galleryImageUrls = extractGalleryImgs(currentHtml);
   }
 
-  return NextResponse.json({ ok: true, autoRefined: false, refineNote });
+  try {
+    const community = await getCommunity(approval.communitySlug);
+    if (!community) throw new Error("Community not found");
+
+    const pastSends = await getRecentSendsForCommunity({ communityId: community.id, limit: 12 });
+
+    // No imageManifestText is passed — this endpoint is text-only, so the
+    // model has no image context and no basis to touch photos.
+    const result = await refineFlyerContent({
+      current: currentExtracted,
+      instruction: editNotes,
+      community,
+      pastSends,
+    });
+
+    // Even though we classified this as text_content up front, the model
+    // itself may still decide the request can't be fulfilled through copy
+    // edits alone — respect that and route to a human instead of guessing.
+    if (result.isOutOfScope) {
+      return notifyMarketing(result.refineNote ?? "The AI could not apply this as a text-only edit.");
+    }
+
+    const mergedExtracted: ExtractedFlyer = { ...currentExtracted, ...result.flyer };
+    const textChanged = stableStringify(mergedExtracted) !== stableStringify(currentExtracted);
+
+    if (!textChanged) {
+      return notifyMarketing(result.refineNote ?? "The AI did not find a text-only change to apply.");
+    }
+
+    // Apply the refinement — images pass through exactly as they were.
+    const newHtml = await inlineRelativeImages(buildEblastHtml(mergedExtracted, community, {
+      heroImageUrl,
+      secondaryImageUrl,
+      galleryImageUrls,
+    }));
+
+    const updatedData = {
+      ...draftData,
+      ...(isNewFormat ? { fields: mergedExtracted } : {}),
+      extracted: mergedExtracted,
+      html: newHtml,
+    };
+    await db
+      .update(savedDrafts)
+      .set({ data: updatedData, subject: mergedExtracted.subject })
+      .where(eq(savedDrafts.id, approval.savedDraftId));
+
+    // Mark this approval as edits_requested (decided).
+    await db
+      .update(savedDraftApprovals)
+      .set({ decision: "edits_requested", editNotes, decidedAt: new Date() })
+      .where(eq(savedDraftApprovals.token, token));
+
+    // Upload images for the new approval email so they render in inbox.
+    let emailHtml = newHtml;
+    try {
+      const swap = await swapDataUrisForHostedImages({
+        html: newHtml,
+        folderPath: `/eblast-drafter/${approval.communitySlug}/approval-previews`,
+      });
+      if (swap.failures.length === 0) emailHtml = swap.html;
+    } catch { /* fall back to raw HTML */ }
+
+    // Create a new approval token and send a fresh review email.
+    const newToken = randomBytes(24).toString("base64url");
+    await db.insert(savedDraftApprovals).values({
+      token: newToken,
+      savedDraftId: approval.savedDraftId,
+      communitySlug: approval.communitySlug,
+      recipientName: approval.recipientName,
+      recipientEmail: approval.recipientEmail,
+      notifyEmail: approval.notifyEmail,
+      draftSubject: mergedExtracted.subject,
+      // Snapshot the exact HTML emailed for this new approval so the eventual
+      // push matches what the salesperson approved (survives draft saves).
+      html: emailHtml,
+      decision: "pending",
+    });
+
+    await sendApprovalEmail({
+      to: approval.recipientEmail,
+      recipientName: approval.recipientName,
+      communityName: community.displayName,
+      draftSubject: mergedExtracted.subject,
+      draftHtml: emailHtml,
+      token: newToken,
+    });
+
+    return NextResponse.json({ ok: true, autoRefined: true, refineNote: result.refineNote ?? null });
+  } catch (e: any) {
+    console.error("[draft-approval/edits] auto-refine failed:", e);
+    return notifyMarketing("The automatic text edit failed unexpectedly — please make this change manually.");
+  }
 }

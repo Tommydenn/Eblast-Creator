@@ -338,6 +338,37 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       .catch(() => null);
   }, []);
 
+  // Re-fetch the full community list and return the freshest copy of one slug.
+  // Community-page edits (brand colors, fonts, senders) must never be baked
+  // into an eblast from a stale in-memory copy — call this immediately before
+  // any HTML render that will be pushed/sent, not just rely on the mount fetch.
+  const refreshCommunity = useCallback(async (slug: string): Promise<ClientCommunity | null> => {
+    try {
+      const res = await fetch("/api/communities");
+      const data = await res.json();
+      if (data.communities) {
+        const fresh = (data.communities as ClientCommunity[]).find((c) => c.slug === slug) ?? null;
+        setCommunities(data.communities as ClientCommunity[]);
+        if (fresh) communityRef.current = fresh;
+        return fresh;
+      }
+    } catch {
+      // Network hiccup — fall back to whatever's already cached below.
+    }
+    return communityRef.current;
+  }, []);
+
+  // While actively editing a draft, keep the community data current whenever
+  // the tab regains focus — so the live preview (which reads `community` from
+  // state, not the ref) reflects a Community-page edit made in another tab
+  // without requiring a full reload.
+  useEffect(() => {
+    if (stage !== "editing" || !selectedCommunitySlug) return;
+    const onFocus = () => { refreshCommunity(selectedCommunitySlug); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [stage, selectedCommunitySlug, refreshCommunity]);
+
   // ─── buildHtml ─────────────────────────────────────────────────────────────
   // Synchronous, uses refs so it's always current even during async operations.
   const buildHtml = useCallback((): string => {
@@ -918,6 +949,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setPushError(null);
     setPushResult(null);
     try {
+      // Community-page edits (colors, fonts, senders) made since this session
+      // started must land in the pushed eblast — refresh before rendering.
+      await refreshCommunity(c.slug);
       const html = buildHtml();
       const res = await fetch("/api/push-eblast", {
         method: "POST",
@@ -938,13 +972,16 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsPushing(false);
     }
-  }, [buildHtml]);
+  }, [buildHtml, refreshCommunity]);
 
   // ─── Send for approval ───────────────────────────────────────────────────
   const sendForApproval = useCallback(async (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string }) => {
     if (!draftId) throw new Error("Save the draft first before sending for approval.");
     const c = communityRef.current;
     if (!c) throw new Error("No community selected.");
+    // Same freshness guarantee as push() — the approval email must reflect
+    // the community's current brand/sender, not a stale in-memory copy.
+    await refreshCommunity(c.slug);
     const html = buildHtml();
     const res = await fetch("/api/draft-approval", {
       method: "POST",
@@ -954,7 +991,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error ?? "Failed to send approval");
     setApprovalStatus({ decision: "pending", sentAt: new Date().toISOString() });
-  }, [draftId, buildHtml]);
+  }, [draftId, buildHtml, refreshCommunity]);
 
   // ─── Subject swap ─────────────────────────────────────────────────────────
   const swapSubjectLine = useCallback((subject: string, previewText: string) => {

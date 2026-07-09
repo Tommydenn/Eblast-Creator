@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
+import { buildEblastHtml } from "@/lib/render-email";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 
@@ -158,18 +159,32 @@ export async function GET(
   try {
     if (!draftRow) throw new Error("Draft not found");
 
-    // Authoritative source is the HTML snapshotted on the approval when it was
-    // sent (immune to later draft autosaves). Fall back to the draft's html for
-    // approvals created before this field existed.
-    const rawHtml: string = (approval.html ?? draftData?.html ?? "").trim();
+    const community = await getCommunity(approval.communitySlug);
+    if (!community) throw new Error("Community not found");
+    displayName = community.displayName;
+
+    // Re-render from the draft's structured fields against the community's
+    // CURRENT brand/senders, so a Community-page edit made after the approval
+    // email was sent (colors, fonts, sender name/email) still lands in what
+    // actually gets pushed — never a frozen snapshot from send time. Only
+    // legacy drafts saved before `.fields` existed fall back to the raw
+    // HTML captured on the approval record.
+    let rawHtml: string;
+    if (draftData?.fields) {
+      const imgs = draftData.images ?? {};
+      rawHtml = buildEblastHtml(draftData.fields, community, {
+        heroImageUrl: imgs.hero?.url,
+        secondaryImageUrl: imgs.secondary?.url,
+        galleryImageUrls: (imgs.gallery ?? []).map((g: any) => g?.url).filter(Boolean),
+      });
+    } else {
+      rawHtml = (approval.html ?? draftData?.html ?? "").trim();
+    }
     // Never push an empty body — that would create a HubSpot email showing only
     // the default compliance footer. Fail loudly instead so it can be re-sent.
     if (!rawHtml) {
       throw new Error("Approved draft has no content to push. Please re-send the draft for approval and approve again.");
     }
-    const community = await getCommunity(approval.communitySlug);
-    if (!community) throw new Error("Community not found");
-    displayName = community.displayName;
 
     let emailHtml = await inlineRelativeImages(rawHtml);
     const swap = await swapDataUrisForHostedImages({ html: emailHtml, folderPath: `/eblast-drafter/${community.slug}` });

@@ -103,13 +103,13 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <meta name="supported-color-schemes" content="light only">
 <title>Draft Review: ${draftSubject}</title>
 </head>
-<body style="margin:0;padding:0;background:#f5f4f1;font-family:Georgia,'Times New Roman',serif;">
+<body style="margin:0;padding:0;background:#f5f4f1;font-family:Georgia,'Times New Roman',serif;" bgcolor="#f5f4f1">
 
 <!-- Header / intro -->
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" bgcolor="#f5f4f1">
   <tr>
     <td align="center" style="padding:32px 16px 0;">
-      <table width="600" cellpadding="0" cellspacing="0" role="presentation"
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" bgcolor="#ffffff"
              style="background:#ffffff;border-radius:8px 8px 0 0;padding:40px 48px 32px;border:1px solid #e0ddd7;border-bottom:none;">
         <tr>
           <td>
@@ -150,7 +150,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
             <!-- Subject line box -->
             <table cellpadding="0" cellspacing="0" role="presentation" width="100%">
               <tr>
-                <td style="background:#f7f5f0;border:1px solid #e0ddd7;border-radius:6px;padding:12px 16px;">
+                <td bgcolor="#f7f5f0" style="background:#f7f5f0;border:1px solid #e0ddd7;border-radius:6px;padding:12px 16px;">
                   <table cellpadding="0" cellspacing="0" role="presentation" width="100%">
                     <tr>
                       <td width="28" valign="middle" style="padding-right:10px;">
@@ -181,7 +181,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
     <td align="center" style="padding:0 16px;">
-      <table width="600" cellpadding="0" cellspacing="0" role="presentation"
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" bgcolor="#f0ece4"
              style="background:#f0ece4;border-left:1px solid #e0ddd7;border-right:1px solid #e0ddd7;padding:10px 48px;">
         <tr>
           <td>
@@ -200,7 +200,7 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
     <td align="center" style="padding:0 16px 32px;">
-      <table width="600" cellpadding="0" cellspacing="0" role="presentation"
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" bgcolor="#ffffff"
              style="background:#ffffff;border:1px solid #e0ddd7;border-top:none;
                     border-radius:0 0 8px 8px;padding:0;">
         <tr>

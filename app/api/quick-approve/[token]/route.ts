@@ -216,6 +216,17 @@ export async function GET(
     .set({ decision: "approved", decidedAt: new Date() })
     .where(eq(savedDraftApprovals.token, token));
 
+  // Mark the underlying saved draft as approved — but only once the HubSpot
+  // push actually succeeded, so "Approved" in the Saved Drafts tab means it
+  // genuinely went out, not just that someone clicked the link. This also
+  // exempts it from the per-community save cap (see /api/saved-drafts).
+  if (!pushError && draftRow) {
+    await db
+      .update(savedDrafts)
+      .set({ approvedAt: new Date() })
+      .where(eq(savedDrafts.id, draftRow.id));
+  }
+
   if (pushError) {
     return new NextResponse(page({
       icon: "⚠", iconColor: "#b45309",

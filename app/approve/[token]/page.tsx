@@ -117,6 +117,16 @@ export default async function ApprovePage({ params, searchParams }: Props) {
       .set({ decision: "approved", decidedAt: new Date() })
       .where(eq(savedDraftApprovals.token, token));
 
+    // Mark the underlying saved draft as approved — only once the push
+    // actually succeeded — so it shows up as "Approved" in Saved Drafts and
+    // is exempt from the per-community save cap. See quick-approve/[token].
+    if (!pushError) {
+      await db
+        .update(savedDrafts)
+        .set({ approvedAt: new Date() })
+        .where(eq(savedDrafts.id, approval.savedDraftId));
+    }
+
     if (pushError) {
       return (
         <Shell>

@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         savedAt: savedDrafts.savedAt,
         subject: savedDrafts.subject,
         imageCount: savedDrafts.imageCount,
+        approvedAt: savedDrafts.approvedAt,
         data: savedDrafts.data,
       })
       .from(savedDrafts)
@@ -69,14 +70,17 @@ export async function POST(req: NextRequest) {
         },
       });
 
-    // Enforce the per-community cap — delete oldest if over limit.
+    // Enforce the per-community cap — delete oldest if over limit. Approved
+    // drafts (a salesperson approved them via the approval email) are exempt
+    // — they're a record of what actually went out, not work-in-progress.
     const existing = await db
-      .select({ id: savedDrafts.id })
+      .select({ id: savedDrafts.id, approvedAt: savedDrafts.approvedAt })
       .from(savedDrafts)
       .where(eq(savedDrafts.communitySlug, communitySlug))
       .orderBy(desc(savedDrafts.savedAt));
-    if (existing.length > MAX_PER_COMMUNITY) {
-      const toDelete = existing.slice(MAX_PER_COMMUNITY).map((r) => r.id);
+    const evictionCandidates = existing.filter((r) => !r.approvedAt);
+    if (evictionCandidates.length > MAX_PER_COMMUNITY) {
+      const toDelete = evictionCandidates.slice(MAX_PER_COMMUNITY).map((r) => r.id);
       await db.delete(savedDrafts).where(inArray(savedDrafts.id, toDelete));
     }
 

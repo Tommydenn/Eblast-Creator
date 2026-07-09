@@ -273,6 +273,13 @@ export const savedDrafts = pgTable("saved_drafts", {
   imageCount: integer("image_count").notNull().default(0),
   /** Full draft JSON — includes rendered HTML, extracted text, and base64 image data. */
   data: jsonb("data").notNull(),
+  /**
+   * Set when a salesperson approves this draft via the approval email
+   * (quick-approve route) and it's successfully pushed to HubSpot. NOT set on
+   * an edit request — only a genuine approval marks a draft this way.
+   * Approved drafts are exempt from the per-community cap-eviction below.
+   */
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
 });
 
 export type SavedDraftRow = InferSelectModel<typeof savedDrafts>;

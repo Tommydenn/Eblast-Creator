@@ -99,6 +99,8 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
 <title>Draft Review: ${draftSubject}</title>
 </head>
 <body style="margin:0;padding:0;background:#f5f4f1;font-family:Georgia,'Times New Roman',serif;">

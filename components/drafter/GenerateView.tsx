@@ -14,6 +14,7 @@ interface DraftMeta {
   savedAt: string;
   subject: string;
   imageCount: number;
+  approvedAt: string | null;
   isNewFormat: boolean;
 }
 
@@ -80,6 +81,14 @@ function DraftCard({
                   <polyline points="21,15 16,10 5,21"/>
                 </svg>
                 {draft.imageCount}
+              </span>
+            )}
+            {draft.approvedAt && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#2d6a4f]">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20,6 9,17 4,12" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Approved
               </span>
             )}
             {isLegacy && (

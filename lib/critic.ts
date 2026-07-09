@@ -214,7 +214,7 @@ Community context
 - Name: ${community.displayName} (${community.shortName})
 - Type: ${community.type.replace(/_/g, " ")}${community.careTypes && community.careTypes.length > 0 ? ` — ${community.careTypes.join(", ")}` : ""}
 - Location: ${community.address.city}, ${community.address.state}
-- Sender (recipients see this): ${community.senders[0]?.name ?? community.displayName} <${community.senders[0]?.email ?? community.email ?? ""}>
+- Sender (recipients see this): ${community.senders[0]?.name ?? community.displayName} <${community.senders[0]?.email ?? ""}>
 ${community.marketingDirector ? `- Marketing director (builds + schedules in HubSpot): ${community.marketingDirector.name}` : ""}
 ${
     (community.hubspot.includedListIds && community.hubspot.includedListIds.length > 0) || community.hubspot.listId

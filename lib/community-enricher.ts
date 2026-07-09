@@ -34,7 +34,6 @@ export interface EnrichmentResult {
   fieldsUpdated: string[];
   candidates: {
     trackingPhone?: string[];
-    email?: string[];
     websiteUrl?: string[];
     address?: any;
     senders?: Array<{ name: string; email: string }>;
@@ -46,7 +45,6 @@ export interface EnrichmentResult {
 
 const TEL_HREF_RE = /href=["']tel:([^"']+)["']/gi;
 const PHONE_DISPLAY_RE = /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
-const MAILTO_RE = /href=["']mailto:([^"'?]+)/gi;
 const HTTPS_RE = /https?:\/\/[\w.-]+(?:\/[^"'\s<>]*)?/gi;
 
 function normalizePhone(raw: string): string {
@@ -245,24 +243,6 @@ export async function enrichCommunity(opts: {
     const winner = topUrls[0][0];
     await db.update(communities).set({ websiteUrl: winner, updatedAt: new Date() }).where(eq(communities.id, community.id));
     result.fieldsUpdated.push(`websiteUrl=${winner}`);
-  }
-
-  // ---------- email extraction -----------------------------------------
-  const mailtos: string[] = [];
-  for (const body of bodies) {
-    let m: RegExpExecArray | null;
-    MAILTO_RE.lastIndex = 0;
-    while ((m = MAILTO_RE.exec(body)) !== null) {
-      const e = m[1].toLowerCase();
-      if (e.startsWith("unsubscribe")) continue;
-      mailtos.push(e);
-    }
-  }
-  const topMailtos = topByCount(mailtos, 1, 5);
-  result.candidates.email = topMailtos;
-  if (topMailtos.length > 0 && (opts.force || !community.email)) {
-    await db.update(communities).set({ email: topMailtos[0], updatedAt: new Date() }).where(eq(communities.id, community.id));
-    result.fieldsUpdated.push(`email=${topMailtos[0]}`);
   }
 
   // ---------- senders --------------------------------------------------

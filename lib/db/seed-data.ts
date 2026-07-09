@@ -136,12 +136,9 @@ export const seedCommunities: SeedCommunity[] = [
       displayName: "Caretta Bellevue",
       shortName: "Caretta",
       brandFamily: "Caretta",
-      nameAbbreviation: "ACB",
       type: "mixed",
       careTypes: ["Assisted Living", "Memory Care"],
       address: { street: "1780 Servant Way", city: "Bellevue", state: "WI", zip: "54311" },
-      phone: "920.504.3443",
-      email: "Bellevue@CarettaSeniorLiving.com",
       websiteUrl: "https://www.CarettaSeniorLiving.com/bellevue",
       trackingPhone: "920-504-3028",
       hubspot: {},
@@ -174,12 +171,9 @@ export const seedCommunities: SeedCommunity[] = [
       displayName: "Caretta Eau Claire",
       shortName: "Caretta",
       brandFamily: "Caretta",
-      nameAbbreviation: null, // TODO
       type: "mixed",
       careTypes: ["Assisted Living", "Memory Care"],
       address: {},
-      phone: null,
-      email: null,
       websiteUrl: "https://www.CarettaSeniorLiving.com/eau-claire",
       trackingPhone: "715-334-8959",
       hubspot: {},
@@ -199,7 +193,6 @@ export const seedCommunities: SeedCommunity[] = [
       displayName: "Caretta Holmen",
       shortName: "Caretta",
       brandFamily: "Caretta",
-      nameAbbreviation: null,
       type: "mixed",
       careTypes: ["Assisted Living", "Memory Care"],
       address: {},
@@ -222,7 +215,6 @@ export const seedCommunities: SeedCommunity[] = [
       displayName: "Caretta Maplewood",
       shortName: "Caretta",
       brandFamily: "Caretta",
-      nameAbbreviation: null,
       type: "mixed",
       careTypes: ["Assisted Living", "Memory Care"],
       address: {},
@@ -768,14 +760,14 @@ for (const sc of seedCommunities) {
 // Website URLs are stored WITHOUT the protocol; the render/href code prepends
 // https:// when linking. This block is the source of truth for these fields and
 // overrides any inline values above.
-const CONTACT_BY_SLUG: Record<string, { address?: Address; websiteUrl?: string; email?: string }> = {
+const CONTACT_BY_SLUG: Record<string, { address?: Address; websiteUrl?: string }> = {
   "caretta-bellevue": { websiteUrl: "carettaseniorliving.com/bellevue" },
-  "caretta-eau-claire": { address: { street: "4688 Keystone Crossing", city: "Eau Claire", state: "WI", zip: "54701" }, websiteUrl: "carettaseniorliving.com/eau-claire-wi", email: "EauClaire@CarettaSeniorLiving.com" },
-  "caretta-holmen": { address: { street: "2120 Staphorst Ln", city: "Holmen", state: "WI", zip: "54636" }, websiteUrl: "carettaseniorliving.com/holmen-wi", email: "Holmen@CarettaSeniorLiving.com" },
-  "caretta-maplewood": { address: { street: "1910 County Road C E", city: "Maplewood", state: "MN", zip: "55109" }, websiteUrl: "carettaseniorliving.com/maplewood-mn", email: "Maplewood@CarettaSeniorLiving.com" },
-  "talamore-st-cloud": { address: { street: "215 37th Ave N", city: "St Cloud", state: "MN", zip: "56303" }, websiteUrl: "talamoreseniorliving.com/st-cloud-mn", email: "stcloud@talamoreseniorliving.com" },
-  "talamore-sun-prairie": { address: { street: "275 N City Station Dr", city: "Sun Prairie", state: "WI", zip: "53590" }, websiteUrl: "talamoreseniorliving.com/sun-prairie-wi", email: "sunprairie@talamoreseniorliving.com" },
-  "talamore-woodbury": { address: { street: "289 Karen Dr", city: "Woodbury", state: "MN", zip: "55129" }, websiteUrl: "talamoreseniorliving.com/woodbury-mn", email: "woodbury@talamoreseniorliving.com" },
+  "caretta-eau-claire": { address: { street: "4688 Keystone Crossing", city: "Eau Claire", state: "WI", zip: "54701" }, websiteUrl: "carettaseniorliving.com/eau-claire-wi" },
+  "caretta-holmen": { address: { street: "2120 Staphorst Ln", city: "Holmen", state: "WI", zip: "54636" }, websiteUrl: "carettaseniorliving.com/holmen-wi" },
+  "caretta-maplewood": { address: { street: "1910 County Road C E", city: "Maplewood", state: "MN", zip: "55109" }, websiteUrl: "carettaseniorliving.com/maplewood-mn" },
+  "talamore-st-cloud": { address: { street: "215 37th Ave N", city: "St Cloud", state: "MN", zip: "56303" }, websiteUrl: "talamoreseniorliving.com/st-cloud-mn" },
+  "talamore-sun-prairie": { address: { street: "275 N City Station Dr", city: "Sun Prairie", state: "WI", zip: "53590" }, websiteUrl: "talamoreseniorliving.com/sun-prairie-wi" },
+  "talamore-woodbury": { address: { street: "289 Karen Dr", city: "Woodbury", state: "MN", zip: "55129" }, websiteUrl: "talamoreseniorliving.com/woodbury-mn" },
   "hayden-grove-bloomington": { address: { street: "8715 Portland Ave S", city: "Bloomington", state: "MN", zip: "55420" }, websiteUrl: "haydengroveseniorliving.com/bloomington-mn" },
   "hayden-grove-st-anthony": { address: { street: "2601 NE Stinson Pkwy", city: "St Anthony", state: "MN", zip: "55418" }, websiteUrl: "haydengroveseniorliving.com/st-anthony-mn" },
   "the-glenn-buffalo-al": { address: { street: "201 1st St NE", city: "Buffalo", state: "MN", zip: "55313" }, websiteUrl: "glennseniorliving.com/buffalo-mn" },
@@ -804,5 +796,4 @@ for (const sc of seedCommunities) {
   if (!cc) continue;
   if (cc.address) sc.community.address = { ...sc.community.address, ...cc.address };
   if (cc.websiteUrl !== undefined) sc.community.websiteUrl = cc.websiteUrl;
-  if (cc.email) sc.community.email = cc.email;
 }

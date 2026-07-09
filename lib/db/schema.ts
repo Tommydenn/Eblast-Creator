@@ -145,8 +145,6 @@ export const communities = pgTable("communities", {
   shortName: text("short_name").notNull(),
   /** Brand family this community belongs to: Caretta / Talamore / Hayden Grove / The Glenn / Cottagewood / Amira Choice / etc. */
   brandFamily: varchar("brand_family", { length: 64 }),
-  /** Past-eblast naming prefix, e.g. "ACB". */
-  nameAbbreviation: varchar("name_abbreviation", { length: 16 }),
 
   type: communityTypeEnum("type").notNull(),
   careTypes: text("care_types").array(),
@@ -154,10 +152,6 @@ export const communities = pgTable("communities", {
   /** Physical address (CAN-SPAM, footers). JSONB to preserve existing nested access. */
   address: jsonb("address").$type<Address>().notNull().default({}),
 
-  /** Public phone number (e.g. front desk). The flyer's phone. */
-  phone: text("phone"),
-  /** Public email. */
-  email: text("email"),
   websiteUrl: text("website_url"),
   /**
    * CallRail tracking number used in eblast CTAs. NEVER the same as `phone`.

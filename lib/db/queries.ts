@@ -150,22 +150,42 @@ export async function updateCommunityContact(
   data: {
     displayName?: string;
     address?: Address;
-    phone?: string | null;
     trackingPhone?: string | null;
-    email?: string | null;
     websiteUrl?: string | null;
   }
 ): Promise<boolean> {
   const patch: Partial<typeof communities.$inferInsert> = { updatedAt: new Date() };
   if (data.displayName !== undefined) patch.displayName = data.displayName;
   if ("address" in data) patch.address = data.address;
-  if ("phone" in data) patch.phone = data.phone;
   if ("trackingPhone" in data) patch.trackingPhone = data.trackingPhone;
-  if ("email" in data) patch.email = data.email;
   if ("websiteUrl" in data) patch.websiteUrl = data.websiteUrl;
   const result = await db
     .update(communities)
     .set(patch)
+    .where(eq(communities.slug, slug))
+    .returning({ id: communities.id });
+  return result.length > 0;
+}
+
+/**
+ * Partial update of a community's brand palette/typography — the fields
+ * editable via the Community page's Brand panel. Read-modify-write against
+ * the existing `brand` JSONB so unrelated sub-fields (paletteSource,
+ * fontsSource, textOnPrimary/Accent, fonts) are never touched. These values
+ * are exclusively user-edited from this point on — the seed script must
+ * never overwrite them (see lib/db/seed.ts's brand-merge logic).
+ */
+export async function updateCommunityBrand(
+  slug: string,
+  patch: Partial<Pick<CommunityBrand, "primary" | "accent" | "background" | "secondary" | "supporting" | "fontHeadline" | "fontBody">>
+): Promise<boolean> {
+  const rows = await db.select({ id: communities.id, brand: communities.brand }).from(communities).where(eq(communities.slug, slug)).limit(1);
+  if (rows.length === 0) return false;
+  const current = (rows[0].brand ?? {}) as CommunityBrand;
+  const merged: CommunityBrand = { ...current, ...patch };
+  const result = await db
+    .update(communities)
+    .set({ brand: merged, updatedAt: new Date() })
     .where(eq(communities.slug, slug))
     .returning({ id: communities.id });
   return result.length > 0;

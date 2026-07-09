@@ -198,7 +198,7 @@ export async function GET(
       }),
       subject,
       fromName: community.senders[0]?.name ?? community.displayName,
-      replyTo: community.senders[0]?.email ?? community.email ?? "",
+      replyTo: community.senders[0]?.email ?? "",
       templatePath: hubspotPath,
       ...segments,
     });

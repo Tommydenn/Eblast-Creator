@@ -10,6 +10,7 @@ import { pastSends } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
 import { SendersPanel } from "@/components/SendersPanel";
 import { ContactPanel } from "@/components/ContactPanel";
+import { BrandPanel } from "@/components/BrandPanel";
 import { RecentSendsPanel } from "@/components/RecentSendsPanel";
 
 export const dynamic = "force-dynamic";
@@ -100,15 +101,6 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
     null;
 
   const hasBrand = c.brandGuideExtracted != null || c.brand.paletteSource === "brand-guide-extracted";
-
-  // All palette entries
-  const palette = [
-    { color: c.brand.primary, label: "Primary" },
-    { color: c.brand.accent, label: "Accent" },
-    { color: c.brand.background, label: "Surface" },
-    ...(c.brand.secondary ? [{ color: c.brand.secondary, label: "Secondary" }] : []),
-    ...(c.brand.supporting ?? []).map((hex, i) => ({ color: hex, label: `Support ${i + 1}` })),
-  ];
 
   return (
     <>
@@ -246,46 +238,8 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
             {/* Brand card */}
             <Section title="Brand" badge={hasBrand ? "From guide" : "Placeholder"} badgeVariant={hasBrand ? "success" : "warning"}>
 
-              {/* Color palette */}
-              <div>
-                <SectionLabel>Color palette</SectionLabel>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {palette.map((s) => (
-                    <div key={s.label + s.color} className="flex flex-col items-center gap-1">
-                      <div
-                        className="h-10 w-10 rounded-lg border border-black/8 shadow-sm"
-                        style={{ backgroundColor: s.color }}
-                        title={s.color}
-                      />
-                      <p className="text-[9px] font-medium uppercase tracking-wider text-sand-500 text-center">{s.label}</p>
-                      <p className="font-mono text-[8.5px] text-sand-400">{s.color}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Typography */}
-              <div>
-                <SectionLabel>Typography</SectionLabel>
-                <div className="mt-2 rounded-xl border border-sand-200/60 bg-sand-50/50 px-4 py-3.5 space-y-3">
-                  <div>
-                    <p className="text-2xl text-sand-900 leading-snug" style={{ fontFamily: c.brand.fontHeadline }}>
-                      The quick brown fox
-                    </p>
-                    <p className="mt-0.5 font-mono text-[10px] text-sand-500">
-                      Display · {c.brand.fontHeadline}
-                    </p>
-                  </div>
-                  <div className="border-t border-sand-200/60 pt-3">
-                    <p className="text-base text-sand-800 leading-relaxed" style={{ fontFamily: c.brand.fontBody }}>
-                      Warm, hospitality-forward copy goes here.
-                    </p>
-                    <p className="mt-0.5 font-mono text-[10px] text-sand-500">
-                      Body · {c.brand.fontBody}
-                    </p>
-                  </div>
-                </div>
-              </div>
+              {/* Color palette + typography — user-owned, edited only via BrandPanel */}
+              <BrandPanel slug={c.slug} brand={c.brand} />
 
               {/* All logos */}
               {c.logos.length > 0 && (
@@ -355,14 +309,9 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 slug={c.slug}
                 initialDisplayName={c.displayName}
                 initialAddress={c.address}
-                initialPhone={c.phone ?? null}
                 initialTrackingPhone={c.trackingPhone ?? null}
-                initialEmail={c.email ?? null}
                 initialWebsiteUrl={c.websiteUrl ?? null}
               />
-              {c.nameAbbreviation && (
-                <Field label="Abbreviation">{c.nameAbbreviation}</Field>
-              )}
               {c.hubspot?.acronym && (
                 <Field label="HubSpot acronym">
                   <span className="font-mono text-sm">{c.hubspot.acronym}</span>

@@ -162,7 +162,7 @@ export async function POST(req: NextRequest) {
     subject: body.subject,
     previewText: body.previewText,
     fromName: community.senders[0]?.name ?? community.displayName,
-    replyTo: community.senders[0]?.email ?? community.email ?? "",
+    replyTo: community.senders[0]?.email ?? "",
     templatePath: hubspotPath,
     ...segmentsPayload,
   });

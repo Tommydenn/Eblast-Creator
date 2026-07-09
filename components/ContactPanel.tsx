@@ -9,9 +9,7 @@ interface Props {
   slug: string;
   initialDisplayName: string;
   initialAddress: Address;
-  initialPhone: string | null;
   initialTrackingPhone: string | null;
-  initialEmail: string | null;
   initialWebsiteUrl: string | null;
 }
 
@@ -22,9 +20,7 @@ export function ContactPanel({
   slug,
   initialDisplayName,
   initialAddress,
-  initialPhone,
   initialTrackingPhone,
-  initialEmail,
   initialWebsiteUrl,
 }: Props) {
   const router = useRouter();
@@ -37,9 +33,7 @@ export function ContactPanel({
   const [city, setCity] = useState(initialAddress.city ?? "");
   const [state, setState] = useState(initialAddress.state ?? "");
   const [zip, setZip] = useState(initialAddress.zip ?? "");
-  const [phone, setPhone] = useState(initialPhone ?? "");
   const [trackingPhone, setTrackingPhone] = useState(initialTrackingPhone ?? "");
-  const [email, setEmail] = useState(initialEmail ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initialWebsiteUrl ?? "");
 
   function handleCancel() {
@@ -48,9 +42,7 @@ export function ContactPanel({
     setCity(initialAddress.city ?? "");
     setState(initialAddress.state ?? "");
     setZip(initialAddress.zip ?? "");
-    setPhone(initialPhone ?? "");
     setTrackingPhone(initialTrackingPhone ?? "");
-    setEmail(initialEmail ?? "");
     setWebsiteUrl(initialWebsiteUrl ?? "");
     setError(null);
     setEditing(false);
@@ -71,9 +63,7 @@ export function ContactPanel({
             state: state.trim() || undefined,
             zip: zip.trim() || undefined,
           },
-          phone: phone.trim() || null,
           trackingPhone: trackingPhone.trim() || null,
-          email: email.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
         }),
       });
@@ -115,20 +105,9 @@ export function ContactPanel({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <SectionLabel>Phone (public)</SectionLabel>
-            <p className="mt-0.5 text-sm text-sand-900">{phone || na}</p>
-          </div>
-          <div>
-            <SectionLabel className="text-forest-700">Tracking phone (CallRail)</SectionLabel>
-            <p className="mt-0.5 text-sm font-medium text-forest-700">{trackingPhone || na}</p>
-          </div>
-        </div>
-
         <div>
-          <SectionLabel>Email</SectionLabel>
-          <p className="mt-0.5 text-sm text-sand-900">{email || na}</p>
+          <SectionLabel className="text-forest-700">Tracking phone (CallRail)</SectionLabel>
+          <p className="mt-0.5 text-sm font-medium text-forest-700">{trackingPhone || na}</p>
         </div>
 
         <div>
@@ -167,20 +146,9 @@ export function ContactPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <SectionLabel>Phone (public)</SectionLabel>
-          <input className={`mt-1 ${INPUT}`} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 000-0000" />
-        </div>
-        <div>
-          <SectionLabel className="text-forest-700">Tracking phone</SectionLabel>
-          <input className={`mt-1 ${INPUT}`} value={trackingPhone} onChange={(e) => setTrackingPhone(e.target.value)} placeholder="(555) 000-0000" />
-        </div>
-      </div>
-
       <div>
-        <SectionLabel>Email</SectionLabel>
-        <input className={`mt-1 ${INPUT}`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="hello@community.com" />
+        <SectionLabel className="text-forest-700">Tracking phone</SectionLabel>
+        <input className={`mt-1 ${INPUT}`} value={trackingPhone} onChange={(e) => setTrackingPhone(e.target.value)} placeholder="(555) 000-0000" />
       </div>
 
       <div>

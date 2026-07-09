@@ -65,6 +65,9 @@ export interface ExtractedFlyer {
   thankYouText?: string;
   /** Override for the "Visit Website" button URL in the footer. */
   footerWebsiteUrl?: string;
+  /** Editable label text on the footer "Visit Website" button (the URL always
+   *  comes from the community's configured website). Default: "Visit Website". */
+  footerButtonLabel?: string;
 
   /**
    * 1–3 generic words classifying the event type — used for the HubSpot email

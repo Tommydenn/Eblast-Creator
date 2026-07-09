@@ -23,7 +23,6 @@ export default function CtaSection() {
   // Pre-fill boxes with the value the email would use by default, so nothing is
   // blank when there's a sensible default. These stay undefined in storage until
   // the user actually edits them (so date/time/rsvp keep mirroring the Hero).
-  const websiteDefault = community?.websiteUrl ?? "";
 
   return (
     <div className="space-y-5">
@@ -76,13 +75,16 @@ export default function CtaSection() {
         />
       </Field>
 
-      <Field label="Visit Website URL" hint="URL for the 'Visit Website' button in the footer. Defaults to the community's configured website.">
-        <input
-          type="text"
-          value={fields.footerWebsiteUrl ?? websiteDefault}
-          onChange={(e) => setField("footerWebsiteUrl", e.target.value || undefined)}
-          placeholder="e.g. mycommunityliving.com"
+      <Field label="Visit Website Button" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
+        <RichInput
+          value={fields.footerButtonLabel ?? "Visit Website"}
+          onValueChange={(html) => setField("footerButtonLabel", html || undefined)}
+          placeholder="Visit Website"
           className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="footerButtonLabel"
         />
       </Field>
 

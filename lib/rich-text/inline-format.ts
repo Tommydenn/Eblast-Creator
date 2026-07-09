@@ -58,26 +58,43 @@ interface Run {
 
 // Fixed property order so identical styles always stringify identically —
 // this is what lets us merge adjacent runs by string equality.
+//
+// bold/italic/underline are TRI-STATE: true = on, false = explicitly off,
+// undefined = not set. An explicit `false` serializes to the neutral value
+// (font-weight: 400 / font-style: normal / text-decoration: none) so it can
+// OVERRIDE a style the email template forces on the field's container (e.g. a
+// hardcoded font-weight:700). Without this, turning a format off would just
+// drop the property and the text would inherit the template's style again.
 function styleToString(s: StyleObj): string {
   const parts: string[] = [];
   if (s.fontFamily) parts.push(`font-family: ${s.fontFamily}`);
   if (s.fontSize) parts.push(`font-size: ${s.fontSize}px`);
-  if (s.bold) parts.push(`font-weight: 700`);
-  if (s.italic) parts.push(`font-style: italic`);
-  if (s.underline) parts.push(`text-decoration: underline`);
+  if (s.bold === true) parts.push(`font-weight: 700`);
+  else if (s.bold === false) parts.push(`font-weight: 400`);
+  if (s.italic === true) parts.push(`font-style: italic`);
+  else if (s.italic === false) parts.push(`font-style: normal`);
+  if (s.underline === true) parts.push(`text-decoration: underline`);
+  else if (s.underline === false) parts.push(`text-decoration: none`);
   if (s.color) parts.push(`color: ${s.color}`);
   return parts.join("; ");
 }
 
 function isEmptyStyle(s: StyleObj): boolean {
-  return !s.bold && !s.italic && !s.underline && !s.color && !s.fontFamily && !s.fontSize;
+  return (
+    s.bold === undefined &&
+    s.italic === undefined &&
+    s.underline === undefined &&
+    !s.color &&
+    !s.fontFamily &&
+    !s.fontSize
+  );
 }
 
 function stylesEqual(a: StyleObj, b: StyleObj): boolean {
   return (
-    !!a.bold === !!b.bold &&
-    !!a.italic === !!b.italic &&
-    !!a.underline === !!b.underline &&
+    a.bold === b.bold &&
+    a.italic === b.italic &&
+    a.underline === b.underline &&
     (a.color ?? "") === (b.color ?? "") &&
     (a.fontFamily ?? "") === (b.fontFamily ?? "") &&
     (a.fontSize ?? 0) === (b.fontSize ?? 0)
@@ -149,15 +166,9 @@ function effectiveFormat(node: Node, stopAt: Element): StyleObj {
     if (acc.fontSize === undefined && s.fontSize !== undefined) acc.fontSize = s.fontSize;
     el = el.parentElement;
   }
-  // Drop explicit-false booleans — absence means "not formatted".
-  return {
-    bold: acc.bold || undefined,
-    italic: acc.italic || undefined,
-    underline: acc.underline || undefined,
-    color: acc.color,
-    fontFamily: acc.fontFamily,
-    fontSize: acc.fontSize,
-  };
+  // Preserve explicit false (an inner span's font-weight:400 / font-style:normal
+  // is a deliberate override) — only undefined means "not set".
+  return acc;
 }
 
 // ── run collection & serialization ─────────────────────────────────────────────
@@ -310,16 +321,19 @@ function ownSpanFor(textNode: Text, root: Element): HTMLElement {
   return span;
 }
 
-function applyToSpan(span: HTMLElement, cmd: FormatCommand, removing: boolean): void {
+// When turning a toggle OFF, we normally just drop the property. But if the
+// field's template container forces that style (defaults[key] === true), we must
+// write the explicit neutral value so it overrides the inherited template style.
+function applyToSpan(span: HTMLElement, cmd: FormatCommand, removing: boolean, defaults?: StyleObj): void {
   switch (cmd.type) {
     case "bold":
-      span.style.fontWeight = removing ? "" : "700";
+      span.style.fontWeight = removing ? (defaults?.bold ? "400" : "") : "700";
       break;
     case "italic":
-      span.style.fontStyle = removing ? "" : "italic";
+      span.style.fontStyle = removing ? (defaults?.italic ? "normal" : "") : "italic";
       break;
     case "underline":
-      span.style.textDecoration = removing ? "" : "underline";
+      span.style.textDecoration = removing ? (defaults?.underline ? "none" : "") : "underline";
       break;
     case "color":
       if (cmd.value) span.style.color = cmd.value;
@@ -338,6 +352,13 @@ function applyToSpan(span: HTMLElement, cmd: FormatCommand, removing: boolean): 
   }
 }
 
+// Effective on/off for a toggle at a node: the node's own value if set, else the
+// field's template default.
+function effectiveBool(node: Node, root: Element, key: ToggleType, defaults?: StyleObj): boolean {
+  const v = effectiveFormat(node, root)[key];
+  return v !== undefined ? v : !!(defaults && defaults[key]);
+}
+
 /**
  * Apply a formatting command to the current selection inside `root`.
  * Returns true if it did something. Toggle commands (bold/italic/underline)
@@ -346,7 +367,12 @@ function applyToSpan(span: HTMLElement, cmd: FormatCommand, removing: boolean): 
  * The selection is preserved across the operation, so the user can chain
  * multiple toolbar actions on the same selection.
  */
-export function applyFormat(root: HTMLElement, cmd: FormatCommand, explicitRange?: Range): boolean {
+export function applyFormat(
+  root: HTMLElement,
+  cmd: FormatCommand,
+  explicitRange?: Range,
+  defaults?: StyleObj,
+): boolean {
   const sel = window.getSelection();
   if (!sel) return false;
 
@@ -366,14 +392,16 @@ export function applyFormat(root: HTMLElement, cmd: FormatCommand, explicitRange
   let removing = false;
   if (cmd.type === "bold" || cmd.type === "italic" || cmd.type === "underline") {
     const key = cmd.type;
-    removing = nodes.every((n) => !!effectiveFormat(n, root)[key]);
+    // Turn off only when EVERY node is effectively on (counting the field's
+    // template default), so a single click toggles a template-styled field.
+    removing = nodes.every((n) => effectiveBool(n, root, key, defaults));
   } else if (cmd.type === "clear") {
     removing = true;
   }
 
   for (const n of nodes) {
     const span = ownSpanFor(n, root);
-    applyToSpan(span, cmd, removing);
+    applyToSpan(span, cmd, removing, defaults);
   }
 
   // Restore the selection across the same text (nodes are still valid — we
@@ -390,7 +418,11 @@ export function applyFormat(root: HTMLElement, cmd: FormatCommand, explicitRange
 }
 
 /** Read the formatting state of the current selection for toolbar highlighting. */
-export function queryFormatState(root: HTMLElement, pending?: StyleObj | null): FormatState {
+export function queryFormatState(
+  root: HTMLElement,
+  pending?: StyleObj | null,
+  defaults?: StyleObj,
+): FormatState {
   const empty: FormatState = {
     bold: false,
     italic: false,
@@ -404,12 +436,15 @@ export function queryFormatState(root: HTMLElement, pending?: StyleObj | null): 
   const range = sel.getRangeAt(0);
   if (!root.contains(range.commonAncestorContainer)) return empty;
 
+  const resolve = (v: boolean | undefined, key: ToggleType): boolean =>
+    v !== undefined ? v : !!(defaults && defaults[key]);
+
   if (range.collapsed) {
     const base = effectiveFormat(range.startContainer, root);
     return {
-      bold: pending?.bold ?? !!base.bold,
-      italic: pending?.italic ?? !!base.italic,
-      underline: pending?.underline ?? !!base.underline,
+      bold: pending?.bold ?? resolve(base.bold, "bold"),
+      italic: pending?.italic ?? resolve(base.italic, "italic"),
+      underline: pending?.underline ?? resolve(base.underline, "underline"),
       color: base.color ?? null,
       fontFamily: base.fontFamily ?? null,
       fontSize: base.fontSize ?? null,
@@ -424,9 +459,9 @@ export function queryFormatState(root: HTMLElement, pending?: StyleObj | null): 
     return styles.every((s) => pick(s) === first) ? first : null;
   };
   return {
-    bold: styles.every((s) => !!s.bold),
-    italic: styles.every((s) => !!s.italic),
-    underline: styles.every((s) => !!s.underline),
+    bold: styles.every((s) => resolve(s.bold, "bold")),
+    italic: styles.every((s) => resolve(s.italic, "italic")),
+    underline: styles.every((s) => resolve(s.underline, "underline")),
     color: commonStr((s) => s.color ?? null),
     fontFamily: commonStr((s) => s.fontFamily ?? null),
     fontSize: commonStr((s) => s.fontSize ?? null),
@@ -444,8 +479,8 @@ export function getPending(root: Element): StyleObj | null {
   return PENDING.get(root) ?? null;
 }
 
-export function setPendingToggle(root: HTMLElement, type: ToggleType): StyleObj {
-  const current = queryFormatState(root, PENDING.get(root) ?? null);
+export function setPendingToggle(root: HTMLElement, type: ToggleType, defaults?: StyleObj): StyleObj {
+  const current = queryFormatState(root, PENDING.get(root) ?? null, defaults);
   const p = { ...(PENDING.get(root) ?? {}) };
   p[type] = !current[type];
   PENDING.set(root, p);

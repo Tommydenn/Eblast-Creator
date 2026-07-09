@@ -351,6 +351,8 @@ export function CallButtonField({
 // ── Toolbar ─────────────────────────────────────────────────────────────────────
 
 // Default font sizes as rendered in the email template, keyed by field name.
+// Every editable field must appear here so the toolbar's px box shows the
+// default size as a reference when the selection has no explicit size.
 const FIELD_FONT_SIZES: Record<string, number> = {
   headline: 36,
   scriptSubheadline: 36,
@@ -366,6 +368,21 @@ const FIELD_FONT_SIZES: Record<string, number> = {
   footerName: 14,
   thankYouText: 26,
   heroAddress: 12,
+  galleryLabel: 11,
+  ctaButtonLabel: 14,
+  footerButtonLabel: 13,
+};
+
+// Formatting the email template forces on a field's container. The toolbar uses
+// these so a single click toggles the field's default off, and turning a toggle
+// off writes the explicit neutral value that overrides the template.
+const FIELD_DEFAULTS: Record<string, { bold?: boolean; italic?: boolean }> = {
+  storyEyebrow: { bold: true },
+  galleryLabel: { bold: true },
+  ctaButtonLabel: { bold: true },
+  footerButtonLabel: { bold: true },
+  scriptSubheadline: { italic: true },
+  storyScriptTitle: { italic: true },
 };
 
 interface ToolbarProps {
@@ -431,7 +448,7 @@ export function FormatToolbar({
         setState(EMPTY_STATE);
         return;
       }
-      const st = queryFormatState(el, getPending(el));
+      const st = queryFormatState(el, getPending(el), fieldDefaults());
       setState(st);
       const fieldName = activeFieldNameRef?.current;
       const fallback = fieldName ? FIELD_FONT_SIZES[fieldName] : undefined;
@@ -441,12 +458,18 @@ export function FormatToolbar({
     return () => document.removeEventListener("selectionchange", refresh);
   }, [editorRef, activeFieldNameRef]);
 
+  // Template-forced formatting for whichever field is currently focused.
+  function fieldDefaults(): { bold?: boolean; italic?: boolean } | undefined {
+    const fieldName = activeFieldNameRef?.current;
+    return fieldName ? FIELD_DEFAULTS[fieldName] : undefined;
+  }
+
   function run(cmd: FormatCommand, savedRange?: Range | null) {
     const el = editorRef.current;
     if (!el) return;
-    applyFormat(el, cmd, savedRange ?? undefined);
+    applyFormat(el, cmd, savedRange ?? undefined, fieldDefaults());
     onInput();
-    setState(queryFormatState(el, getPending(el)));
+    setState(queryFormatState(el, getPending(el), fieldDefaults()));
   }
 
   // Bold / Italic / Underline: toggle on a selection, or queue a pending mark
@@ -457,8 +480,8 @@ export function FormatToolbar({
     const sel = window.getSelection();
     const collapsed = !sel || sel.rangeCount === 0 || sel.getRangeAt(0).collapsed;
     if (collapsed) {
-      setPendingToggle(el, type);
-      setState(queryFormatState(el, getPending(el)));
+      setPendingToggle(el, type, fieldDefaults());
+      setState(queryFormatState(el, getPending(el), fieldDefaults()));
     } else {
       run({ type });
     }

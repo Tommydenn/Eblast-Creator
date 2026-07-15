@@ -7,6 +7,7 @@
 // `lookup_past_sends`, `read_open_rates_by_subject_pattern`, etc.
 
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 import type { Community } from "@/data/communities";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import {
@@ -101,13 +102,37 @@ export interface ReviewImages {
   galleryDataUris?: string[];
 }
 
-function dataUriToImageBlock(dataUri: string): {
+// Downscale/re-encode the image that gets sent to the vision model. This is
+// ONLY the copy Claude reviews — the actual stored/rendered/pushed image is
+// never touched. Claude's API rejects any single image whose base64 exceeds
+// 10 MB, and internally downscales anything past ~1568px anyway, so full-res
+// PDF extractions (which can be 8+ MB) provide zero review benefit and only
+// risk a hard 400. Cap the long edge at 1568px and re-encode as JPEG so the
+// critic can always see every image regardless of source resolution.
+const VISION_MAX_EDGE = 1568;
+
+async function dataUriToImageBlock(dataUri: string): Promise<{
   type: "image";
   source: { type: "base64"; media_type: string; data: string };
-} {
+}> {
   const m = dataUri.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
   if (!m) throw new Error("Invalid image data URI passed to critic");
-  return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
+
+  try {
+    const input = Buffer.from(m[2], "base64");
+    const resized = await sharp(input, { failOn: "none" })
+      .rotate()
+      .resize(VISION_MAX_EDGE, VISION_MAX_EDGE, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    return {
+      type: "image",
+      source: { type: "base64", media_type: "image/jpeg", data: resized.toString("base64") },
+    };
+  } catch {
+    // If re-encoding fails, fall back to the original bytes.
+    return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
+  }
 }
 
 const reviewSchema = {
@@ -283,14 +308,14 @@ export async function reviewDraft(opts: {
   const userContent: any[] = [];
   if (opts.images?.heroDataUri) {
     userContent.push({ type: "text", text: "HERO IMAGE (largest from the PDF, used as the email hero):" });
-    userContent.push(dataUriToImageBlock(opts.images.heroDataUri));
+    userContent.push(await dataUriToImageBlock(opts.images.heroDataUri));
   }
   if (opts.images?.secondaryDataUri) {
     userContent.push({
       type: "text",
       text: "SECONDARY IMAGE (placed inline between body paragraphs):",
     });
-    userContent.push(dataUriToImageBlock(opts.images.secondaryDataUri));
+    userContent.push(await dataUriToImageBlock(opts.images.secondaryDataUri));
   }
   if (opts.images?.galleryDataUris && opts.images.galleryDataUris.length > 0) {
     for (let i = 0; i < opts.images.galleryDataUris.length; i++) {
@@ -298,7 +323,7 @@ export async function reviewDraft(opts: {
         type: "text",
         text: `GALLERY IMAGE ${i + 1} (in the "A Look Around ${opts.community.shortName}" grid):`,
       });
-      userContent.push(dataUriToImageBlock(opts.images.galleryDataUris[i]));
+      userContent.push(await dataUriToImageBlock(opts.images.galleryDataUris[i]));
     }
   }
   userContent.push({

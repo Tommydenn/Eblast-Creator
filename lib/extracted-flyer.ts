@@ -110,4 +110,15 @@ export interface ExtractedFlyer {
    * Only populated when past sends or structured voice rules were in context.
    */
   drafterRationale?: string;
+
+  /**
+   * Manual background-color overrides (hex) for individual email sections.
+   * The drafter never sets these — they're only written when the user picks
+   * a color directly in the editor. Each defaults to the community brand's
+   * usual color for that section when unset (see lib/render-email.ts).
+   */
+  headerBgColor?: string;
+  heroBgColor?: string;
+  finalCtaBgColor?: string;
+  footerBgColor?: string;
 }

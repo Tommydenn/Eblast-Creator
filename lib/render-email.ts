@@ -163,11 +163,13 @@ export function buildEblastHtml(
 
   // A dark header is only allowed when the brand surface is genuinely dark.
   const isDarkHeader = !surfaceIsLight;
-  const headerBg = isDarkHeader
+  const defaultHeaderBg = isDarkHeader
     ? brand.background // genuinely dark brand surface -> dark header
     : surfaceIsGray
       ? "#ffffff" // gray surface -> force white (never a gray header)
       : brand.background; // warm/beige light surface -> keep it
+  // Manual per-draft override, set from the editor's section-color picker.
+  const headerBg = flyer.headerBgColor ?? defaultHeaderBg;
   const headerStripe = brand.accent;
 
   // Logo follows the HEADER, not the raw surface. On a light header use the
@@ -240,6 +242,13 @@ export function buildEblastHtml(
     return { displayText, displayHtml, fontSize, letterSpacing, width };
   }
 
+  // Manual per-draft background overrides, set from the editor's section-color
+  // picker. Each defaults to the exact same brand token used today, so a draft
+  // that never touches these renders pixel-identical to before this feature.
+  const heroBg = flyer.heroBgColor ?? brand.primary;
+  const finalCtaBg = flyer.finalCtaBgColor ?? brand.accent;
+  const footerBg = flyer.footerBgColor ?? "#FFFFFF";
+
   const heroCta = reconcileCtaLabel(flyer.ctaButtonLabel);
   const finalCtaLabel = reconcileCtaLabel(flyer.finalCtaButtonLabel ?? flyer.ctaButtonLabel);
   // Legacy aliases kept so the hero markup below (unchanged) still reads correctly.
@@ -271,7 +280,7 @@ export function buildEblastHtml(
           </td>
         </tr>` : ""}
         <tr>
-          <td class="glm-bg-primary" bgcolor="${brand.primary}" style="background:${brand.primary}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
+          <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
             ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
             <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
@@ -373,7 +382,7 @@ export function buildEblastHtml(
   const finalCta = `
   <tr data-section="Call to Action">
     <td>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-accent" bgcolor="${brand.accent}" style="background:${brand.accent};">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};">
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
@@ -399,7 +408,7 @@ export function buildEblastHtml(
 
   const footer = `
   <tr data-section="Footer">
-    <td class="glm-bg-white" bgcolor="#FFFFFF" style="padding: 40px 36px 32px 36px; background: #FFFFFF;" align="center">
+    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center">
       ${websiteHref ? `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
@@ -440,6 +449,9 @@ export function buildEblastHtml(
   [data-ogsc] .glm-bg-header, [data-ogsb] .glm-bg-header { background-color: ${headerBg} !important; }
   [data-ogsc] .glm-bg-primary, [data-ogsb] .glm-bg-primary { background-color: ${brand.primary} !important; }
   [data-ogsc] .glm-bg-accent, [data-ogsb] .glm-bg-accent { background-color: ${brand.accent} !important; }
+  [data-ogsc] .glm-bg-hero, [data-ogsb] .glm-bg-hero { background-color: ${heroBg} !important; }
+  [data-ogsc] .glm-bg-finalcta, [data-ogsb] .glm-bg-finalcta { background-color: ${finalCtaBg} !important; }
+  [data-ogsc] .glm-bg-footer, [data-ogsb] .glm-bg-footer { background-color: ${footerBg} !important; }
 </style>
 </head>
 <body class="glm-bg-outer" style="margin:0; padding:0; background:#f5f5f5;" bgcolor="#f5f5f5">

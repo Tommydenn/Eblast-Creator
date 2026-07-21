@@ -3,6 +3,7 @@
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
+import { SectionColorPicker } from "@/components/drafter/SectionColorPicker";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -24,8 +25,30 @@ export default function CtaSection() {
   // blank when there's a sensible default. These stay undefined in storage until
   // the user actually edits them (so date/time/rsvp keep mirroring the Hero).
 
+  const finalCtaBg = fields.finalCtaBgColor ?? community?.brand.accent ?? "#000000";
+  const footerBg = fields.footerBgColor ?? "#FFFFFF";
+
   return (
     <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4">
+        <SectionColorPicker
+          label="Call-to-Action Background"
+          hint="The bottom action band."
+          value={finalCtaBg}
+          isOverridden={!!fields.finalCtaBgColor}
+          onChange={(hex) => setField("finalCtaBgColor", hex)}
+          onReset={() => setField("finalCtaBgColor", undefined)}
+        />
+        <SectionColorPicker
+          label="Footer Background"
+          hint="Below the action band."
+          value={footerBg}
+          isOverridden={!!fields.footerBgColor}
+          onChange={(hex) => setField("footerBgColor", hex)}
+          onReset={() => setField("footerBgColor", undefined)}
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <Field label="Event Date" hint="Edit to differ from the Hero section">
           <RichInput

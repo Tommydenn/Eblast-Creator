@@ -3,6 +3,7 @@
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
+import { SectionColorPicker } from "@/components/drafter/SectionColorPicker";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -28,8 +29,30 @@ export default function HeroSection() {
         .filter(Boolean).join(", ")
     : "";
 
+  const headerBg = fields.headerBgColor ?? community?.brand.background ?? "#ffffff";
+  const heroBg = fields.heroBgColor ?? community?.brand.primary ?? "#000000";
+
   return (
     <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4">
+        <SectionColorPicker
+          label="Header Background"
+          hint="The logo bar at the very top."
+          value={headerBg}
+          isOverridden={!!fields.headerBgColor}
+          onChange={(hex) => setField("headerBgColor", hex)}
+          onReset={() => setField("headerBgColor", undefined)}
+        />
+        <SectionColorPicker
+          label="Hero Background"
+          hint="Behind the headline and call button."
+          value={heroBg}
+          isOverridden={!!fields.heroBgColor}
+          onChange={(hex) => setField("heroBgColor", hex)}
+          onReset={() => setField("heroBgColor", undefined)}
+        />
+      </div>
+
       <Field label="Headline">
         <RichInput
           value={fields.headline}

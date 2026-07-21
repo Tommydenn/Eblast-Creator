@@ -27,6 +27,11 @@ export default function CtaSection() {
 
   const finalCtaBg = fields.finalCtaBgColor ?? community?.brand.accent ?? "#000000";
   const footerBg = fields.footerBgColor ?? "#FFFFFF";
+  const finalCtaButtonBg = fields.finalCtaButtonBgColor ?? community?.brand.primary ?? "#000000";
+  const footerButtonBg = fields.footerButtonBgColor ?? community?.brand.primary ?? "#000000";
+  const brandColors = community
+    ? [community.brand.primary, community.brand.accent, community.brand.background, community.brand.secondary, ...(community.brand.supporting ?? [])].filter(Boolean) as string[]
+    : [];
 
   return (
     <div className="space-y-5">
@@ -36,6 +41,7 @@ export default function CtaSection() {
           hint="The bottom action band."
           value={finalCtaBg}
           isOverridden={!!fields.finalCtaBgColor}
+          brandColors={brandColors}
           onChange={(hex) => setField("finalCtaBgColor", hex)}
           onReset={() => setField("finalCtaBgColor", undefined)}
         />
@@ -44,8 +50,27 @@ export default function CtaSection() {
           hint="Below the action band."
           value={footerBg}
           isOverridden={!!fields.footerBgColor}
+          brandColors={brandColors}
           onChange={(hex) => setField("footerBgColor", hex)}
           onReset={() => setField("footerBgColor", undefined)}
+        />
+        <SectionColorPicker
+          label="Call Button Color"
+          hint="The bottom band's call button."
+          value={finalCtaButtonBg}
+          isOverridden={!!fields.finalCtaButtonBgColor}
+          brandColors={brandColors}
+          onChange={(hex) => setField("finalCtaButtonBgColor", hex)}
+          onReset={() => setField("finalCtaButtonBgColor", undefined)}
+        />
+        <SectionColorPicker
+          label="Visit Website Button Color"
+          hint="The footer's website button."
+          value={footerButtonBg}
+          isOverridden={!!fields.footerButtonBgColor}
+          brandColors={brandColors}
+          onChange={(hex) => setField("footerButtonBgColor", hex)}
+          onReset={() => setField("footerButtonBgColor", undefined)}
         />
       </div>
 

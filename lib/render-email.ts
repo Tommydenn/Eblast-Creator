@@ -248,6 +248,11 @@ export function buildEblastHtml(
   const heroBg = flyer.heroBgColor ?? brand.primary;
   const finalCtaBg = flyer.finalCtaBgColor ?? brand.accent;
   const footerBg = flyer.footerBgColor ?? "#FFFFFF";
+  // Same idea for the three buttons — each independently overridable now
+  // (previously they shared brand.accent/brand.primary directly).
+  const ctaButtonBg = flyer.ctaButtonBgColor ?? brand.accent;
+  const finalCtaButtonBg = flyer.finalCtaButtonBgColor ?? brand.primary;
+  const footerButtonBg = flyer.footerButtonBgColor ?? brand.primary;
 
   const heroCta = reconcileCtaLabel(flyer.ctaButtonLabel);
   const finalCtaLabel = reconcileCtaLabel(flyer.finalCtaButtonLabel ?? flyer.ctaButtonLabel);
@@ -264,7 +269,7 @@ export function buildEblastHtml(
 
   const header = `
   <tr data-section="Header">
-    <td class="glm-bg-header" bgcolor="${headerBg}" style="padding: 22px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center">
+    <td class="glm-bg-header" bgcolor="${headerBg}" style="padding: 22px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center" data-bgfield="headerBgColor">
       ${logoContent}
     </td>
   </tr>`;
@@ -280,7 +285,7 @@ export function buildEblastHtml(
           </td>
         </tr>` : ""}
         <tr>
-          <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center">
+          <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
             ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
             <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
@@ -299,8 +304,8 @@ export function buildEblastHtml(
             </table>` : ""}
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
-                <td width="${ctaBtnWidth}" class="glm-bg-accent" bgcolor="${brand.accent}" align="center" style="background:${brand.accent};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.accent)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
+                <td width="${ctaBtnWidth}" class="glm-bg-herobtn" bgcolor="${ctaButtonBg}" align="center" style="background:${ctaButtonBg};" data-bgfield="ctaButtonBgColor">
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", ctaButtonBg)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
                 </td>
               </tr>
             </table>
@@ -382,15 +387,15 @@ export function buildEblastHtml(
   const finalCta = `
   <tr data-section="Call to Action">
     <td>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>
-                <td width="${finalCtaLabel.width}" class="glm-bg-primary" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">
-                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${finalCtaLabel.fontSize}px; letter-spacing:${finalCtaLabel.letterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${finalCtaLabel.displayHtml}</a>
+                <td width="${finalCtaLabel.width}" class="glm-bg-finalctabtn" bgcolor="${finalCtaButtonBg}" align="center" style="background:${finalCtaButtonBg};" data-bgfield="finalCtaButtonBgColor">
+                  <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", finalCtaButtonBg)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${finalCtaLabel.fontSize}px; letter-spacing:${finalCtaLabel.letterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${finalCtaLabel.displayHtml}</a>
                 </td>
               </tr>
             </table>
@@ -408,12 +413,12 @@ export function buildEblastHtml(
 
   const footer = `
   <tr data-section="Footer">
-    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center">
+    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center" data-bgfield="footerBgColor">
       ${websiteHref ? `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
-          <td width="220" class="glm-bg-primary" bgcolor="${brand.primary}" align="center" style="background:${brand.primary};">
-            <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", brand.primary)}; text-decoration:none; font-family:${brand.fontBody}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Website"}</a>
+          <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg};" data-bgfield="footerButtonBgColor">
+            <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${brand.fontBody}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Website"}</a>
           </td>
         </tr>
       </table>` : ""}
@@ -447,10 +452,11 @@ export function buildEblastHtml(
   [data-ogsc] .glm-bg-outer, [data-ogsb] .glm-bg-outer { background-color: #f5f5f5 !important; }
   [data-ogsc] .glm-bg-white, [data-ogsb] .glm-bg-white { background-color: #ffffff !important; }
   [data-ogsc] .glm-bg-header, [data-ogsb] .glm-bg-header { background-color: ${headerBg} !important; }
-  [data-ogsc] .glm-bg-primary, [data-ogsb] .glm-bg-primary { background-color: ${brand.primary} !important; }
-  [data-ogsc] .glm-bg-accent, [data-ogsb] .glm-bg-accent { background-color: ${brand.accent} !important; }
   [data-ogsc] .glm-bg-hero, [data-ogsb] .glm-bg-hero { background-color: ${heroBg} !important; }
   [data-ogsc] .glm-bg-finalcta, [data-ogsb] .glm-bg-finalcta { background-color: ${finalCtaBg} !important; }
+  [data-ogsc] .glm-bg-herobtn, [data-ogsb] .glm-bg-herobtn { background-color: ${ctaButtonBg} !important; }
+  [data-ogsc] .glm-bg-finalctabtn, [data-ogsb] .glm-bg-finalctabtn { background-color: ${finalCtaButtonBg} !important; }
+  [data-ogsc] .glm-bg-footerbtn, [data-ogsb] .glm-bg-footerbtn { background-color: ${footerButtonBg} !important; }
   [data-ogsc] .glm-bg-footer, [data-ogsb] .glm-bg-footer { background-color: ${footerBg} !important; }
 </style>
 </head>

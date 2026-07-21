@@ -121,4 +121,9 @@ export interface ExtractedFlyer {
   heroBgColor?: string;
   finalCtaBgColor?: string;
   footerBgColor?: string;
+
+  /** Same idea, for the three buttons — each independent of the others. */
+  ctaButtonBgColor?: string;
+  finalCtaButtonBgColor?: string;
+  footerButtonBgColor?: string;
 }

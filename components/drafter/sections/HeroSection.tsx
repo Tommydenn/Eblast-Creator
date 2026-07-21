@@ -31,6 +31,10 @@ export default function HeroSection() {
 
   const headerBg = fields.headerBgColor ?? community?.brand.background ?? "#ffffff";
   const heroBg = fields.heroBgColor ?? community?.brand.primary ?? "#000000";
+  const ctaButtonBg = fields.ctaButtonBgColor ?? community?.brand.accent ?? "#000000";
+  const brandColors = community
+    ? [community.brand.primary, community.brand.accent, community.brand.background, community.brand.secondary, ...(community.brand.supporting ?? [])].filter(Boolean) as string[]
+    : [];
 
   return (
     <div className="space-y-5">
@@ -40,6 +44,7 @@ export default function HeroSection() {
           hint="The logo bar at the very top."
           value={headerBg}
           isOverridden={!!fields.headerBgColor}
+          brandColors={brandColors}
           onChange={(hex) => setField("headerBgColor", hex)}
           onReset={() => setField("headerBgColor", undefined)}
         />
@@ -48,8 +53,18 @@ export default function HeroSection() {
           hint="Behind the headline and call button."
           value={heroBg}
           isOverridden={!!fields.heroBgColor}
+          brandColors={brandColors}
           onChange={(hex) => setField("heroBgColor", hex)}
           onReset={() => setField("heroBgColor", undefined)}
+        />
+        <SectionColorPicker
+          label="Call Button Color"
+          hint="The hero's call-to-action button."
+          value={ctaButtonBg}
+          isOverridden={!!fields.ctaButtonBgColor}
+          brandColors={brandColors}
+          onChange={(hex) => setField("ctaButtonBgColor", hex)}
+          onReset={() => setField("ctaButtonBgColor", undefined)}
         />
       </div>
 

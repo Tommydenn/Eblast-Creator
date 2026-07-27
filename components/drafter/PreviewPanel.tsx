@@ -30,62 +30,57 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   // hovered element) since some hovered elements are near-zero-height table
   // rows that can't usefully contain an overlay child.
   //
-  // Removal is debounced rather than instant: the button sits at the edge of
-  // its target, outside the target's own DOM subtree, so as the mouse moves
-  // toward it there's a brief moment where the pointer is over neither the
-  // target nor the button (a sub-pixel gap, or momentarily over the iframe's
-  // background). Removing it immediately on that transient mouseover-loss
-  // caused a flicker (and could delete the button out from under an in-flight
-  // click). A short grace period, cancelled if the mouse re-enters either the
-  // target or the button, fixes both.
+  // Show/hide tracking is purely geometric (mousemove + point-in-rect against
+  // the target's and button's own rects), not based on which DOM node a
+  // mouseover/mouseout event reports as its target. The button lives outside
+  // the target's own DOM subtree, in a deeply nested table-based email layout
+  // — relying on discrete mouseover/mouseout event identity across that gap
+  // proved unreliable with a real mouse (it worked under synthetic dispatched
+  // events, which bypass real hit-testing, but not for an actual cursor).
+  // Testing "is the real cursor currently within the target OR button
+  // rectangle" on every mousemove sidesteps that entirely.
   var delBtn=null;
+  var delTarget=null;
   var removeTimer=null;
   function cancelRemove(){
     if(removeTimer){ clearTimeout(removeTimer); removeTimer=null; }
   }
-  function removeDelBtnNow(){
+  function hideDelBtn(){
     cancelRemove();
     if(delBtn){ delBtn.remove(); delBtn=null; }
+    delTarget=null;
   }
-  function scheduleRemoveDelBtn(){
+  function scheduleHideDelBtn(){
     cancelRemove();
-    removeTimer=setTimeout(function(){ removeTimer=null; if(delBtn){ delBtn.remove(); delBtn=null; } },200);
+    removeTimer=setTimeout(function(){ removeTimer=null; hideDelBtn(); },200);
   }
-  function showDelBtn(target){
+  function showDelBtnFor(target){
     cancelRemove();
-    // delBtn.isConnected guards against a stale reference: patchIframe()
-    // rewrites doc.body.innerHTML on every edit, which silently detaches an
-    // on-screen delete button from the page without this script knowing —
-    // without this check, delBtn stays truthy (pointing at the now-invisible
-    // detached node) and this would skip recreating a real, visible one.
-    if(delBtn && delBtn.__target===target && delBtn.isConnected) return;
-    removeDelBtnNow();
+    if(delTarget===target && delBtn && delBtn.isConnected) return;
+    hideDelBtn();
+    delTarget=target;
     var rect=target.getBoundingClientRect();
     var btn=document.createElement('div');
     btn.textContent='\\u00d7';
     btn.setAttribute('data-delete-btn','1');
-    btn.__target=target;
     btn.style.cssText='position:fixed;left:'+(rect.right-24)+'px;top:'+(rect.top+4)+'px;width:20px;height:20px;line-height:19px;text-align:center;background:#b3312c;color:#fff;border-radius:50%;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;cursor:pointer;z-index:99999;box-shadow:0 1px 3px rgba(0,0,0,0.35);user-select:none;';
-    btn.addEventListener('mouseover',function(e){ e.stopPropagation(); cancelRemove(); });
-    btn.addEventListener('mousedown',function(e){ e.preventDefault(); e.stopPropagation(); });
-    btn.addEventListener('click',function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      var r=target.getBoundingClientRect();
-      window.parent.postMessage({type:'delete-click',field:target.dataset.deletefield,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
-      removeDelBtnNow();
-    });
     document.body.appendChild(btn);
     delBtn=btn;
   }
+  function pointInRect(x,y,rect,pad){
+    pad=pad||0;
+    return x>=rect.left-pad && x<=rect.right+pad && y>=rect.top-pad && y<=rect.bottom+pad;
+  }
 
-  document.addEventListener('mouseover',function(e){
-    if(e.target&&e.target.getAttribute&&e.target.getAttribute('data-delete-btn')==='1'){ cancelRemove(); return; }
-    var found=findAncestors(e.target,['bgfield','deletefield','section']);
+  document.addEventListener('mousemove',function(e){
+    var x=e.clientX, y=e.clientY;
+    if(delBtn && pointInRect(x,y,delBtn.getBoundingClientRect(),4)){ cancelRemove(); return; }
+    var el=document.elementFromPoint(x,y);
+    var found=el?findAncestors(el,['bgfield','deletefield','section']):{};
     document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield]').forEach(function(s){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
-    if(found.deletefield){ showDelBtn(found.deletefield); } else { scheduleRemoveDelBtn(); }
+    if(found.deletefield){ showDelBtnFor(found.deletefield); } else { scheduleHideDelBtn(); }
     if(found.bgfield){
       found.bgfield.style.outline='2px dashed rgba(31,69,56,0.55)';
       found.bgfield.style.outlineOffset='-2px';
@@ -101,11 +96,25 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
     document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield]').forEach(function(s){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
-    removeDelBtnNow();
+    hideDelBtn();
+  },true);
+
+  document.addEventListener('mousedown',function(e){
+    if(delBtn && pointInRect(e.clientX,e.clientY,delBtn.getBoundingClientRect(),4)){
+      e.preventDefault();
+      e.stopPropagation();
+    }
   },true);
 
   document.addEventListener('click',function(e){
-    if(e.target&&e.target.getAttribute&&e.target.getAttribute('data-delete-btn')==='1') return;
+    if(delBtn && delTarget && pointInRect(e.clientX,e.clientY,delBtn.getBoundingClientRect(),4)){
+      e.preventDefault();
+      e.stopPropagation();
+      var r=delTarget.getBoundingClientRect();
+      window.parent.postMessage({type:'delete-click',field:delTarget.dataset.deletefield,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
+      hideDelBtn();
+      return;
+    }
     var found=findAncestors(e.target,['bgfield','section']);
     if(found.bgfield){
       e.preventDefault();

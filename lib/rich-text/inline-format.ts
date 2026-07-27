@@ -217,15 +217,57 @@ export function serializeInline(root: Element): string {
   return runsToHtml(trimEnds(collectRuns(root, root)));
 }
 
-/** Serialize a multi-paragraph body (one <div> per paragraph) to a string[]. */
+/**
+ * Serialize a multi-paragraph body (one <div> per paragraph) to a string[].
+ *
+ * Root-level content isn't always cleanly one <div> per paragraph — pasting
+ * text (or, in some browsers, typing at particular caret positions) can land
+ * as a loose text node sitting directly under root, as a SIBLING of the
+ * existing paragraph <div>s rather than inside one. That content is still a
+ * real child of root, so it must be captured — the previous implementation
+ * only ever read `root.children` filtered to <div> tags and silently dropped
+ * anything else, which is why pasted/typed text could vanish from the output
+ * paragraph one was created. Walking every child node in order and grouping
+ * non-div runs into their own paragraph fixes that, while being byte-for-byte
+ * identical to the old output whenever the DOM is already well-formed (every
+ * top-level child a <div>, the common case).
+ */
 export function serializeBlocks(root: Element): string[] {
-  const divs = Array.from(root.children).filter((c) => c.tagName === "DIV") as HTMLElement[];
-  let blocks: string[];
-  if (divs.length === 0) {
-    blocks = [serializeInline(root)];
-  } else {
-    blocks = divs.map((d) => runsToHtml(trimEnds(collectRuns(d, d))));
+  const hasDiv = Array.from(root.children).some((c) => c.tagName === "DIV");
+  if (!hasDiv) {
+    const nonEmpty = [serializeInline(root)].filter((b) => b !== "" && b !== "<br>");
+    return nonEmpty.length ? nonEmpty : [""];
   }
+
+  const blocks: string[] = [];
+  let looseRuns: Run[] = [];
+  const flushLoose = () => {
+    if (looseRuns.length) {
+      blocks.push(runsToHtml(trimEnds(looseRuns)));
+      looseRuns = [];
+    }
+  };
+  const pushRun = (run: Run) => {
+    if (run.text === "") return;
+    const last = looseRuns[looseRuns.length - 1];
+    if (last && stylesEqual(last.style, run.style)) last.text += run.text;
+    else looseRuns.push({ text: run.text, style: { ...run.style } });
+  };
+
+  for (const child of Array.from(root.childNodes)) {
+    if (child.nodeType === Node.ELEMENT_NODE && (child as Element).tagName === "DIV") {
+      flushLoose();
+      const d = child as HTMLElement;
+      blocks.push(runsToHtml(trimEnds(collectRuns(d, d))));
+    } else if (child.nodeType === Node.TEXT_NODE) {
+      const text = (child.nodeValue || "").replace(/ /g, " ");
+      if (text !== "") pushRun({ text, style: effectiveFormat(child, root) });
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      for (const run of collectRuns(child as Element, root)) pushRun(run);
+    }
+  }
+  flushLoose();
+
   const nonEmpty = blocks.filter((b) => b !== "" && b !== "<br>");
   return nonEmpty.length ? nonEmpty : [""];
 }

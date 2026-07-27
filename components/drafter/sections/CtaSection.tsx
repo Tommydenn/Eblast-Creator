@@ -4,6 +4,7 @@ import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
 import { SectionColorPicker } from "@/components/drafter/SectionColorPicker";
+import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -35,6 +36,16 @@ export default function CtaSection() {
 
   return (
     <div className="space-y-5">
+      {fields.finalCtaSectionHidden && (
+        <HiddenBanner label="The Call-to-Action section" onRestore={() => setField("finalCtaSectionHidden", undefined)} />
+      )}
+      {fields.finalCtaButtonHidden && (
+        <HiddenBanner label="The bottom call button" onRestore={() => setField("finalCtaButtonHidden", undefined)} />
+      )}
+      {fields.footerButtonHidden && (
+        <HiddenBanner label="The Visit Website button" onRestore={() => setField("footerButtonHidden", undefined)} />
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <SectionColorPicker
           label="Call-to-Action Background"

@@ -4,6 +4,7 @@ import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
 import { SectionColorPicker } from "@/components/drafter/SectionColorPicker";
+import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -38,6 +39,13 @@ export default function HeroSection() {
 
   return (
     <div className="space-y-5">
+      {fields.heroSectionHidden && (
+        <HiddenBanner label="The Hero section" onRestore={() => setField("heroSectionHidden", undefined)} />
+      )}
+      {fields.ctaButtonHidden && (
+        <HiddenBanner label="The hero's call button" onRestore={() => setField("ctaButtonHidden", undefined)} />
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <SectionColorPicker
           label="Header Background"

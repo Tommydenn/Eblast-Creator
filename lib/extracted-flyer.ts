@@ -126,4 +126,22 @@ export interface ExtractedFlyer {
   ctaButtonBgColor?: string;
   finalCtaButtonBgColor?: string;
   footerButtonBgColor?: string;
+
+  /**
+   * Manual per-draft "hide this section/button" toggles, set only from the
+   * editor (hover-delete in the preview, or the sidebar's restore banner).
+   * Non-destructive: hiding never clears the underlying content (text, image
+   * assignment, community website, etc.) — it's purely a display flag, so
+   * turning it back off restores exactly what was there before. Header and
+   * Footer themselves are never hideable (logo/branding and required sender
+   * contact info), but the Footer's own "Visit Website" button is.
+   */
+  heroSectionHidden?: boolean;
+  storySectionHidden?: boolean;
+  secondaryImageSectionHidden?: boolean;
+  gallerySectionHidden?: boolean;
+  finalCtaSectionHidden?: boolean;
+  ctaButtonHidden?: boolean;
+  finalCtaButtonHidden?: boolean;
+  footerButtonHidden?: boolean;
 }

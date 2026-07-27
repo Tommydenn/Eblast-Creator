@@ -2,6 +2,7 @@
 
 import React, { useRef } from "react";
 import { useDraft } from "@/context/DraftContext";
+import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
 function SlotCard({
   label,
@@ -185,7 +186,7 @@ type ActivePicker = { slot: "hero" | "secondary" | "gallery"; galleryIdx?: numbe
 type ActiveReposition = { slot: "hero" | "secondary" | "gallery"; galleryIdx?: number; originalUrl: string } | null;
 
 export default function ImagesSection() {
-  const { images, imageBank, assignImage, assignGalleryImage, removeImage, repositionImage, addToImageBank } = useDraft();
+  const { images, imageBank, assignImage, assignGalleryImage, removeImage, repositionImage, addToImageBank, fields, setField } = useDraft();
   const [picker, setPicker] = React.useState<ActivePicker>(null);
   const [reposition, setReposition] = React.useState<ActiveReposition>(null);
 
@@ -206,6 +207,10 @@ export default function ImagesSection() {
 
   return (
     <div className="space-y-4">
+      {fields?.gallerySectionHidden && (
+        <HiddenBanner label="The photo gallery" onRestore={() => setField("gallerySectionHidden", undefined)} />
+      )}
+
       <SlotCard
         label="Hero Image"
         url={images.hero?.url}

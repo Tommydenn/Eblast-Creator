@@ -274,8 +274,8 @@ export function buildEblastHtml(
     </td>
   </tr>`;
 
-  const hero = `
-  <tr data-section="Hero">
+  const hero = flyer.heroSectionHidden ? "" : `
+  <tr data-section="Hero" data-deletefield="heroSectionHidden">
     <td>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
         ${heroImg ? `
@@ -302,13 +302,14 @@ export function buildEblastHtml(
                 </td>
               </tr>
             </table>` : ""}
+            ${flyer.ctaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
-                <td width="${ctaBtnWidth}" class="glm-bg-herobtn" bgcolor="${ctaButtonBg}" align="center" style="background:${ctaButtonBg};" data-bgfield="ctaButtonBgColor">
+                <td width="${ctaBtnWidth}" class="glm-bg-herobtn" bgcolor="${ctaButtonBg}" align="center" style="background:${ctaButtonBg};" data-bgfield="ctaButtonBgColor" data-deletefield="ctaButtonHidden">
                   <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", ctaButtonBg)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
                 </td>
               </tr>
-            </table>
+            </table>`}
           </td>
         </tr>
       </table>
@@ -316,19 +317,20 @@ export function buildEblastHtml(
   </tr>`;
 
   const story = `
-  <tr data-section="Story">
+  ${flyer.storySectionHidden ? "" : `
+  <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 44px 36px 12px 36px;">
       <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(flyer.storyEyebrow)}</p>
       ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
-  <tr data-section="Story">
+  <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 0 36px 28px 36px;">
       <p data-field="bodyParagraphs" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => renderBodyParagraph(p)).join("<br><br>")}</p>
     </td>
-  </tr>
-  ${secondaryImg ? `
-  <tr data-section="Secondary Image">
+  </tr>`}
+  ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
+  <tr data-section="Secondary Image" data-deletefield="secondaryImageSectionHidden">
     <td style="padding: 0 36px 28px 36px;">
       <img src="${secondaryImg}" data-img-label="Secondary image" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:528px; max-width:100%; height:auto; border:0;">
     </td>
@@ -340,6 +342,7 @@ export function buildEblastHtml(
   // Sits between the story and the final CTA.
   // Requires at least 2 images — a single orphaned photo looks unfinished.
   const gallery = (() => {
+    if (flyer.gallerySectionHidden) return "";
     if (galleryImgs.length === 0) return "";
 
     // 1 image → full-width; 2 images → 2-up; 3 → 3-up; 4+ → 2×2 grid.
@@ -356,12 +359,12 @@ export function buildEblastHtml(
     }
 
     return `
-  <tr data-section="Photo Gallery">
+  <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
     <td style="padding: 44px 36px 12px 36px;" align="center">
       <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${flyer.galleryLabel ? renderInlineField(flyer.galleryLabel) : escapeHtml(`A Look Around ${community.shortName}`)}</p>
     </td>
   </tr>
-  <tr data-section="Photo Gallery">
+  <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
     <td style="padding: 16px 36px 32px 36px;">
       <table role="presentation" cellpadding="0" cellspacing="6" border="0" width="100%" style="border-collapse:separate; border-spacing:6px;">
         ${rows
@@ -384,21 +387,22 @@ export function buildEblastHtml(
   </tr>`;
   })();
 
-  const finalCta = `
-  <tr data-section="Call to Action">
+  const finalCta = flyer.finalCtaSectionHidden ? "" : `
+  <tr data-section="Call to Action" data-deletefield="finalCtaSectionHidden">
     <td>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
+            ${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>
-                <td width="${finalCtaLabel.width}" class="glm-bg-finalctabtn" bgcolor="${finalCtaButtonBg}" align="center" style="background:${finalCtaButtonBg};" data-bgfield="finalCtaButtonBgColor">
+                <td width="${finalCtaLabel.width}" class="glm-bg-finalctabtn" bgcolor="${finalCtaButtonBg}" align="center" style="background:${finalCtaButtonBg};" data-bgfield="finalCtaButtonBgColor" data-deletefield="finalCtaButtonHidden">
                   <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", finalCtaButtonBg)}; text-decoration:none; font-family:${brand.fontBody}; font-size:${finalCtaLabel.fontSize}px; letter-spacing:${finalCtaLabel.letterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${finalCtaLabel.displayHtml}</a>
                 </td>
               </tr>
-            </table>
+            </table>`}
           </td>
         </tr>
       </table>
@@ -414,10 +418,10 @@ export function buildEblastHtml(
   const footer = `
   <tr data-section="Footer">
     <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center" data-bgfield="footerBgColor">
-      ${websiteHref ? `
+      ${(websiteHref && !flyer.footerButtonHidden) ? `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
-          <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg};" data-bgfield="footerButtonBgColor">
+          <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg};" data-bgfield="footerButtonBgColor" data-deletefield="footerButtonHidden">
             <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${brand.fontBody}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Website"}</a>
           </td>
         </tr>

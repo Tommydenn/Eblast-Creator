@@ -6,11 +6,13 @@ import type { EditorSection } from "@/context/DraftContext";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { buildEblastHtml } from "@/lib/render-email";
 import { ColorPickerPopover } from "@/components/drafter/ColorPickerPopover";
+import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
 
 const PREVIEW_SCRIPT = /* javascript */`(function(){
   // Walk from the event target up to <body>, returning the innermost element
-  // matching each of the given dataset keys (bgfield is checked first/innermost
-  // since a button's data-bgfield sits inside its section's data-bgfield).
+  // matching each of the given dataset keys (bgfield/deletefield checked
+  // first/innermost since a button's data-bgfield/data-deletefield sits
+  // inside its section's).
   function findAncestors(target, keys){
     var found={};
     var el=target;
@@ -24,11 +26,41 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
     return found;
   }
 
+  // Floating "x" delete button — appended to <body> directly (not inside the
+  // hovered element) since some hovered elements are near-zero-height table
+  // rows that can't usefully contain an overlay child.
+  var delBtn=null;
+  function removeDelBtn(){
+    if(delBtn){ delBtn.remove(); delBtn=null; }
+  }
+  function showDelBtn(target){
+    if(delBtn && delBtn.__target===target) return;
+    removeDelBtn();
+    var rect=target.getBoundingClientRect();
+    var btn=document.createElement('div');
+    btn.textContent='\\u00d7';
+    btn.setAttribute('data-delete-btn','1');
+    btn.__target=target;
+    btn.style.cssText='position:fixed;left:'+(rect.right-24)+'px;top:'+(rect.top+4)+'px;width:20px;height:20px;line-height:19px;text-align:center;background:#b3312c;color:#fff;border-radius:50%;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;cursor:pointer;z-index:99999;box-shadow:0 1px 3px rgba(0,0,0,0.35);user-select:none;';
+    btn.addEventListener('mousedown',function(e){ e.preventDefault(); e.stopPropagation(); });
+    btn.addEventListener('click',function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      var r=target.getBoundingClientRect();
+      window.parent.postMessage({type:'delete-click',field:target.dataset.deletefield,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
+      removeDelBtn();
+    });
+    document.body.appendChild(btn);
+    delBtn=btn;
+  }
+
   document.addEventListener('mouseover',function(e){
-    var found=findAncestors(e.target,['bgfield','section']);
-    document.querySelectorAll('[data-section],[data-bgfield]').forEach(function(s){
+    if(e.target&&e.target.getAttribute&&e.target.getAttribute('data-delete-btn')==='1') return;
+    var found=findAncestors(e.target,['bgfield','deletefield','section']);
+    document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield]').forEach(function(s){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
+    if(found.deletefield){ showDelBtn(found.deletefield); } else { removeDelBtn(); }
     if(found.bgfield){
       found.bgfield.style.outline='2px dashed rgba(31,69,56,0.55)';
       found.bgfield.style.outlineOffset='-2px';
@@ -41,12 +73,14 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   },true);
 
   document.addEventListener('mouseleave',function(){
-    document.querySelectorAll('[data-section],[data-bgfield]').forEach(function(s){
+    document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield]').forEach(function(s){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
+    removeDelBtn();
   },true);
 
   document.addEventListener('click',function(e){
+    if(e.target&&e.target.getAttribute&&e.target.getAttribute('data-delete-btn')==='1') return;
     var found=findAncestors(e.target,['bgfield','section']);
     if(found.bgfield){
       e.preventDefault();
@@ -105,6 +139,24 @@ function defaultForBgField(key: BgFieldKey, community: any): string {
   }
 }
 
+// Every hover-delete target — human label for the confirm popover. Header and
+// Footer themselves are intentionally absent (never deletable — branding and
+// required sender contact info), but the Footer's own website button is.
+type DeleteFieldKey =
+  | "heroSectionHidden" | "storySectionHidden" | "secondaryImageSectionHidden" | "gallerySectionHidden"
+  | "finalCtaSectionHidden" | "ctaButtonHidden" | "finalCtaButtonHidden" | "footerButtonHidden";
+
+const DELETE_FIELD_LABELS: Record<DeleteFieldKey, string> = {
+  heroSectionHidden: "the Hero section",
+  storySectionHidden: "the Story section",
+  secondaryImageSectionHidden: "the secondary image",
+  gallerySectionHidden: "the photo gallery",
+  finalCtaSectionHidden: "the Call-to-Action section",
+  ctaButtonHidden: "the hero's call button",
+  finalCtaButtonHidden: "the bottom call button",
+  footerButtonHidden: "the Visit Website button",
+};
+
 function injectScript(doc: Document) {
   if (doc.body.querySelector("[data-preview-script]")) return;
   const s = doc.createElement("script");
@@ -125,6 +177,7 @@ export default function PreviewPanel() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [bgPopover, setBgPopover] = useState<{ field: BgFieldKey; left: number; top: number } | null>(null);
+  const [deletePopover, setDeletePopover] = useState<{ field: DeleteFieldKey; left: number; top: number } | null>(null);
 
   const html = useMemo(() => {
     if (!fields || !community) return "";
@@ -193,6 +246,17 @@ export default function PreviewPanel() {
           left: iframeRect.left - containerRect.left + (e.data.left as number),
           top: iframeRect.top - containerRect.top + (e.data.bottom as number),
         });
+        return;
+      }
+      if (e.data.type === "delete-click") {
+        const iframeRect = iframeRef.current?.getBoundingClientRect();
+        const containerRect = containerRef.current?.getBoundingClientRect();
+        if (!iframeRect || !containerRect) return;
+        setDeletePopover({
+          field: e.data.field as DeleteFieldKey,
+          left: iframeRect.left - containerRect.left + (e.data.left as number),
+          top: iframeRect.top - containerRect.top + (e.data.bottom as number),
+        });
       }
     }
     window.addEventListener("message", handler);
@@ -249,6 +313,22 @@ export default function PreviewPanel() {
               }
               resetLabel={`Reset ${BG_FIELD_LABELS[bgPopover.field]} to default`}
               onClose={() => setBgPopover(null)}
+            />
+          </div>
+        </>
+      )}
+
+      {deletePopover && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setDeletePopover(null)} />
+          <div className="absolute z-40" style={{ left: deletePopover.left, top: deletePopover.top + 4 }}>
+            <DeleteConfirmPopover
+              label={DELETE_FIELD_LABELS[deletePopover.field]}
+              onConfirm={() => {
+                setField(deletePopover.field as keyof ExtractedFlyer, true as never);
+                setDeletePopover(null);
+              }}
+              onCancel={() => setDeletePopover(null)}
             />
           </div>
         </>

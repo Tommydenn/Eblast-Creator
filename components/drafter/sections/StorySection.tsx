@@ -3,6 +3,7 @@
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, RichBodyEditor } from "@/components/drafter/RichEditor";
+import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
 function Field({
   label,
@@ -36,6 +37,13 @@ export default function StorySection() {
 
   return (
     <div className="space-y-5">
+      {fields.storySectionHidden && (
+        <HiddenBanner label="The Story section" onRestore={() => setField("storySectionHidden", undefined)} />
+      )}
+      {fields.secondaryImageSectionHidden && (
+        <HiddenBanner label="The secondary image" onRestore={() => setField("secondaryImageSectionHidden", undefined)} />
+      )}
+
       <Field label="Section Eyebrow" hint="Small label above the story section">
         <RichInput
           value={fields.storyEyebrow}

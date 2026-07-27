@@ -282,6 +282,16 @@ export const savedDrafts = pgTable("saved_drafts", {
    * Approved drafts are exempt from the per-community cap-eviction below.
    */
   approvedAt: timestamp("approved_at", { withTimezone: true }),
+  /**
+   * Soft-delete marker. Set when the user deletes a draft from the Saved
+   * Drafts list — the row (and its data/images/approval history) stays
+   * intact and recoverable via the Deleted Drafts view until the daily
+   * purge cron hard-deletes it 30 days later (see
+   * app/api/cron/purge-deleted-drafts). Cap-eviction (the automatic
+   * per-community 8-draft limit) also soft-deletes rather than hard-deletes,
+   * for the same recoverability.
+   */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
 export type SavedDraftRow = InferSelectModel<typeof savedDrafts>;

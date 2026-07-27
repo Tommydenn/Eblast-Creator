@@ -4,6 +4,7 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import { useDraft, type SavedDraft } from "@/context/DraftContext";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
 import { Header } from "@/components/Header";
+import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
 
 // ─── Saved Drafts ─────────────────────────────────────────────────────────────
 
@@ -134,6 +135,7 @@ function SavedDraftsView() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterSlug, setFilterSlug] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<DraftMeta | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +167,8 @@ function SavedDraftsView() {
   const deleteDraft = useCallback(async (id: string) => {
     setDeletingId(id);
     try {
+      // Soft-delete (default, no ?permanent param) — moves it to Deleted
+      // Drafts, recoverable there for 30 days.
       const res = await fetch(`/api/saved-drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({ ok: false }));
       if (data.ok) setDrafts((prev) => prev.filter((d) => d.id !== id));
@@ -294,10 +298,236 @@ function SavedDraftsView() {
               isOpening={openingId === d.id}
               isDeleting={deletingId === d.id}
               onOpen={() => openDraft(d.id)}
-              onDelete={() => deleteDraft(d.id)}
+              onDelete={() => setConfirmDelete(d)}
             />
           ))}
         </div>
+      )}
+
+      {confirmDelete && (
+        <>
+          <div className="fixed inset-0 z-30 bg-black/20" onClick={() => setConfirmDelete(null)} />
+          <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto">
+              <DeleteConfirmPopover
+                label={confirmDelete.subject || "this draft"}
+                message={
+                  <>Delete <span className="font-semibold">{confirmDelete.subject || "this draft"}</span>?</>
+                }
+                footerNote="It'll move to Deleted Drafts, recoverable there for 30 days before it's permanently deleted."
+                onConfirm={() => {
+                  const id = confirmDelete.id;
+                  setConfirmDelete(null);
+                  deleteDraft(id);
+                }}
+                onCancel={() => setConfirmDelete(null)}
+              />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Deleted Drafts (trash, 30-day recovery) ──────────────────────────────────
+
+interface DeletedDraftMeta extends DraftMeta {
+  deletedAt: string;
+  purgeAt: string;
+}
+
+function daysUntil(iso: string): number {
+  const ms = new Date(iso).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+}
+
+function DeletedDraftCard({
+  draft,
+  accentColor,
+  isBusy,
+  onRestore,
+  onDeleteForever,
+}: {
+  draft: DeletedDraftMeta;
+  accentColor: string;
+  isBusy: boolean;
+  onRestore: () => void;
+  onDeleteForever: () => void;
+}) {
+  const relTime = new Date(draft.savedAt).toLocaleString(undefined, {
+    month: "numeric", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+  });
+  const daysLeft = daysUntil(draft.purgeAt);
+
+  return (
+    <div className="group relative flex bg-white rounded-xl border border-[#e8e3dc] overflow-hidden opacity-90">
+      <div className="w-1 shrink-0" style={{ backgroundColor: accentColor, opacity: 0.4 }} />
+      <div className="flex-1 min-w-0 p-4">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4] truncate">
+            {draft.communityName}
+          </p>
+          <p className="text-[10px] text-[#b0a89f] shrink-0">{relTime}</p>
+        </div>
+        <p className="text-sm font-medium leading-snug line-clamp-2 text-[#5a6b63]">
+          {draft.subject || "(no subject)"}
+        </p>
+        <div className="mt-3 flex items-center justify-between">
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700">
+            {daysLeft <= 0 ? "Deleting soon" : `Expires in ${daysLeft}d`}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onRestore}
+              disabled={isBusy}
+              className="text-[11px] font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1 transition-all disabled:opacity-40"
+            >
+              Restore
+            </button>
+            <button
+              onClick={onDeleteForever}
+              disabled={isBusy}
+              title="Delete forever"
+              className="p-1 rounded-lg text-[#c9c0b8] hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-30"
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeletedDraftsView() {
+  const { communities } = useDraft();
+  const [drafts, setDrafts] = useState<DeletedDraftMeta[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmPurge, setConfirmPurge] = useState<DeletedDraftMeta | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    return fetch("/api/saved-drafts/deleted")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) setDrafts(d.drafts);
+        else setFetchError(d.error ?? "Failed to load");
+      })
+      .catch((e) => setFetchError(String(e)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const restore = useCallback(async (id: string) => {
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/saved-drafts/${encodeURIComponent(id)}/restore`, { method: "POST" });
+      const data = await res.json().catch(() => ({ ok: false }));
+      if (data.ok) setDrafts((prev) => prev.filter((d) => d.id !== id));
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  const purgeForever = useCallback(async (id: string) => {
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/saved-drafts/${encodeURIComponent(id)}?permanent=1`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({ ok: false }));
+      if (data.ok) setDrafts((prev) => prev.filter((d) => d.id !== id));
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
+
+  const accentBySlug = new Map(communities.map((c) => [c.slug, c.brand.accent]));
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex bg-white rounded-xl border border-[#e8e3dc] overflow-hidden h-24 animate-pulse">
+            <div className="w-1 bg-[#e8e3dc]" />
+            <div className="flex-1 p-4 space-y-2">
+              <div className="h-2.5 bg-[#f0ede7] rounded w-2/5" />
+              <div className="h-3.5 bg-[#f0ede7] rounded w-4/5" />
+              <div className="h-2.5 bg-[#f5f3ef] rounded w-1/3" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="rounded-xl bg-red-50 border border-red-100 px-6 py-10 text-center">
+        <p className="text-sm text-red-600">Could not load deleted drafts</p>
+        <p className="mt-1 text-xs text-red-400">{fetchError}</p>
+      </div>
+    );
+  }
+
+  if (drafts.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-[#ddd8d0] px-8 py-20 text-center">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#f0ede7] mb-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9aaba4" strokeWidth="1.8">
+            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-[#5a6b63]">Nothing in Deleted Drafts</p>
+        <p className="mt-1.5 text-xs text-[#9aaba4]">Deleted drafts stay here for 30 days before being permanently removed.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-[#9aaba4]">
+        {drafts.length} {drafts.length === 1 ? "draft" : "drafts"} — each is permanently deleted 30 days after being removed.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {drafts.map((d) => (
+          <DeletedDraftCard
+            key={d.id}
+            draft={d}
+            accentColor={accentBySlug.get(d.communitySlug) ?? "#1F4538"}
+            isBusy={busyId === d.id}
+            onRestore={() => restore(d.id)}
+            onDeleteForever={() => setConfirmPurge(d)}
+          />
+        ))}
+      </div>
+
+      {confirmPurge && (
+        <>
+          <div className="fixed inset-0 z-30 bg-black/20" onClick={() => setConfirmPurge(null)} />
+          <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto">
+              <DeleteConfirmPopover
+                label={confirmPurge.subject || "this draft"}
+                message={
+                  <>Permanently delete <span className="font-semibold">{confirmPurge.subject || "this draft"}</span>?</>
+                }
+                confirmLabel="Delete Forever"
+                footerNote="This cannot be undone — it will not go through the 30-day recovery period."
+                onConfirm={() => {
+                  const id = confirmPurge.id;
+                  setConfirmPurge(null);
+                  purgeForever(id);
+                }}
+                onCancel={() => setConfirmPurge(null)}
+              />
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -327,7 +557,7 @@ export default function GenerateView() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [tab, setTab] = useState<"new" | "drafts">("new");
+  const [tab, setTab] = useState<"new" | "drafts" | "deleted">("new");
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
   const [isResuming, setIsResuming] = useState(false);
 
@@ -424,6 +654,15 @@ export default function GenerateView() {
               ].join(" ")}
             >
               Saved Drafts
+            </button>
+            <button
+              onClick={() => setTab("deleted")}
+              className={[
+                "px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
+                tab === "deleted" ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
+              ].join(" ")}
+            >
+              Deleted Drafts
             </button>
           </div>
 
@@ -581,8 +820,10 @@ export default function GenerateView() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : tab === "drafts" ? (
             <SavedDraftsView />
+          ) : (
+            <DeletedDraftsView />
           )}
         </div>
       </div>

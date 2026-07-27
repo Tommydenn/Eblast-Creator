@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sync-past-sends",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/purge-deleted-drafts",
+      "schedule": "30 6 * * *"
     }
   ]
 }

@@ -19,10 +19,19 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 // DELETE /api/saved-drafts/[id]
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+// Soft-deletes by default (moves to the Deleted Drafts view, recoverable for
+// 30 days — see app/api/cron/purge-deleted-drafts). Pass ?permanent=1 to
+// hard-delete immediately instead (used by the Deleted Drafts view's "Delete
+// Forever" action).
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;
+  const permanent = req.nextUrl.searchParams.get("permanent") === "1";
   try {
-    await db.delete(savedDrafts).where(eq(savedDrafts.id, id));
+    if (permanent) {
+      await db.delete(savedDrafts).where(eq(savedDrafts.id, id));
+    } else {
+      await db.update(savedDrafts).set({ deletedAt: new Date() }).where(eq(savedDrafts.id, id));
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[saved-drafts/[id] DELETE]", err);

@@ -29,38 +29,58 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   // Floating "x" delete button — appended to <body> directly (not inside the
   // hovered element) since some hovered elements are near-zero-height table
   // rows that can't usefully contain an overlay child.
+  //
+  // Removal is debounced rather than instant: the button sits at the edge of
+  // its target, outside the target's own DOM subtree, so as the mouse moves
+  // toward it there's a brief moment where the pointer is over neither the
+  // target nor the button (a sub-pixel gap, or momentarily over the iframe's
+  // background). Removing it immediately on that transient mouseover-loss
+  // caused a flicker (and could delete the button out from under an in-flight
+  // click). A short grace period, cancelled if the mouse re-enters either the
+  // target or the button, fixes both.
   var delBtn=null;
-  function removeDelBtn(){
+  var removeTimer=null;
+  function cancelRemove(){
+    if(removeTimer){ clearTimeout(removeTimer); removeTimer=null; }
+  }
+  function removeDelBtnNow(){
+    cancelRemove();
     if(delBtn){ delBtn.remove(); delBtn=null; }
   }
+  function scheduleRemoveDelBtn(){
+    cancelRemove();
+    removeTimer=setTimeout(function(){ removeTimer=null; if(delBtn){ delBtn.remove(); delBtn=null; } },200);
+  }
   function showDelBtn(target){
+    cancelRemove();
     if(delBtn && delBtn.__target===target) return;
-    removeDelBtn();
+    removeDelBtnNow();
     var rect=target.getBoundingClientRect();
     var btn=document.createElement('div');
     btn.textContent='\\u00d7';
     btn.setAttribute('data-delete-btn','1');
     btn.__target=target;
     btn.style.cssText='position:fixed;left:'+(rect.right-24)+'px;top:'+(rect.top+4)+'px;width:20px;height:20px;line-height:19px;text-align:center;background:#b3312c;color:#fff;border-radius:50%;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;cursor:pointer;z-index:99999;box-shadow:0 1px 3px rgba(0,0,0,0.35);user-select:none;';
+    btn.addEventListener('mouseover',function(e){ e.stopPropagation(); cancelRemove(); });
     btn.addEventListener('mousedown',function(e){ e.preventDefault(); e.stopPropagation(); });
     btn.addEventListener('click',function(e){
       e.preventDefault();
       e.stopPropagation();
       var r=target.getBoundingClientRect();
       window.parent.postMessage({type:'delete-click',field:target.dataset.deletefield,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
-      removeDelBtn();
+      removeDelBtnNow();
     });
     document.body.appendChild(btn);
     delBtn=btn;
   }
 
   document.addEventListener('mouseover',function(e){
-    if(e.target&&e.target.getAttribute&&e.target.getAttribute('data-delete-btn')==='1') return;
+    if(e.target&&e.target.getAttribute&&e.target.getAttribute('data-delete-btn')==='1'){ cancelRemove(); return; }
     var found=findAncestors(e.target,['bgfield','deletefield','section']);
     document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield]').forEach(function(s){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
-    if(found.deletefield){ showDelBtn(found.deletefield); } else { removeDelBtn(); }
+    if(found.deletefield){ showDelBtn(found.deletefield); } else { scheduleRemoveDelBtn(); }
     if(found.bgfield){
       found.bgfield.style.outline='2px dashed rgba(31,69,56,0.55)';
       found.bgfield.style.outlineOffset='-2px';
@@ -76,7 +96,7 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
     document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield]').forEach(function(s){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
-    removeDelBtn();
+    removeDelBtnNow();
   },true);
 
   document.addEventListener('click',function(e){

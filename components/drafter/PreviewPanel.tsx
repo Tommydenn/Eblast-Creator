@@ -53,7 +53,12 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   }
   function showDelBtn(target){
     cancelRemove();
-    if(delBtn && delBtn.__target===target) return;
+    // delBtn.isConnected guards against a stale reference: patchIframe()
+    // rewrites doc.body.innerHTML on every edit, which silently detaches an
+    // on-screen delete button from the page without this script knowing —
+    // without this check, delBtn stays truthy (pointing at the now-invisible
+    // detached node) and this would skip recreating a real, visible one.
+    if(delBtn && delBtn.__target===target && delBtn.isConnected) return;
     removeDelBtnNow();
     var rect=target.getBoundingClientRect();
     var btn=document.createElement('div');
@@ -178,7 +183,16 @@ const DELETE_FIELD_LABELS: Record<DeleteFieldKey, string> = {
 };
 
 function injectScript(doc: Document) {
-  if (doc.body.querySelector("[data-preview-script]")) return;
+  // Guarded on the Document itself (not a DOM node under <body>) because
+  // patchIframe() below replaces doc.body.innerHTML wholesale on every edit,
+  // which would otherwise wipe out the previous <script> tag and make this
+  // look "uninjected" again — causing a second, independent copy of the
+  // script to run with its own event listeners stacked on top of the first.
+  // The listeners registered by the first copy are on `document`, which
+  // survives a body.innerHTML swap, so they keep working fine — the script
+  // only ever needs to run once per iframe document.
+  if ((doc as any).__glmPreviewScriptInjected) return;
+  (doc as any).__glmPreviewScriptInjected = true;
   const s = doc.createElement("script");
   s.setAttribute("data-preview-script", "1");
   s.textContent = PREVIEW_SCRIPT;

@@ -3,7 +3,6 @@
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
-import { SectionColorPicker } from "@/components/drafter/SectionColorPicker";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -30,13 +29,6 @@ export default function HeroSection() {
         .filter(Boolean).join(", ")
     : "";
 
-  const headerBg = fields.headerBgColor ?? community?.brand.background ?? "#ffffff";
-  const heroBg = fields.heroBgColor ?? community?.brand.primary ?? "#000000";
-  const ctaButtonBg = fields.ctaButtonBgColor ?? community?.brand.accent ?? "#000000";
-  const brandColors = community
-    ? [community.brand.primary, community.brand.accent, community.brand.background, community.brand.secondary, ...(community.brand.supporting ?? [])].filter(Boolean) as string[]
-    : [];
-
   return (
     <div className="space-y-5">
       {fields.heroSectionHidden && (
@@ -45,36 +37,6 @@ export default function HeroSection() {
       {fields.ctaButtonHidden && (
         <HiddenBanner label="The hero's call button" onRestore={() => setField("ctaButtonHidden", undefined)} />
       )}
-
-      <div className="grid grid-cols-2 gap-4">
-        <SectionColorPicker
-          label="Header Background"
-          hint="The logo bar at the very top."
-          value={headerBg}
-          isOverridden={!!fields.headerBgColor}
-          brandColors={brandColors}
-          onChange={(hex) => setField("headerBgColor", hex)}
-          onReset={() => setField("headerBgColor", undefined)}
-        />
-        <SectionColorPicker
-          label="Hero Background"
-          hint="Behind the headline and call button."
-          value={heroBg}
-          isOverridden={!!fields.heroBgColor}
-          brandColors={brandColors}
-          onChange={(hex) => setField("heroBgColor", hex)}
-          onReset={() => setField("heroBgColor", undefined)}
-        />
-        <SectionColorPicker
-          label="Call Button Color"
-          hint="The hero's call-to-action button."
-          value={ctaButtonBg}
-          isOverridden={!!fields.ctaButtonBgColor}
-          brandColors={brandColors}
-          onChange={(hex) => setField("ctaButtonBgColor", hex)}
-          onReset={() => setField("ctaButtonBgColor", undefined)}
-        />
-      </div>
 
       <Field label="Headline">
         <RichInput

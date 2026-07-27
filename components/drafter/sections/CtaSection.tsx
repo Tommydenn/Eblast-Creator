@@ -3,7 +3,6 @@
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
-import { SectionColorPicker } from "@/components/drafter/SectionColorPicker";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -26,14 +25,6 @@ export default function CtaSection() {
   // blank when there's a sensible default. These stay undefined in storage until
   // the user actually edits them (so date/time/rsvp keep mirroring the Hero).
 
-  const finalCtaBg = fields.finalCtaBgColor ?? community?.brand.accent ?? "#000000";
-  const footerBg = fields.footerBgColor ?? "#FFFFFF";
-  const finalCtaButtonBg = fields.finalCtaButtonBgColor ?? community?.brand.primary ?? "#000000";
-  const footerButtonBg = fields.footerButtonBgColor ?? community?.brand.primary ?? "#000000";
-  const brandColors = community
-    ? [community.brand.primary, community.brand.accent, community.brand.background, community.brand.secondary, ...(community.brand.supporting ?? [])].filter(Boolean) as string[]
-    : [];
-
   return (
     <div className="space-y-5">
       {fields.finalCtaSectionHidden && (
@@ -45,45 +36,6 @@ export default function CtaSection() {
       {fields.footerButtonHidden && (
         <HiddenBanner label="The Visit Website button" onRestore={() => setField("footerButtonHidden", undefined)} />
       )}
-
-      <div className="grid grid-cols-2 gap-4">
-        <SectionColorPicker
-          label="Call-to-Action Background"
-          hint="The bottom action band."
-          value={finalCtaBg}
-          isOverridden={!!fields.finalCtaBgColor}
-          brandColors={brandColors}
-          onChange={(hex) => setField("finalCtaBgColor", hex)}
-          onReset={() => setField("finalCtaBgColor", undefined)}
-        />
-        <SectionColorPicker
-          label="Footer Background"
-          hint="Below the action band."
-          value={footerBg}
-          isOverridden={!!fields.footerBgColor}
-          brandColors={brandColors}
-          onChange={(hex) => setField("footerBgColor", hex)}
-          onReset={() => setField("footerBgColor", undefined)}
-        />
-        <SectionColorPicker
-          label="Call Button Color"
-          hint="The bottom band's call button."
-          value={finalCtaButtonBg}
-          isOverridden={!!fields.finalCtaButtonBgColor}
-          brandColors={brandColors}
-          onChange={(hex) => setField("finalCtaButtonBgColor", hex)}
-          onReset={() => setField("finalCtaButtonBgColor", undefined)}
-        />
-        <SectionColorPicker
-          label="Visit Website Button Color"
-          hint="The footer's website button."
-          value={footerButtonBg}
-          isOverridden={!!fields.footerButtonBgColor}
-          brandColors={brandColors}
-          onChange={(hex) => setField("footerButtonBgColor", hex)}
-          onReset={() => setField("footerButtonBgColor", undefined)}
-        />
-      </div>
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Event Date" hint="Edit to differ from the Hero section">

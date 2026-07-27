@@ -710,6 +710,23 @@ for (const sc of seedCommunities) {
   sc.community.hubspot = { ...sc.community.hubspot, acronym };
 }
 
+// Amira communities push to Amira's own HubSpot portal, not Great Lakes.
+// Deliberately excludes amira-choice-arvada/-bloomington, which are a
+// different brand family (Amira Choice) that stays on the Great Lakes account.
+const AMIRA_ACCOUNT_SLUGS = [
+  "amira-corcoran",
+  "amira-minnetonka",
+  "amira-villas-minnetonka",
+  "amira-lowry",
+  "amira-lake-elmo",
+  "amira-bloomington",
+  "amira-roseville",
+];
+for (const sc of seedCommunities) {
+  if (!AMIRA_ACCOUNT_SLUGS.includes(sc.community.slug)) continue;
+  sc.community.hubspot = { ...sc.community.hubspot, account: "amira" };
+}
+
 // Sender identities recovered from each community's actual HubSpot send history
 // (the people/aliases that have sent eblasts for them). First entry = primary.
 // Only the communities that previously had no senders are listed here; the rest

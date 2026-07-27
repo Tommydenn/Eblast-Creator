@@ -186,8 +186,9 @@ export async function GET(
       throw new Error("Approved draft has no content to push. Please re-send the draft for approval and approve again.");
     }
 
+    const hubspotAccount = community.hubspot.account ?? "primary";
     let emailHtml = await inlineRelativeImages(rawHtml);
-    const swap = await swapDataUrisForHostedImages({ html: emailHtml, folderPath: `/eblast-drafter/${community.slug}` });
+    const swap = await swapDataUrisForHostedImages({ html: emailHtml, folderPath: `/eblast-drafter/${community.slug}`, account: hubspotAccount });
     if (swap.failures.length > 0) throw new Error(`Image upload failed (status ${swap.failures[0].status})`);
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -198,6 +199,7 @@ export async function GET(
       path: hubspotPath,
       html: swap.html,
       label: `${community.displayName} — ${templateFileName}`,
+      account: hubspotAccount,
     });
     if (!upload.ok) throw new Error(`Template upload failed: ${upload.status}`);
 
@@ -205,6 +207,7 @@ export async function GET(
       communityId: community.id,
       fallbackIncluded: [],
       fallbackExcluded: [],
+      account: hubspotAccount,
     });
     const create = await createEmail({
       name: generateHubspotEmailName({
@@ -215,6 +218,7 @@ export async function GET(
       fromName: community.senders[0]?.name ?? community.displayName,
       replyTo: community.senders[0]?.email ?? "",
       templatePath: hubspotPath,
+      account: hubspotAccount,
       ...segments,
     });
     if (!create.ok) throw new Error(`HubSpot create failed: ${create.status}`);

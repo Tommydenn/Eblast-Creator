@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
     const swap = await swapDataUrisForHostedImages({
       html: inlined,
       folderPath: `/eblast-drafter/${communitySlug}/approval-previews`,
+      account: community.hubspot.account,
     });
     if (swap.failures.length === 0) {
       emailHtml = swap.html;

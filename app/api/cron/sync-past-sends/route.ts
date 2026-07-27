@@ -22,8 +22,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await syncPastSends({ verbose: false });
-    return NextResponse.json({ ok: true, ...result });
+    const primary = await syncPastSends({ verbose: false, account: "primary" });
+    // Only sync the Amira portal if its token is configured — avoids a hard
+    // failure for installs that haven't set up the second account yet.
+    const amira = process.env.HUBSPOT_PRIVATE_APP_TOKEN_AMIRA
+      ? await syncPastSends({ verbose: false, account: "amira" })
+      : null;
+    return NextResponse.json({ ok: true, primary, amira });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message ?? String(e) }, { status: 500 });
   }

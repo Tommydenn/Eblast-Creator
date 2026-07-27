@@ -1,18 +1,31 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+const TOKEN_ENV_VAR: Record<string, string> = {
+  primary: "HUBSPOT_PRIVATE_APP_TOKEN",
+  amira: "HUBSPOT_PRIVATE_APP_TOKEN_AMIRA",
+};
+
 /**
- * GET /api/admin/hubspot-office-locations
+ * GET /api/admin/hubspot-office-locations?account=amira
  *
  * Probes multiple HubSpot endpoints to find the configured office/physical
  * addresses and their IDs. Returns all raw responses so we can see exactly
  * where the data lives and what IDs to use per community.
+ *
+ * `account` defaults to "primary" (Great Lakes); pass "amira" to probe the
+ * Amira portal instead, once HUBSPOT_PRIVATE_APP_TOKEN_AMIRA is set.
  */
-export async function GET() {
-  const token = process.env.HUBSPOT_PRIVATE_APP_TOKEN;
+export async function GET(req: NextRequest) {
+  const account = req.nextUrl.searchParams.get("account") ?? "primary";
+  const envVar = TOKEN_ENV_VAR[account];
+  if (!envVar) {
+    return NextResponse.json({ error: `Unknown account "${account}". Use "primary" or "amira".` }, { status: 400 });
+  }
+  const token = process.env[envVar];
   if (!token) {
-    return NextResponse.json({ error: "HUBSPOT_PRIVATE_APP_TOKEN not set" }, { status: 500 });
+    return NextResponse.json({ error: `${envVar} not set` }, { status: 500 });
   }
 
   const h = { Authorization: `Bearer ${token}` };

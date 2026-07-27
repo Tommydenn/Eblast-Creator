@@ -2,7 +2,8 @@
 // map each to a community, fetch statistics, upsert into past_sends.
 //
 // Usage:
-//   npx tsx scripts/sync-past-sends.ts                # full backfill
+//   npx tsx scripts/sync-past-sends.ts                # full backfill (primary/Great Lakes account)
+//   npx tsx scripts/sync-past-sends.ts --account=amira # same, for the Amira portal
 //   npx tsx scripts/sync-past-sends.ts --skip-stats   # faster, no stats
 //   npx tsx scripts/sync-past-sends.ts --refresh-stats-only
 
@@ -10,17 +11,20 @@ import { config } from "dotenv";
 config({ path: ".env.local", override: true });
 
 import { syncPastSends } from "../lib/past-sends-sync";
+import type { HubspotAccount } from "../lib/hubspot";
 
 async function main() {
   const args = process.argv.slice(2);
   const skipStats = args.includes("--skip-stats");
   const refreshStatsOnly = args.includes("--refresh-stats-only");
+  const accountArg = args.find((a) => a.startsWith("--account="))?.split("=")[1];
+  const account: HubspotAccount = accountArg === "amira" ? "amira" : "primary";
 
   console.log(
-    `Sync mode: ${refreshStatsOnly ? "refresh stats only" : "full walk"}${skipStats ? " (no stats)" : ""}`,
+    `Sync mode: ${refreshStatsOnly ? "refresh stats only" : "full walk"}${skipStats ? " (no stats)" : ""} (account: ${account})`,
   );
 
-  const result = await syncPastSends({ skipStats, refreshStatsOnly, verbose: true });
+  const result = await syncPastSends({ skipStats, refreshStatsOnly, verbose: true, account });
 
   console.log("\n=== Sync result ===");
   console.log(`  Walked HubSpot list:   ${result.walked}`);

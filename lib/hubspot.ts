@@ -1,16 +1,31 @@
 // Minimal HubSpot Marketing Email API client.
 // Use a Private App token with `content` scope.
+//
+// Supports pushing to more than one HubSpot portal: most communities push to
+// the primary (Great Lakes) account, but a community can be flagged with
+// `hubspot.account` (see CommunityHubSpot in lib/db/schema.ts) to route to a
+// different portal's Private App token instead. Every function below takes
+// an optional `account` and defaults to "primary" so existing callers that
+// don't pass one keep behaving exactly as before.
 
 const HUBSPOT_BASE = "https://api.hubapi.com";
 
-function authHeader() {
-  const token = process.env.HUBSPOT_PRIVATE_APP_TOKEN;
-  if (!token) throw new Error("HUBSPOT_PRIVATE_APP_TOKEN is not set in .env.local");
+export type HubspotAccount = "primary" | "amira";
+
+const TOKEN_ENV_VAR: Record<HubspotAccount, string> = {
+  primary: "HUBSPOT_PRIVATE_APP_TOKEN",
+  amira: "HUBSPOT_PRIVATE_APP_TOKEN_AMIRA",
+};
+
+function authHeader(account: HubspotAccount = "primary") {
+  const envVar = TOKEN_ENV_VAR[account];
+  const token = process.env[envVar];
+  if (!token) throw new Error(`${envVar} is not set`);
   return { Authorization: `Bearer ${token}` };
 }
 
-function authHeaders() {
-  return { ...authHeader(), "Content-Type": "application/json" };
+function authHeaders(account: HubspotAccount = "primary") {
+  return { ...authHeader(account), "Content-Type": "application/json" };
 }
 
 // ---------- types ---------------------------------------------------------
@@ -28,6 +43,7 @@ export interface CreateEmailInput {
   includedListIds?: number[];
   /** HubSpot list IDs to suppress (`to.contactLists.exclude`). */
   excludedListIds?: number[];
+  account?: HubspotAccount;
 }
 
 export interface ApiCallResult {
@@ -39,10 +55,13 @@ export interface ApiCallResult {
 
 // ---------- helpers -------------------------------------------------------
 
-async function call(step: string, init: { method: string; url: string; body?: any }): Promise<ApiCallResult> {
+async function call(
+  step: string,
+  init: { method: string; url: string; body?: any; account?: HubspotAccount },
+): Promise<ApiCallResult> {
   const res = await fetch(init.url, {
     method: init.method,
-    headers: authHeaders(),
+    headers: authHeaders(init.account),
     body: init.body ? JSON.stringify(init.body) : undefined,
   });
   const text = await res.text();
@@ -124,6 +143,7 @@ export function generateHubspotEmailName(opts: {
 export async function listMarketingEmails(opts: {
   limit?: number;
   after?: string;
+  account?: HubspotAccount;
 } = {}): Promise<ApiCallResult & { results?: any[]; paging?: any }> {
   const params = new URLSearchParams();
   params.set("limit", String(opts.limit ?? 50));
@@ -131,7 +151,7 @@ export async function listMarketingEmails(opts: {
 
   const res = await fetch(`${HUBSPOT_BASE}/marketing/v3/emails?${params.toString()}`, {
     method: "GET",
-    headers: authHeader(),
+    headers: authHeader(opts.account),
   });
   const text = await res.text();
   let parsed: any;
@@ -148,10 +168,10 @@ export async function listMarketingEmails(opts: {
 }
 
 /** Fetch a single marketing email by ID, including its content. */
-export async function getMarketingEmail(emailId: string): Promise<ApiCallResult> {
+export async function getMarketingEmail(emailId: string, account?: HubspotAccount): Promise<ApiCallResult> {
   const res = await fetch(`${HUBSPOT_BASE}/marketing/v3/emails/${emailId}`, {
     method: "GET",
-    headers: authHeader(),
+    headers: authHeader(account),
   });
   const text = await res.text();
   let parsed: any;
@@ -171,10 +191,10 @@ export async function getMarketingEmail(emailId: string): Promise<ApiCallResult>
  *     delivered, dropped, deferred, suppressed, open, click, bounce,
  *     unsubscribed, statuschange }, scheduledAt, processingState, type, ... }
  */
-export async function getMarketingEmailCampaign(campaignId: number | string): Promise<ApiCallResult> {
+export async function getMarketingEmailCampaign(campaignId: number | string, account?: HubspotAccount): Promise<ApiCallResult> {
   const res = await fetch(`${HUBSPOT_BASE}/email/public/v1/campaigns/${campaignId}`, {
     method: "GET",
-    headers: authHeader(),
+    headers: authHeader(account),
   });
   const text = await res.text();
   let parsed: any;
@@ -203,6 +223,7 @@ export async function uploadImageToFileManager(opts: {
   mimeType: string;
   fileName: string;
   folderPath: string; // e.g. "/eblast-drafter/caretta-bellevue"
+  account?: HubspotAccount;
 }): Promise<UploadedFile> {
   const url = `${HUBSPOT_BASE}/files/v3/files`;
 
@@ -228,7 +249,7 @@ export async function uploadImageToFileManager(opts: {
 
   const res = await fetch(url, {
     method: "POST",
-    headers: authHeader(), // do NOT set Content-Type; FormData sets the boundary
+    headers: authHeader(opts.account), // do NOT set Content-Type; FormData sets the boundary
     body: form,
   });
   const text = await res.text();
@@ -252,6 +273,7 @@ export async function uploadImageToFileManager(opts: {
 export async function swapDataUrisForHostedImages(opts: {
   html: string;
   folderPath: string;
+  account?: HubspotAccount;
 }): Promise<{
   html: string;
   attempted: number;
@@ -288,6 +310,7 @@ export async function swapDataUrisForHostedImages(opts: {
         mimeType: mime,
         fileName,
         folderPath: opts.folderPath,
+        account: opts.account,
       });
       return { dataUri, result };
     }),
@@ -337,6 +360,7 @@ export async function uploadEmailTemplate(opts: {
   path: string;       // e.g. "email-templates/caretta-dining.html"
   html: string;
   label?: string;
+  account?: HubspotAccount;
 }): Promise<ApiCallResult> {
   const wrapped = wrapAsHubLEmailTemplate(opts.html, opts.label ?? "Eblast Drafter Template");
   const url = `${HUBSPOT_BASE}/cms/v3/source-code/published/content/${opts.path}`;
@@ -348,7 +372,7 @@ export async function uploadEmailTemplate(opts: {
 
   const res = await fetch(url, {
     method: "PUT",
-    headers: authHeader(), // do NOT set Content-Type; fetch sets the multipart boundary
+    headers: authHeader(opts.account), // do NOT set Content-Type; fetch sets the multipart boundary
     body: form,
   });
   const text = await res.text();
@@ -397,6 +421,7 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
     method: "POST",
     url: `${HUBSPOT_BASE}/marketing/v3/emails`,
     body,
+    account: input.account,
   });
 }
 
@@ -407,12 +432,12 @@ export async function createEmail(input: CreateEmailInput): Promise<ApiCallResul
  * Requires `crm.lists.read` on the Private App.
  * Returns an empty Map on any failure — callers fall back to showing IDs.
  */
-export async function fetchListNames(ids: number[]): Promise<Map<number, string>> {
+export async function fetchListNames(ids: number[], account?: HubspotAccount): Promise<Map<number, string>> {
   if (ids.length === 0) return new Map();
   try {
     const res = await fetch(`${HUBSPOT_BASE}/crm/v3/lists/search`, {
       method: "POST",
-      headers: authHeaders(),
+      headers: authHeaders(account),
       body: JSON.stringify({
         listIds: ids.map(String),
         count: ids.length,

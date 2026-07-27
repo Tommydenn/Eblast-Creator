@@ -92,6 +92,14 @@ export interface CommunityHubSpot {
   businessUnitId?: number;
   /** HubSpot segment-naming acronym for this community, e.g. "PGR" → "PGR eBlasts | …". */
   acronym?: string;
+  /**
+   * Which HubSpot portal this community's eblasts push to. Defaults to
+   * "primary" (Great Lakes) when unset — only communities that belong to a
+   * different portal's account (e.g. Amira) need this set explicitly.
+   * All the *ListIds/businessUnitId/officeLocationId fields below are only
+   * meaningful within whichever portal this points at.
+   */
+  account?: "primary" | "amira";
   /** HubSpot list IDs (Segments) to send TO — active prospects. */
   includedListIds?: number[];
   /** HubSpot list IDs (Segments) to SUPPRESS — moved-in/out, closed-lost, referral sources. */

@@ -176,7 +176,7 @@ export async function enrichCommunity(opts: {
   // tel:/mailto:/https:// reference present in the rendered email.
   const bodies: string[] = [];
   for (const send of sends) {
-    const full = await getMarketingEmail(send.hubspotEmailId);
+    const full = await getMarketingEmail(send.hubspotEmailId, (community.hubspot as any)?.account);
     if (full.ok && full.body?.content) {
       const text = collectAllStrings(full.body.content).join("\n");
       if (text) bodies.push(text);

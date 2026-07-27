@@ -7,7 +7,7 @@
 import { eq, sql, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { pastSends } from "@/lib/db/schema";
-import { getMarketingEmail } from "@/lib/hubspot";
+import { getMarketingEmail, type HubspotAccount } from "@/lib/hubspot";
 
 export interface PastSendForContext {
   subject: string;
@@ -67,6 +67,7 @@ export async function resolveSegmentsFromRecentSend(opts: {
   communityId: string;
   fallbackIncluded?: number[];
   fallbackExcluded?: number[];
+  account?: HubspotAccount;
 }): Promise<{ includedListIds: number[]; excludedListIds: number[] }> {
   const fallback = {
     includedListIds: opts.fallbackIncluded ?? [],
@@ -83,7 +84,7 @@ export async function resolveSegmentsFromRecentSend(opts: {
 
     if (!recent?.hubspotEmailId) return fallback;
 
-    const res = await getMarketingEmail(recent.hubspotEmailId);
+    const res = await getMarketingEmail(recent.hubspotEmailId, opts.account);
     if (!res.ok || !res.body) return fallback;
 
     const lists = res.body?.to?.contactIlsLists;

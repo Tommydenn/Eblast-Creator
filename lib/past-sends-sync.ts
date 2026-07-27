@@ -21,6 +21,7 @@ import {
   listMarketingEmails,
   getMarketingEmail,
   getMarketingEmailCampaign,
+  type HubspotAccount,
 } from "@/lib/hubspot";
 
 const DAYS_BACKFILL = 365;
@@ -145,19 +146,19 @@ function extractStatsCounters(campaignBody: any): {
  *
  * Returns null if either call fails — caller continues with metadata-only.
  */
-async function fetchStatsForEmail(emailId: string): Promise<{
+async function fetchStatsForEmail(emailId: string, account?: HubspotAccount): Promise<{
   campaignId: number | null;
   campaignName: string | null;
   scheduledAt: number | null;
   counters: ReturnType<typeof extractStatsCounters>;
   raw: any;
 } | null> {
-  const fullRes = await getMarketingEmail(emailId);
+  const fullRes = await getMarketingEmail(emailId, account);
   if (!fullRes.ok) return null;
   const campaignId = fullRes.body?.primaryEmailCampaignId;
   if (!campaignId) return null;
 
-  const campRes = await getMarketingEmailCampaign(campaignId);
+  const campRes = await getMarketingEmailCampaign(campaignId, account);
   if (!campRes.ok) return null;
   return {
     campaignId,
@@ -175,15 +176,26 @@ export async function syncPastSends(opts: {
   skipStats?: boolean;
   /** Verbose logging. */
   verbose?: boolean;
+  /**
+   * Which HubSpot portal to walk. Defaults to "primary" (Great Lakes).
+   * Community mapping is restricted to communities belonging to this same
+   * account — a portal's emails should only ever map to its own communities,
+   * since numeric HubSpot IDs are only unique within a single portal.
+   */
+  account?: HubspotAccount;
 } = {}): Promise<SyncResult> {
   const startedAt = Date.now();
+  const account: HubspotAccount = opts.account ?? "primary";
   const log = (...args: any[]) => {
     if (opts.verbose) console.log(...args);
   };
 
-  // Load communities + senders for mapping.
-  const communitiesRows = await db.select().from(communities);
-  const sendersRows = await db.select().from(communitySenders);
+  // Load communities + senders for mapping, restricted to this account.
+  const communitiesRows = (await db.select().from(communities)).filter(
+    (c) => ((c.hubspot as any)?.account ?? "primary") === account,
+  );
+  const communityIds = new Set(communitiesRows.map((c) => c.id));
+  const sendersRows = (await db.select().from(communitySenders)).filter((s) => communityIds.has(s.communityId));
   const commForMap: CommunityForMap[] = communitiesRows.map((c) => ({
     id: c.id,
     slug: c.slug,
@@ -208,7 +220,7 @@ export async function syncPastSends(opts: {
   if (!opts.refreshStatsOnly) {
     log(`Walking HubSpot marketing emails (cutoff: ${cutoff.toISOString().slice(0, 10)})...`);
     for (let i = 0; i < 60; i++) {
-      const page = await listMarketingEmails({ limit: 100, after });
+      const page = await listMarketingEmails({ limit: 100, after, account });
       if (!page.ok) {
         log(`HubSpot list call failed at page ${i}, status=${page.status}. Stopping pagination.`);
         break;
@@ -230,7 +242,9 @@ export async function syncPastSends(opts: {
     log(`Walked ${walked}, in-window ${inWindow.length}.`);
   } else {
     log("Refresh-stats-only mode: walking past_sends rows already in DB.");
-    const existing = await db.select().from(pastSends);
+    const existing = (await db.select().from(pastSends)).filter(
+      (row) => row.communityId != null && communityIds.has(row.communityId),
+    );
     for (const row of existing) {
       const raw = (row.raw as any) ?? {};
       const email = raw.email ?? { id: row.hubspotEmailId, subject: row.subject, from: { fromName: row.fromName, replyTo: row.fromEmail }, state: row.state };
@@ -272,7 +286,7 @@ export async function syncPastSends(opts: {
 
     if (!opts.skipStats && email.state === "PUBLISHED") {
       try {
-        const fetched = await fetchStatsForEmail(email.id);
+        const fetched = await fetchStatsForEmail(email.id, account);
         if (fetched) {
           stats = fetched.counters;
           statsRaw = fetched.raw;

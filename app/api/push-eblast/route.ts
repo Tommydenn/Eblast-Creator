@@ -88,9 +88,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `Image inlining failed: ${e.message ?? String(e)}` }, { status: 500 });
   }
 
+  const hubspotAccount = community.hubspot.account ?? "primary";
   const swap = await swapDataUrisForHostedImages({
     html,
     folderPath: `/eblast-drafter/${community.slug}`,
+    account: hubspotAccount,
   });
   if (swap.failures.length > 0) {
     console.error(`[push-eblast] image-upload failures`, JSON.stringify(swap.failures));
@@ -106,7 +108,7 @@ export async function POST(req: NextRequest) {
             uploaded: swap.uploaded,
             failures: swap.failures,
             hint:
-              "If you see 401/403 here, add the `files` scope to your Private App, regenerate the token, and update HUBSPOT_PRIVATE_APP_TOKEN in Vercel env vars.",
+              `If you see 401/403 here, add the \`files\` scope to your Private App, regenerate the token, and update ${hubspotAccount === "amira" ? "HUBSPOT_PRIVATE_APP_TOKEN_AMIRA" : "HUBSPOT_PRIVATE_APP_TOKEN"} in Vercel env vars.`,
           },
         },
       ],
@@ -120,6 +122,7 @@ export async function POST(req: NextRequest) {
     path: hubspotPath,
     html: finalHtml,
     label: `${community.displayName} — ${templateFileName}`,
+    account: hubspotAccount,
   });
   if (!upload.ok) {
     console.error(`[push-eblast] upload failed status=${upload.status}`, JSON.stringify(upload.body));
@@ -146,6 +149,7 @@ export async function POST(req: NextRequest) {
       communityId: community.id,
       fallbackIncluded: [],
       fallbackExcluded: [],
+      account: hubspotAccount,
     });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: `Segment resolution failed: ${e.message ?? String(e)}` }, { status: 500 });
@@ -164,6 +168,7 @@ export async function POST(req: NextRequest) {
     fromName: community.senders[0]?.name ?? community.displayName,
     replyTo: community.senders[0]?.email ?? "",
     templatePath: hubspotPath,
+    account: hubspotAccount,
     ...segmentsPayload,
   });
 

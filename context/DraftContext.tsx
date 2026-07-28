@@ -1047,6 +1047,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       setPushResult({ steps: data.steps ?? [], summary: data.summary ?? null });
       if (!data.ok) throw new Error(data.steps?.at(-1)?.body?.error ?? data.error ?? "Push failed");
+      // A successful push locks this draft (push-eblast/route.ts just set
+      // pushedAt in the DB) — reflect that immediately so a further edit in
+      // THIS session prompts for a copy too, not just after a fresh reload.
+      setLockInfo((prev) => ({
+        locked: true,
+        reasons: prev?.reasons.includes("pushed") ? prev.reasons : [...(prev?.reasons ?? []), "pushed"],
+      }));
     } catch (e: any) {
       setPushError(e.message ?? "Push failed");
     } finally {
@@ -1072,6 +1079,12 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error ?? "Failed to send approval");
     setApprovalStatus({ decision: "pending", sentAt: new Date().toISOString() });
+    // Same reasoning as push() above — a pending approval row now exists in
+    // the DB, so lock this draft immediately rather than waiting for a reload.
+    setLockInfo((prev) => ({
+      locked: true,
+      reasons: prev?.reasons.includes("pending_approval") ? prev.reasons : [...(prev?.reasons ?? []), "pending_approval"],
+    }));
   }, [draftId, buildHtml, refreshCommunity, requestCopyPrompt]);
 
   // ─── Subject swap ─────────────────────────────────────────────────────────

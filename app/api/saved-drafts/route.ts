@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { savedDrafts } from "@/lib/db/schema";
+import { savedDrafts, savedDraftApprovals } from "@/lib/db/schema";
 import { eq, desc, inArray, isNull, and } from "drizzle-orm";
 
 const MAX_PER_COMMUNITY = 8;
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
         subject: savedDrafts.subject,
         imageCount: savedDrafts.imageCount,
         approvedAt: savedDrafts.approvedAt,
+        pushedAt: savedDrafts.pushedAt,
         data: savedDrafts.data,
       })
       .from(savedDrafts)
@@ -26,9 +27,21 @@ export async function GET(req: NextRequest) {
     const rawRows = slug
       ? await query.where(and(eq(savedDrafts.communitySlug, slug), isNull(savedDrafts.deletedAt)))
       : await query.where(isNull(savedDrafts.deletedAt));
+
+    // One batch query for which of these drafts have a pending (sent, no
+    // decision yet) approval request, rather than one query per row.
+    const pendingRows = rawRows.length
+      ? await db
+          .select({ savedDraftId: savedDraftApprovals.savedDraftId })
+          .from(savedDraftApprovals)
+          .where(and(inArray(savedDraftApprovals.savedDraftId, rawRows.map((r) => r.id)), eq(savedDraftApprovals.decision, "pending")))
+      : [];
+    const pendingIds = new Set(pendingRows.map((r) => r.savedDraftId));
+
     const rows = rawRows.map(({ data, ...meta }) => ({
       ...meta,
       isNewFormat: !!(data as any)?.fields,
+      pendingApproval: pendingIds.has(meta.id),
     }));
     return NextResponse.json({ ok: true, drafts: rows });
   } catch (err) {

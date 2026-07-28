@@ -16,6 +16,8 @@ interface DraftMeta {
   subject: string;
   imageCount: number;
   approvedAt: string | null;
+  pushedAt: string | null;
+  pendingApproval: boolean;
   isNewFormat: boolean;
 }
 
@@ -91,6 +93,22 @@ function DraftCard({
                   <polyline points="20,6 9,17 4,12" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 Approved
+              </span>
+            )}
+            {draft.pushedAt && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#2563eb]">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Pushed
+              </span>
+            )}
+            {draft.pendingApproval && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Pending Approval
               </span>
             )}
             {isLegacy && (

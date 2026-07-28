@@ -219,6 +219,7 @@ export default function PreviewPanel() {
   const { setActiveSection, fields, setField, images, community } = useDraft();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const [bgPopover, setBgPopover] = useState<{ field: BgFieldKey; left: number; top: number } | null>(null);
   const [deletePopover, setDeletePopover] = useState<{ field: DeleteFieldKey; left: number; top: number } | null>(null);
 
@@ -312,7 +313,31 @@ export default function PreviewPanel() {
     if (!doc?.body || !iframe) return;
     resizeIframe(iframe);
     injectScript(doc);
+
+    // A single point-in-time measurement isn't enough: images (the hero slot
+    // especially, which is intentionally left height:auto so a differently-
+    // cropped photo can flex slightly) can still be decoding after this
+    // synchronous call returns, and every subsequent edit fully replaces
+    // doc.body's children (see patchIframe), destroying and re-creating every
+    // <img> — each replacement re-enters that same decode race. Both
+    // symptoms this was causing — the preview being cropped short right
+    // after loading a saved draft until *something else* happened to
+    // re-measure, and the whole preview visibly resizing (and the page's
+    // scroll position jumping with it) right after clicking a section to
+    // change its color — trace back to this: the iframe's own height
+    // lagging behind its actual content height. Watching doc.body with a
+    // ResizeObserver keeps it continuously accurate instead of relying on
+    // one-off calls timed around actions that happen to also trigger a
+    // reflow. doc.body itself is stable across patchIframe (only its
+    // children are replaced), so this only needs to attach once per real
+    // iframe document load.
+    resizeObserverRef.current?.disconnect();
+    const ro = new ResizeObserver(() => resizeIframe(iframe));
+    ro.observe(doc.body);
+    resizeObserverRef.current = ro;
   }
+
+  useEffect(() => () => resizeObserverRef.current?.disconnect(), []);
 
   if (!initSrc) {
     return (

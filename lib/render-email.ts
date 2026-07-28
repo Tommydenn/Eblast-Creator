@@ -281,7 +281,7 @@ export function buildEblastHtml(
         ${heroImg ? `
         <tr>
           <td style="padding: 0; line-height: 0; font-size: 0; overflow: hidden;">
-            <img src="${heroImg}" data-img-label="Hero image" width="600" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:600px; max-width:100%; height:auto; border:0;">
+            <img src="${heroImg}" data-img-label="Hero image" width="600" height="340" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:600px; max-width:100%; height:auto; border:0;">
           </td>
         </tr>` : ""}
         <tr>

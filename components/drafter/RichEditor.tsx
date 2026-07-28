@@ -150,9 +150,26 @@ export function RichInput({
   // Last accepted live innerHTML, restored when a guarded edit is rejected.
   const lastGoodHtml = useRef<string>("");
 
+  // A locked draft (approved / pushed / pending-approval) rejects every edit
+  // the same way a guardPlain failure does — revert the DOM immediately,
+  // never call onValueChange at all — plus opens the copy prompt. Checked
+  // via refs (not the destructured values directly) so serialize() itself
+  // stays referentially stable.
+  const { lockInfo, requestCopyPrompt } = useDraft();
+  const isLockedRef = useRef(false);
+  isLockedRef.current = !!lockInfo?.locked;
+  const requestCopyPromptRef = useRef(requestCopyPrompt);
+  requestCopyPromptRef.current = requestCopyPrompt;
+
   const serialize = useCallback(() => {
     const el = ref.current;
     if (!el) return;
+    if (isLockedRef.current) {
+      el.innerHTML = lastGoodHtml.current;
+      placeCaretEnd(el);
+      requestCopyPromptRef.current();
+      return;
+    }
     const html = serializeInline(el);
     const guard = guardRef.current;
     if (guard && !guard(plainFromHtml(el.innerHTML))) {
@@ -234,15 +251,36 @@ export function RichBodyEditor({
   onChangeRef.current = onChange;
 
   const lastEmitted = useRef<string | null>(null);
+  // Last accepted live innerHTML, restored when a locked-draft edit is rejected.
+  const lastGoodHtml = useRef<string>("");
+
+  // Same lock rejection as RichInput — see its comment for why refs are used.
+  const { lockInfo, requestCopyPrompt } = useDraft();
+  const isLockedRef = useRef(false);
+  isLockedRef.current = !!lockInfo?.locked;
+  const requestCopyPromptRef = useRef(requestCopyPrompt);
+  requestCopyPromptRef.current = requestCopyPrompt;
+
   const serialize = useCallback(() => {
-    if (!ref.current) return;
-    const paras = serializeBlocks(ref.current);
+    const el = ref.current;
+    if (!el) return;
+    if (isLockedRef.current) {
+      el.innerHTML = lastGoodHtml.current;
+      placeCaretEnd(el);
+      requestCopyPromptRef.current();
+      return;
+    }
+    const paras = serializeBlocks(el);
+    lastGoodHtml.current = el.innerHTML;
     lastEmitted.current = paras.join(" ");
     onChangeRef.current(paras);
   }, []);
 
   useEffect(() => {
-    if (ref.current) ref.current.innerHTML = blocksToHtml(paragraphs);
+    if (ref.current) {
+      ref.current.innerHTML = blocksToHtml(paragraphs);
+      lastGoodHtml.current = ref.current.innerHTML;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -251,6 +289,7 @@ export function RichBodyEditor({
     if (isFocused.current || !ref.current) return;
     if (extKey === lastEmitted.current) return;
     ref.current.innerHTML = blocksToHtml(paragraphs);
+    lastGoodHtml.current = ref.current.innerHTML;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extKey]);
 

@@ -222,6 +222,10 @@ export interface DraftContextValue {
   dismissPushResult: () => void;
   makeCopy: () => Promise<void>;
   cancelCopyPrompt: () => void;
+  /** Opens the copy prompt directly — used by RichInput/RichBodyEditor to
+   * reject a locked edit at the DOM level (revert innerHTML, don't call
+   * onValueChange) the same way a guardPlain failure is rejected. */
+  requestCopyPrompt: () => void;
 }
 
 const DraftContext = createContext<DraftContextValue | null>(null);
@@ -429,37 +433,39 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ─── setField / setFields ──────────────────────────────────────────────────
-  // Locked drafts (approved / pushed / pending-approval) still apply the edit
-  // to local state — so typing/toolbar formatting feels normal and RichInput
-  // never fights its own DOM — but never schedule an autosave, so the
-  // original row in the DB is never actually touched. The copy prompt opens
-  // on the very first attempt; "Make a Copy" carries these in-memory edits
-  // over to a new draft, "Cancel" reloads the untouched original from the
-  // server, discarding them.
+  // Locked drafts (approved / pushed / pending-approval) reject the edit
+  // outright — fields/images state never changes, so nothing needs undoing
+  // later. For contentEditable RichInput fields, the DOM has already visibly
+  // changed by the time this runs (the keystroke already landed), but
+  // RichInput's own "sync external changes" effect corrects that as soon as
+  // it loses focus: since `value` never actually changed, the moment
+  // requestCopyPrompt() blurs the active editor, that effect resets the
+  // DOM's innerHTML back to match — no separate revert logic needed here.
   const setField = useCallback(<K extends keyof ExtractedFlyer>(key: K, value: ExtractedFlyer[K]) => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setFields_((prev) => prev ? { ...prev, [key]: value } : prev);
     setIsSaved(false);
-    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setLastEditTimestamp(Date.now());
   }, [requestCopyPrompt]);
 
   const setFields = useCallback((patch: Partial<ExtractedFlyer>) => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setFields_((prev) => prev ? { ...prev, ...patch } : prev);
     setIsSaved(false);
-    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setLastEditTimestamp(Date.now());
   }, [requestCopyPrompt]);
 
   // ─── Image management ──────────────────────────────────────────────────────
   const assignImage = useCallback(async (slot: "hero" | "secondary", imageUrl: string) => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     const ratio = ASPECT[slot];
     const croppedUrl = await cropImage(imageUrl, ratio);
     setImages((prev) => ({ ...prev, [slot]: { url: croppedUrl, originalUrl: imageUrl } }));
     setIsSaved(false);
-    if (lockInfoRef.current?.locked) requestCopyPrompt();
   }, [requestCopyPrompt]);
 
   const assignGalleryImage = useCallback(async (idx: number, imageUrl: string) => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     const croppedUrl = await cropImage(imageUrl, ASPECT.gallery);
     setImages((prev) => {
       const gallery = [...prev.gallery];
@@ -468,10 +474,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       return { ...prev, gallery };
     });
     setIsSaved(false);
-    if (lockInfoRef.current?.locked) requestCopyPrompt();
   }, [requestCopyPrompt]);
 
   const removeImage = useCallback((slot: "hero" | "secondary" | "gallery", galleryIdx?: number) => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setImages((prev) => {
       if (slot === "gallery") {
         const gallery = prev.gallery.filter((_, i) => i !== galleryIdx);
@@ -480,7 +486,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       return { ...prev, [slot]: null };
     });
     setIsSaved(false);
-    if (lockInfoRef.current?.locked) requestCopyPrompt();
   }, [requestCopyPrompt]);
 
   const repositionImage = useCallback(async (
@@ -489,6 +494,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     y: number,
     galleryIdx?: number,
   ) => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     const imgs = imagesRef.current;
     let originalUrl: string;
     let ratio: number;
@@ -513,7 +519,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
       return { ...prev, [slot]: { url: croppedUrl, originalUrl } };
     });
-    if (lockInfoRef.current?.locked) requestCopyPrompt();
   }, [requestCopyPrompt]);
 
   const addToImageBank = useCallback((url: string) => {
@@ -1071,9 +1076,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Subject swap ─────────────────────────────────────────────────────────
   const swapSubjectLine = useCallback((subject: string, previewText: string) => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setFields_((prev) => prev ? { ...prev, subject, previewText } : prev);
     setIsSaved(false);
-    if (lockInfoRef.current?.locked) requestCopyPrompt();
   }, [requestCopyPrompt]);
 
   // ─── selectCommunity ──────────────────────────────────────────────────────
@@ -1087,16 +1092,21 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ─── Copy prompt resolution (locked drafts) ──────────────────────────────
-  // "Make a Copy" carries whatever's currently in memory (including edits
-  // made since the lock was hit) over to a brand-new, unlocked draft, titled
-  // `Copy of "{original subject}"`. That title is written directly into
-  // fields.subject (the real email subject line), not just the top-level
-  // SavedDraft.subject metadata — buildDraftPayload() always re-derives the
-  // latter from fields.subject on every save/autosave/discard, so a
-  // metadata-only title would get silently clobbered by the very next one.
-  // This matches how "make a copy" works in most similar tools (the copy's
-  // title visibly says "Copy of ..." until the user renames it) rather than
-  // permanently diverging the list title from the actual subject field.
+  // Every guarded mutator above rejects a locked edit outright — fields/images
+  // never change while locked, so fieldsRef/imagesRef here are still exactly
+  // what was loaded (the attempted edit was never applied, and RichInput has
+  // already reverted its own DOM back to match once it lost focus). "Make a
+  // Copy" duplicates that pristine state into a brand-new, unlocked draft,
+  // titled `Copy of "{original subject}"`, and switches the editor onto it —
+  // the user lands directly in the copy, ready to make the edit for real.
+  // That title is written directly into fields.subject (the real email
+  // subject line), not just the top-level SavedDraft.subject metadata —
+  // buildDraftPayload() always re-derives the latter from fields.subject on
+  // every save/autosave/discard, so a metadata-only title would get silently
+  // clobbered by the very next one. This matches how "make a copy" works in
+  // most similar tools (the copy's title visibly says "Copy of ..." until the
+  // user renames it) rather than permanently diverging the list title from
+  // the actual subject field.
   const makeCopy = useCallback(async () => {
     const f = fieldsRef.current;
     const c = communityRef.current;
@@ -1235,6 +1245,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     dismissPushResult,
     makeCopy,
     cancelCopyPrompt,
+    requestCopyPrompt,
   };
 
   return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>;

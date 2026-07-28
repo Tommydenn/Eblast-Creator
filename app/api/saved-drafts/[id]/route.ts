@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { savedDrafts } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { savedDrafts, savedDraftApprovals } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 
-// GET /api/saved-drafts/[id]  — returns the full draft including image data
+// GET /api/saved-drafts/[id]  — returns the full draft including image data,
+// plus lock-relevant metadata (approvedAt/pushedAt/pendingApproval) so the
+// editor can determine whether further edits must go to a copy instead of
+// this row — see DraftContext's lockInfo.
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;
   try {
@@ -11,7 +14,18 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     if (rows.length === 0) {
       return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ ok: true, draft: rows[0].data });
+    const [pending] = await db
+      .select({ token: savedDraftApprovals.token })
+      .from(savedDraftApprovals)
+      .where(and(eq(savedDraftApprovals.savedDraftId, id), eq(savedDraftApprovals.decision, "pending")))
+      .limit(1);
+    return NextResponse.json({
+      ok: true,
+      draft: rows[0].data,
+      approvedAt: rows[0].approvedAt,
+      pushedAt: rows[0].pushedAt,
+      pendingApproval: !!pending,
+    });
   } catch (err) {
     console.error("[saved-drafts/[id] GET]", err);
     return NextResponse.json({ ok: false, error: "Database error" }, { status: 500 });

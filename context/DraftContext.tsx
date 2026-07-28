@@ -111,6 +111,28 @@ export interface SavedDraft {
   agentLoop?: AgentLoopSummary | null;
   pastSendsContext?: PastSendForContext[];
   subjectSpecialist?: SubjectSpecialistResult | null;
+  /**
+   * Lock-relevant metadata, present only when loaded via GET /api/saved-drafts/[id]
+   * (never part of the stored payload itself) — see loadSavedDraft/lockInfo.
+   */
+  approvedAt?: string | null;
+  pushedAt?: string | null;
+  pendingApproval?: boolean;
+}
+
+// A draft that's been approved by the sales director, pushed to HubSpot, or
+// sent for approval and still awaiting a decision must never be silently
+// altered — any edit attempt instead prompts the user to continue on a fresh
+// copy, leaving the original exactly as it was at that milestone.
+export type DraftLockReason = "approved" | "pushed" | "pending_approval";
+export interface DraftLockInfo { locked: boolean; reasons: DraftLockReason[] }
+
+function computeLockInfo(draft: Pick<SavedDraft, "approvedAt" | "pushedAt" | "pendingApproval">): DraftLockInfo {
+  const reasons: DraftLockReason[] = [];
+  if (draft.approvedAt) reasons.push("approved");
+  if (draft.pushedAt) reasons.push("pushed");
+  if (draft.pendingApproval) reasons.push("pending_approval");
+  return { locked: reasons.length > 0, reasons };
 }
 
 interface RefineSnapshot {
@@ -167,6 +189,9 @@ export interface DraftContextValue {
   isSaving: boolean;
   saveError: string | null;
   approvalStatus: { decision: string; sentAt: string } | null;
+  lockInfo: DraftLockInfo | null;
+  copyPromptOpen: boolean;
+  isMakingCopy: boolean;
   lastEditTimestamp: number;
   activeEditorRef: React.MutableRefObject<HTMLDivElement | null>;
   activeEditorCallback: React.MutableRefObject<(() => void) | null>;
@@ -195,6 +220,8 @@ export interface DraftContextValue {
   buildHtml: () => string;
   addToImageBank: (url: string) => void;
   dismissPushResult: () => void;
+  makeCopy: () => Promise<void>;
+  cancelCopyPrompt: () => void;
 }
 
 const DraftContext = createContext<DraftContextValue | null>(null);
@@ -303,11 +330,29 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Approval
   const [approvalStatus, setApprovalStatus] = useState<{ decision: string; sentAt: string } | null>(null);
 
+  // Lock (approved / pushed / pending-approval drafts can't be edited in place —
+  // any edit attempt opens a "make a copy" prompt instead). null = unlocked/unknown.
+  const [lockInfo, setLockInfo] = useState<DraftLockInfo | null>(null);
+  const lockInfoRef = useRef<DraftLockInfo | null>(null);
+  useEffect(() => { lockInfoRef.current = lockInfo; }, [lockInfo]);
+  const [copyPromptOpen, setCopyPromptOpen] = useState(false);
+  const [isMakingCopy, setIsMakingCopy] = useState(false);
+
   // Format toolbar — shared mutable refs so the preview-panel toolbar can
   // target whichever contentEditable is currently focused in the sidebar.
   const activeEditorRef = useRef<HTMLDivElement | null>(null);
   const activeEditorCallback = useRef<(() => void) | null>(null);
   const activeFieldNameRef = useRef<string | null>(null);
+
+  // Opens the copy prompt (safe to call repeatedly — every guarded mutator
+  // calls this on every blocked edit attempt while locked, but it's just a
+  // state set, so it's a no-op once already open) and blurs whatever's
+  // focused so further keystrokes don't keep silently landing in the locked
+  // field while the user decides.
+  const requestCopyPrompt = useCallback(() => {
+    setCopyPromptOpen(true);
+    if (activeEditorRef.current) activeEditorRef.current.blur();
+  }, []);
 
   // Debounce auto-save — increments whenever any field is edited so EditorLayout
   // can start a 5-second timer that resets on each new edit.
@@ -384,17 +429,26 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ─── setField / setFields ──────────────────────────────────────────────────
+  // Locked drafts (approved / pushed / pending-approval) still apply the edit
+  // to local state — so typing/toolbar formatting feels normal and RichInput
+  // never fights its own DOM — but never schedule an autosave, so the
+  // original row in the DB is never actually touched. The copy prompt opens
+  // on the very first attempt; "Make a Copy" carries these in-memory edits
+  // over to a new draft, "Cancel" reloads the untouched original from the
+  // server, discarding them.
   const setField = useCallback(<K extends keyof ExtractedFlyer>(key: K, value: ExtractedFlyer[K]) => {
     setFields_((prev) => prev ? { ...prev, [key]: value } : prev);
     setIsSaved(false);
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setLastEditTimestamp(Date.now());
-  }, []);
+  }, [requestCopyPrompt]);
 
   const setFields = useCallback((patch: Partial<ExtractedFlyer>) => {
     setFields_((prev) => prev ? { ...prev, ...patch } : prev);
     setIsSaved(false);
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setLastEditTimestamp(Date.now());
-  }, []);
+  }, [requestCopyPrompt]);
 
   // ─── Image management ──────────────────────────────────────────────────────
   const assignImage = useCallback(async (slot: "hero" | "secondary", imageUrl: string) => {
@@ -402,7 +456,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const croppedUrl = await cropImage(imageUrl, ratio);
     setImages((prev) => ({ ...prev, [slot]: { url: croppedUrl, originalUrl: imageUrl } }));
     setIsSaved(false);
-  }, []);
+    if (lockInfoRef.current?.locked) requestCopyPrompt();
+  }, [requestCopyPrompt]);
 
   const assignGalleryImage = useCallback(async (idx: number, imageUrl: string) => {
     const croppedUrl = await cropImage(imageUrl, ASPECT.gallery);
@@ -413,7 +468,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       return { ...prev, gallery };
     });
     setIsSaved(false);
-  }, []);
+    if (lockInfoRef.current?.locked) requestCopyPrompt();
+  }, [requestCopyPrompt]);
 
   const removeImage = useCallback((slot: "hero" | "secondary" | "gallery", galleryIdx?: number) => {
     setImages((prev) => {
@@ -424,7 +480,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       return { ...prev, [slot]: null };
     });
     setIsSaved(false);
-  }, []);
+    if (lockInfoRef.current?.locked) requestCopyPrompt();
+  }, [requestCopyPrompt]);
 
   const repositionImage = useCallback(async (
     slot: "hero" | "secondary" | "gallery",
@@ -456,7 +513,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
       return { ...prev, [slot]: { url: croppedUrl, originalUrl } };
     });
-  }, []);
+    if (lockInfoRef.current?.locked) requestCopyPrompt();
+  }, [requestCopyPrompt]);
 
   const addToImageBank = useCallback((url: string) => {
     setImageBank((prev) => (prev.includes(url) ? prev : [...prev, url]));
@@ -523,6 +581,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setRedoStack([]);
       setActiveSection("hero");
       setStage("editing");
+      setLockInfo(null);
+      setCopyPromptOpen(false);
 
       // Eagerly claim a draftId and write it to localStorage so the resume
       // banner always points to the draft just generated, not a previous one.
@@ -597,6 +657,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const c = communityRef.current;
     const imgs = imagesRef.current;
     if (!f || !c) return;
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
 
     // Snapshot for undo
     const snapshot: RefineSnapshot = {
@@ -645,7 +706,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsRefining(false);
     }
-  }, []);
+  }, [requestCopyPrompt]);
 
   const undo = useCallback(() => {
     setUndoStack((prev) => {
@@ -754,6 +815,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Save (explicit — shows "Saving…" indicator) ─────────────────────────
   const save = useCallback(async () => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     const payload = buildDraftPayload();
     if (!payload) return;
     const { id, draft } = payload;
@@ -783,10 +845,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsSaving(false);
     }
-  }, [buildDraftPayload, saveImagesForDraft]);
+  }, [buildDraftPayload, saveImagesForDraft, requestCopyPrompt]);
 
   // ─── autoSave (silent — no UI indicator, used by 5s interval) ────────────
+  // Guarded the same way as save() — belt-and-suspenders: setField/setFields
+  // already stop bumping lastEditTimestamp while locked (so this normally
+  // never even gets scheduled), but this covers any other path that might.
   const autoSave = useCallback(async () => {
+    if (lockInfoRef.current?.locked) return;
     const payload = buildDraftPayload();
     if (!payload) return;
     const { id, draft } = payload;
@@ -833,6 +899,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setActiveSection("hero");
     setStage("editing");
     setSelectedCommunitySlug(draft.communitySlug);
+    setLockInfo(computeLockInfo(draft));
+    setCopyPromptOpen(false);
 
     // Load images from separate endpoint (saved to avoid 4.5 MB payload limit)
     fetch(`/api/saved-drafts/${draft.id}/images`)
@@ -910,7 +978,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     // Write localStorage SYNCHRONOUSLY before clearing state so GenerateView
     // can read the resume ID on its very first mount (no async race).
     const payload = buildDraftPayload();
-    if (payload) {
+    // Never persist a locked draft's in-memory edits on the way out — that
+    // would slip an unauthorized change through the one exit path that
+    // doesn't go through setField/save's guards.
+    if (payload && !lockInfoRef.current?.locked) {
       const { id, draft } = payload;
       try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
       // Fire-and-forget save so the draft is persisted in the DB too.
@@ -938,6 +1009,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setApprovalStatus(null);
     setRefineError(null);
     setGenerateError(null);
+    setLockInfo(null);
+    setCopyPromptOpen(false);
   }, [buildDraftPayload]);
 
   // ─── Push ─────────────────────────────────────────────────────────────────
@@ -945,6 +1018,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const f = fieldsRef.current;
     const c = communityRef.current;
     if (!f || !c) return;
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setIsPushing(true);
     setPushError(null);
     setPushResult(null);
@@ -958,6 +1032,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           communitySlug: c.slug,
+          draftId,
           subject: f.subject,
           previewText: f.previewText,
           eventCategory: f.eventCategory,
@@ -972,11 +1047,12 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsPushing(false);
     }
-  }, [buildHtml, refreshCommunity]);
+  }, [draftId, buildHtml, refreshCommunity, requestCopyPrompt]);
 
   // ─── Send for approval ───────────────────────────────────────────────────
   const sendForApproval = useCallback(async (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string }) => {
     if (!draftId) throw new Error("Save the draft first before sending for approval.");
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     const c = communityRef.current;
     if (!c) throw new Error("No community selected.");
     // Same freshness guarantee as push() — the approval email must reflect
@@ -991,13 +1067,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error ?? "Failed to send approval");
     setApprovalStatus({ decision: "pending", sentAt: new Date().toISOString() });
-  }, [draftId, buildHtml, refreshCommunity]);
+  }, [draftId, buildHtml, refreshCommunity, requestCopyPrompt]);
 
   // ─── Subject swap ─────────────────────────────────────────────────────────
   const swapSubjectLine = useCallback((subject: string, previewText: string) => {
     setFields_((prev) => prev ? { ...prev, subject, previewText } : prev);
     setIsSaved(false);
-  }, []);
+    if (lockInfoRef.current?.locked) requestCopyPrompt();
+  }, [requestCopyPrompt]);
 
   // ─── selectCommunity ──────────────────────────────────────────────────────
   const selectCommunity = useCallback((slug: string) => {
@@ -1008,6 +1085,92 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setPushResult(null);
     setPushError(null);
   }, []);
+
+  // ─── Copy prompt resolution (locked drafts) ──────────────────────────────
+  // "Make a Copy" carries whatever's currently in memory (including edits
+  // made since the lock was hit) over to a brand-new, unlocked draft, titled
+  // `Copy of "{original subject}"`. That title is written directly into
+  // fields.subject (the real email subject line), not just the top-level
+  // SavedDraft.subject metadata — buildDraftPayload() always re-derives the
+  // latter from fields.subject on every save/autosave/discard, so a
+  // metadata-only title would get silently clobbered by the very next one.
+  // This matches how "make a copy" works in most similar tools (the copy's
+  // title visibly says "Copy of ..." until the user renames it) rather than
+  // permanently diverging the list title from the actual subject field.
+  const makeCopy = useCallback(async () => {
+    const f = fieldsRef.current;
+    const c = communityRef.current;
+    if (!f || !c) return;
+    setIsMakingCopy(true);
+    try {
+      const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const copiedFields: ExtractedFlyer = { ...f, subject: `Copy of "${f.subject}"` };
+      const imgs = imagesRef.current;
+      const filteredImages: DraftImages = {
+        hero: imgs.hero ? { url: "", originalUrl: "" } : null,
+        secondary: imgs.secondary ? { url: "", originalUrl: "" } : null,
+        gallery: imgs.gallery.map(() => ({ url: "", originalUrl: "" })),
+      };
+      const draft: SavedDraft = {
+        id: newId,
+        communitySlug: c.slug,
+        communityName: c.displayName,
+        savedAt: new Date().toISOString(),
+        subject: copiedFields.subject,
+        fields: copiedFields,
+        images: filteredImages,
+        imageBank: [],
+        imageCount: (imgs.hero ? 1 : 0) + (imgs.secondary ? 1 : 0) + imgs.gallery.length,
+        review,
+        agentLoop,
+        pastSendsContext,
+        subjectSpecialist,
+      };
+      const res = await fetch("/api/saved-drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft }),
+      });
+      const data = await res.json().catch(() => ({ ok: false }));
+      if (!data.ok) throw new Error(data.error ?? "Failed to create copy");
+
+      setFields_(copiedFields);
+      setDraftId(newId);
+      setLockInfo(null);
+      setIsSaved(true);
+      setCopyPromptOpen(false);
+      try { localStorage.setItem("eblast_lastDraftId", newId); } catch {}
+      setSaveNotice("Created a copy — you're now editing it");
+      setTimeout(() => setSaveNotice(null), 4000);
+      saveImagesForDraft(newId).catch(() => null);
+    } catch (e: any) {
+      setSaveError(e.message ?? "Failed to create copy");
+    } finally {
+      setIsMakingCopy(false);
+    }
+  }, [review, agentLoop, pastSendsContext, subjectSpecialist, saveImagesForDraft]);
+
+  // "Cancel" discards whatever's been typed since the lock was hit by
+  // reloading the untouched original from the server — safe because setField/
+  // save/autoSave/discard never actually persisted any of it while locked.
+  const cancelCopyPrompt = useCallback(() => {
+    setCopyPromptOpen(false);
+    const id = draftId;
+    if (!id) return;
+    fetch(`/api/saved-drafts/${encodeURIComponent(id)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok && data.draft) {
+          loadSavedDraft({
+            ...(data.draft as SavedDraft),
+            approvedAt: data.approvedAt,
+            pushedAt: data.pushedAt,
+            pendingApproval: data.pendingApproval,
+          });
+        }
+      })
+      .catch(() => null);
+  }, [draftId, loadSavedDraft]);
 
   // ─── Context value ────────────────────────────────────────────────────────
   const value: DraftContextValue = {
@@ -1039,6 +1202,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     isSaving,
     saveError,
     approvalStatus,
+    lockInfo,
+    copyPromptOpen,
+    isMakingCopy,
     lastEditTimestamp,
     activeEditorRef,
     activeEditorCallback,
@@ -1067,6 +1233,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     buildHtml,
     addToImageBank,
     dismissPushResult,
+    makeCopy,
+    cancelCopyPrompt,
   };
 
   return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>;

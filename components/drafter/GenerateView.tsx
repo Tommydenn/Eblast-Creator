@@ -158,7 +158,14 @@ function SavedDraftsView() {
     try {
       const res = await fetch(`/api/saved-drafts/${encodeURIComponent(id)}`);
       const data = await res.json();
-      if (data.ok && data.draft) loadSavedDraft(data.draft as SavedDraft);
+      if (data.ok && data.draft) {
+        loadSavedDraft({
+          ...(data.draft as SavedDraft),
+          approvedAt: data.approvedAt,
+          pushedAt: data.pushedAt,
+          pendingApproval: data.pendingApproval,
+        });
+      }
     } finally {
       setOpeningId(null);
     }
@@ -601,7 +608,12 @@ export default function GenerateView() {
       const res = await fetch(`/api/saved-drafts/${encodeURIComponent(resumeDraft.id)}`);
       const data = await res.json();
       if (data.ok && data.draft) {
-        loadSavedDraft(data.draft);
+        loadSavedDraft({
+          ...data.draft,
+          approvedAt: data.approvedAt,
+          pushedAt: data.pushedAt,
+          pendingApproval: data.pendingApproval,
+        });
         setResumeDraft(null);
       }
     } finally {

@@ -7,7 +7,8 @@ import { inlineRelativeImages } from "@/lib/inline-images";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 import { db } from "@/lib/db";
-import { pastSends } from "@/lib/db/schema";
+import { pastSends, savedDrafts } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -15,6 +16,8 @@ export const maxDuration = 30;
 interface PushBody {
   /** Community slug. */
   communitySlug: string;
+  /** The saved draft this push originated from, if any — used to mark it pushedAt. */
+  draftId?: string;
   /** Email subject. */
   subject: string;
   /** Optional inbox preview text. */
@@ -203,6 +206,12 @@ export async function POST(req: NextRequest) {
         },
       })
       .catch(() => null);
+  }
+
+  // Mark the originating saved draft as pushed so the editor knows further
+  // edits must go to a copy instead of altering what was actually sent.
+  if (create.ok && body.draftId) {
+    db.update(savedDrafts).set({ pushedAt: new Date() }).where(eq(savedDrafts.id, body.draftId)).catch(() => null);
   }
 
   return NextResponse.json({

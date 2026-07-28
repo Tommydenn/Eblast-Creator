@@ -7,6 +7,7 @@ import { FormatToolbar } from "@/components/drafter/RichEditor";
 import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
 import ApprovalModal from "./ApprovalModal";
+import { CopyPromptModal } from "./CopyPromptModal";
 
 // Error code generator — gives each error a short stable identifier
 function errorCode(msg: string): string {
@@ -231,7 +232,10 @@ export default function EditorLayout() {
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
-  const { isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, activeFieldNameRef, community } = useDraft();
+  const {
+    isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, activeFieldNameRef, community,
+    lockInfo, copyPromptOpen, isMakingCopy, makeCopy, cancelCopyPrompt,
+  } = useDraft();
 
   const isSavingRef = useRef(isSaving);
   const fieldsRef2 = useRef(fields);
@@ -335,6 +339,15 @@ export default function EditorLayout() {
       </div>
 
       {approvalOpen && <ApprovalModal onClose={() => setApprovalOpen(false)} />}
+
+      {copyPromptOpen && lockInfo && (
+        <CopyPromptModal
+          reasons={lockInfo.reasons}
+          isMakingCopy={isMakingCopy}
+          onMakeCopy={makeCopy}
+          onCancel={cancelCopyPrompt}
+        />
+      )}
     </div>
   );
 }

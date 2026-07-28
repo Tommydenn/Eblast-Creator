@@ -283,6 +283,16 @@ export const savedDrafts = pgTable("saved_drafts", {
    */
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   /**
+   * Set when this exact draft is pushed to HubSpot directly (the "Push to
+   * HubSpot" button in the editor, app/api/push-eblast). Independent of
+   * approvedAt, which is only set by the magic-link approval flow — a draft
+   * can be pushed directly without ever going through approval. Both this and
+   * approvedAt (plus a pending row in saved_draft_approvals) are checked by
+   * the editor to decide whether further edits must go to a copy instead of
+   * this row — see DraftContext's lockInfo.
+   */
+  pushedAt: timestamp("pushed_at", { withTimezone: true }),
+  /**
    * Soft-delete marker. Set when the user deletes a draft from the Saved
    * Drafts list — the row (and its data/images/approval history) stays
    * intact and recoverable via the Deleted Drafts view until the daily

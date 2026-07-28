@@ -128,6 +128,16 @@ const GLOBAL_POINTE_BRAND = {
   fontsSource: "brand-guide-extracted" as const,
 };
 
+const BROADWELL_BRAND = {
+  primary: "#005E85",    // PMS 7469 C — deep teal blue
+  accent: "#CFB400",     // PMS 606 C — gold
+  background: "#669BB4", // PMS 7469 C 60% tint — light steel blue
+  fontHeadline: "Asul",
+  fontBody: "Raleway",
+  paletteSource: "brand-guide-extracted" as const,
+  fontsSource: "brand-guide-extracted" as const,
+};
+
 export const seedCommunities: SeedCommunity[] = [
   // ---------------- Caretta brand ----------------
   {
@@ -668,6 +678,23 @@ export const seedCommunities: SeedCommunity[] = [
     },
     senders: [],
   },
+  {
+    community: {
+      slug: "broadwell",
+      displayName: "Broadwell",
+      shortName: "Broadwell",
+      brandFamily: "Broadwell",
+      type: "mixed",
+      careTypes: ["Assisted Living", "Memory Care"],
+      address: { street: "3025 Harbor Lane N", city: "Plymouth", state: "MN", zip: "55447" },
+      websiteUrl: "https://broadwellplymouth.com",
+      hubspot: {},
+      brand: BROADWELL_BRAND,
+      logos: twoLogos("broadwell"),
+      socials: {},
+    },
+    senders: [{ name: "Matthew Gregar", email: "mgregar@greatlakesmc.com", isPrimary: true }],
+  },
 ];
 
 // HubSpot acronym per community slug. Used to label emails in HubSpot
@@ -700,6 +727,7 @@ const ACRONYM_BY_SLUG: Record<string, string> = {
   "global-pointe": "GP",
   "seven-hills": "SH",
   "orchards-of-minnetonka": "OM",
+  "broadwell": "BWP",
   "the-pillars-of-grand-rapids": "PGR",
 };
 

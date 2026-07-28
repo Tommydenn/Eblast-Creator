@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
-import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
+import { RichInput, CallButtonField, EmailButtonField } from "@/components/drafter/RichEditor";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -24,6 +24,20 @@ export default function CtaSection() {
   // Pre-fill boxes with the value the email would use by default, so nothing is
   // blank when there's a sensible default. These stay undefined in storage until
   // the user actually edits them (so date/time/rsvp keep mirroring the Hero).
+
+  const additionalEmails = fields.additionalFooterEmails ?? [];
+  function updateAdditionalEmail(idx: number, html: string) {
+    const next = [...additionalEmails];
+    next[idx] = html;
+    setField("additionalFooterEmails", next);
+  }
+  function addAdditionalEmail() {
+    setField("additionalFooterEmails", [...additionalEmails, ""]);
+  }
+  function removeAdditionalEmail(idx: number) {
+    const next = additionalEmails.filter((_, i) => i !== idx);
+    setField("additionalFooterEmails", next.length ? next : undefined);
+  }
 
   return (
     <div className="space-y-5">
@@ -127,6 +141,63 @@ export default function CtaSection() {
           fieldName="footerName"
         />
       </Field>
+
+      <Field label="Salesperson Email" hint="The community's primary sender, set on the Community page. Select text to format it — the address itself can't be changed here.">
+        <EmailButtonField
+          value={fields.footerSenderEmail ?? ""}
+          onValueChange={(html) => setField("footerSenderEmail", html || undefined)}
+          fieldName="footerSenderEmail"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+        />
+      </Field>
+
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">Additional Emails</label>
+          <button
+            type="button"
+            onClick={addAdditionalEmail}
+            className="text-xs text-[#1F4538] hover:underline font-medium"
+          >
+            + Add email
+          </button>
+        </div>
+        {additionalEmails.length === 0 ? (
+          <p className="text-xs text-[#9aaba4]">Shown under the primary email above. Freely editable — not tied to a community record.</p>
+        ) : (
+          <div className="space-y-2">
+            {additionalEmails.map((email, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <div className="flex-1">
+                  <RichInput
+                    value={email}
+                    onValueChange={(html) => updateAdditionalEmail(i, html)}
+                    placeholder="e.g. jane@greatlakesmc.com"
+                    className={baseInput}
+                    activeEditorRef={activeEditorRef}
+                    activeEditorCallback={activeEditorCallback}
+                    activeFieldNameRef={activeFieldNameRef}
+                    fieldName={`additionalFooterEmails-${i}`}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeAdditionalEmail(i)}
+                  title="Remove"
+                  className="mt-2 p-1 rounded-lg text-[#c9c0b8] hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

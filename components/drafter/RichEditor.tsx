@@ -396,6 +396,76 @@ export function CallButtonField({
   );
 }
 
+// ── Salesperson email field — formattable, locked text (mirrors CallButtonField) ─
+
+/**
+ * The footer's primary salesperson email, sourced from the community's
+ * primary sender record (Community page, not the drafter). Fully formattable
+ * (bold/italic/color/font/size), but the plain text is always exactly that
+ * email address — any edit that changes it is reverted, same guardPlain
+ * mechanism as CallButtonField's tracking-number lock. Unlike the call
+ * button, there's no surrounding label text to preserve, so the guard is an
+ * exact match rather than a substring check.
+ */
+export function EmailButtonField({
+  value: rawValue,
+  onValueChange,
+  fieldName,
+  className,
+  activeEditorRef,
+  activeEditorCallback,
+  activeFieldNameRef,
+}: {
+  value: string;
+  onValueChange: (html: string) => void;
+  fieldName: string;
+  className?: string;
+} & Omit<ActiveEditorProps, "fieldName">) {
+  const { community } = useDraft();
+  const primary = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
+  const email = primary?.email ?? null;
+
+  const stored = rawValue ?? "";
+
+  // Always show the current primary sender's email, reconciling any stale
+  // value (an old sender's email, or a legacy draft with none set) without a
+  // write until the user actually applies formatting.
+  const value = (() => {
+    if (!email) return stored;
+    const plain = stored.replace(/<[^>]+>/g, "").trim();
+    if (stored && plain === email) return stored;
+    return email;
+  })();
+
+  const guardPlain = email ? (t: string) => t.trim() === email : undefined;
+
+  return (
+    <div>
+      <RichInput
+        value={value}
+        onValueChange={onValueChange}
+        guardPlain={guardPlain}
+        placeholder="Salesperson email"
+        className={className}
+        activeEditorRef={activeEditorRef}
+        activeEditorCallback={activeEditorCallback}
+        activeFieldNameRef={activeFieldNameRef}
+        fieldName={fieldName}
+      />
+      {email ? (
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#7a8c85]">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" />
+          </svg>
+          <span><span className="font-semibold text-[#5a6b63]">{email}</span> is locked — you can format it, but the address can&rsquo;t be changed.</span>
+        </div>
+      ) : (
+        <p className="mt-1.5 text-xs text-amber-600">No primary sender is set for this community yet — add one on the Community page.</p>
+      )}
+    </div>
+  );
+}
+
 // ── Toolbar ─────────────────────────────────────────────────────────────────────
 
 // Default font sizes as rendered in the email template, keyed by field name.
@@ -420,6 +490,7 @@ const FIELD_FONT_SIZES: Record<string, number> = {
   ctaButtonLabel: 14,
   finalCtaButtonLabel: 14,
   footerButtonLabel: 13,
+  footerSenderEmail: 13,
 };
 
 // Formatting the email template forces on a field's container. The toolbar uses

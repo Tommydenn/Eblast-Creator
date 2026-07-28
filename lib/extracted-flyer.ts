@@ -144,4 +144,21 @@ export interface ExtractedFlyer {
   ctaButtonHidden?: boolean;
   finalCtaButtonHidden?: boolean;
   footerButtonHidden?: boolean;
+
+  /**
+   * Formatting-only override for the footer's primary salesperson email.
+   * Same locking pattern as ctaButtonLabel's tracking phone number (see
+   * CallButtonField/EmailButtonField): the plain text is always the
+   * community's current primary sender email — only bold/italic/color/font/
+   * size can be changed here, never the address itself. That address is
+   * owned by the Community page's sender records, not the drafter.
+   */
+  footerSenderEmail?: string;
+
+  /**
+   * Additional email addresses shown under the primary one in the footer.
+   * Unlike footerSenderEmail, these are fully free-text/editable — added and
+   * removed directly in the editor, not sourced from the community record.
+   */
+  additionalFooterEmails?: string[];
 }

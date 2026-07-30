@@ -382,12 +382,23 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const community = communities.find((c) => c.slug === selectedCommunitySlug) ?? null;
   useEffect(() => { communityRef.current = community; }, [community]);
 
-  // Fetch communities on mount
+  // Fetch communities on mount, then honor a ?community=<slug> deep link — the
+  // "Create Eblast" button on a community page lands here with that param and
+  // expects its community already selected. Validated against the fetched list
+  // so a stale/bogus slug just leaves the picker empty instead of selecting a
+  // community that doesn't exist. `prev || slug` so a selection the user made
+  // while the fetch was still in flight wins.
   useEffect(() => {
     fetch("/api/communities")
       .then((r) => r.json())
       .then((data) => {
-        if (data.communities) setCommunities(data.communities as ClientCommunity[]);
+        if (!data.communities) return;
+        const list = data.communities as ClientCommunity[];
+        setCommunities(list);
+        const slug = new URLSearchParams(window.location.search).get("community");
+        if (slug && list.some((c) => c.slug === slug)) {
+          setSelectedCommunitySlug((prev) => prev || slug);
+        }
       })
       .catch(() => null);
   }, []);

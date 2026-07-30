@@ -366,19 +366,27 @@ export async function cropDataUriToXY(
     const srcRatio = meta.width / meta.height;
     let cropWidth: number, cropHeight: number;
 
-    // Apply a 12% margin so BOTH axes always have panning room regardless of
-    // the source aspect ratio. A portrait original in a 16:9 slot would have
-    // zero horizontal excess without this — left/right would do nothing.
-    const MARGIN = 0.12;
+    // Take the LARGEST box of the target ratio that fits inside the source —
+    // the constraining dimension is used in full. That's the same framing
+    // scale as the initial crop (cropDataUriToAspectRatio, fit: "cover"), so
+    // repositioning only slides the window; it never zooms in or shaves every
+    // edge. There used to be a 12% margin here purely so both axes had panning
+    // room, but it discarded 12% of the photo on every reposition — not a
+    // trade worth making. Panning room exists on whichever axis actually has
+    // excess pixels; on the constraining axis there is nothing to pan into.
     if (srcRatio > targetRatio) {
       // Source wider than target: height is the constraining dimension.
-      cropHeight = Math.round(meta.height * (1 - MARGIN));
+      cropHeight = meta.height;
       cropWidth = Math.round(cropHeight * targetRatio);
     } else {
       // Source taller than (or equal to) target: width is the constraining dimension.
-      cropWidth = Math.round(meta.width * (1 - MARGIN));
+      cropWidth = meta.width;
       cropHeight = Math.round(cropWidth / targetRatio);
     }
+    // Rounding can push the derived side a pixel past the source when the two
+    // ratios are nearly equal — extract() throws on an out-of-bounds region.
+    cropWidth = Math.min(cropWidth, meta.width);
+    cropHeight = Math.min(cropHeight, meta.height);
 
     const left = Math.round((meta.width - cropWidth) * (x / 100));
     const top = Math.round((meta.height - cropHeight) * (y / 100));

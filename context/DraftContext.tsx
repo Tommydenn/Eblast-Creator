@@ -145,7 +145,12 @@ export interface PushStep { step: string; ok: boolean; status?: number; body?: a
 
 // ─── Crop helpers ─────────────────────────────────────────────────────────────
 
-const ASPECT = { hero: 600 / 340, secondary: 528 / 396, gallery: 4 / 3 } as const;
+// Must match the <img> slots in render-email.ts (hero 600×340, secondary
+// 528×300, gallery tiles 4:3) — those render with height:auto, so a mismatch
+// here doesn't crop to fit, it changes the photo's displayed shape. secondary
+// was 528/396 (4:3), so repositioning re-cropped a 16:9 photo to 4:3 and made
+// it visibly taller and narrower than the draft was generated with.
+const ASPECT = { hero: 600 / 340, secondary: 528 / 300, gallery: 4 / 3 } as const;
 
 async function cropImage(imageUrl: string, ratio: number, x = 50, y = 50): Promise<string> {
   const res = await fetch("/api/crop-image", {

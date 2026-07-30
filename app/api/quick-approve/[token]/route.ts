@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
-import { buildEblastHtml } from "@/lib/render-email";
+import { renderSavedDraftHtml, draftEventCategory } from "@/lib/draft-render-server";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 
@@ -166,18 +166,12 @@ export async function GET(
     // Re-render from the draft's structured fields against the community's
     // CURRENT brand/senders, so a Community-page edit made after the approval
     // email was sent (colors, fonts, sender name/email) still lands in what
-    // actually gets pushed — never a frozen snapshot from send time. Only
-    // legacy drafts saved before `.fields` existed fall back to the raw
-    // HTML captured on the approval record.
-    let rawHtml: string;
-    if (draftData?.fields) {
-      const imgs = draftData.images ?? {};
-      rawHtml = buildEblastHtml(draftData.fields, community, {
-        heroImageUrl: imgs.hero?.url,
-        secondaryImageUrl: imgs.secondary?.url,
-        galleryImageUrls: (imgs.gallery ?? []).map((g: any) => g?.url).filter(Boolean),
-      });
-    } else {
+    // actually gets pushed — never a frozen snapshot from send time. Images
+    // come from draft_image_bank, since the draft's own data.images has every
+    // URL stripped to "" (see loadDraftImageUrls). Only legacy drafts saved
+    // before `.fields` existed fall back to the raw HTML snapshot.
+    let rawHtml = (await renderSavedDraftHtml(draftRow.id, draftData, community)).trim();
+    if (!rawHtml) {
       rawHtml = (approval.html ?? draftData?.html ?? "").trim();
     }
     // Never push an empty body — that would create a HubSpot email showing only
@@ -212,7 +206,7 @@ export async function GET(
     const create = await createEmail({
       name: generateHubspotEmailName({
         acronym: community.hubspot.acronym,
-        eventCategory: (draftData?.extracted as any)?.eventCategory,
+        eventCategory: draftEventCategory(draftData),
       }),
       subject,
       fromName: community.senders[0]?.name ?? community.displayName,

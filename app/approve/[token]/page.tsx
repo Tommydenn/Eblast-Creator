@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
-import { buildEblastHtml } from "@/lib/render-email";
+import { renderSavedDraftHtml, draftEventCategory } from "@/lib/draft-render-server";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 
@@ -59,18 +59,10 @@ export default async function ApprovePage({ params, searchParams }: Props) {
       const community = await getCommunity(approval.communitySlug);
       if (!community) throw new Error("Community not found");
 
-      // New format: build HTML from fields. Legacy drafts still have html field.
-      let rawHtml: string;
-      if (draftData?.fields) {
-        const imgs = draftData.images ?? {};
-        rawHtml = buildEblastHtml(draftData.fields, community, {
-          heroImageUrl: imgs.hero?.url,
-          secondaryImageUrl: imgs.secondary?.url,
-          galleryImageUrls: (imgs.gallery ?? []).map((g: any) => g?.url).filter(Boolean),
-        });
-      } else {
-        rawHtml = draftData?.html ?? "";
-      }
+      // New format: build HTML from fields, images restored from
+      // draft_image_bank. Legacy drafts still have an html field.
+      let rawHtml = (await renderSavedDraftHtml(draftRow.id, draftData, community)).trim();
+      if (!rawHtml) rawHtml = draftData?.html ?? "";
 
       let html = await inlineRelativeImages(rawHtml);
       const swap = await swapDataUrisForHostedImages({ html, folderPath: `/eblast-drafter/${community.slug}` });
@@ -95,7 +87,7 @@ export default async function ApprovePage({ params, searchParams }: Props) {
       const create = await createEmail({
         name: generateHubspotEmailName({
           acronym: community.hubspot.acronym,
-          eventCategory: (draftData.fields ?? draftData.extracted)?.eventCategory,
+          eventCategory: draftEventCategory(draftData),
         }),
         subject,
         fromName: community.senders[0]?.name ?? community.displayName,

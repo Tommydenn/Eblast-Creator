@@ -25,7 +25,14 @@ export default function CtaSection() {
   // blank when there's a sensible default. These stay undefined in storage until
   // the user actually edits them (so date/time/rsvp keep mirroring the Hero).
 
-  const additionalEmails = fields.additionalFooterEmails ?? [];
+  // Secondary senders from the Communities page prefill these boxes (email only —
+  // the primary sender is the only name on the eblast, and their email stays above).
+  const primarySender = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
+  const secondarySenderEmails = (community?.senders ?? [])
+    .filter((s) => s !== primarySender && s.email?.trim())
+    .map((s) => s.email.trim());
+
+  const additionalEmails = fields.additionalFooterEmails ?? secondarySenderEmails;
   function updateAdditionalEmail(idx: number, html: string) {
     const next = [...additionalEmails];
     next[idx] = html;
@@ -35,8 +42,9 @@ export default function CtaSection() {
     setField("additionalFooterEmails", [...additionalEmails, ""]);
   }
   function removeAdditionalEmail(idx: number) {
-    const next = additionalEmails.filter((_, i) => i !== idx);
-    setField("additionalFooterEmails", next.length ? next : undefined);
+    // Keep an empty array rather than undefined — undefined would fall back to
+    // the community's secondary senders and the removal wouldn't stick.
+    setField("additionalFooterEmails", additionalEmails.filter((_, i) => i !== idx));
   }
 
   return (

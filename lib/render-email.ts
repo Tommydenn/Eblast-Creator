@@ -414,6 +414,11 @@ export function buildEblastHtml(
     ? (/^https?:\/\//.test(websiteSource) ? websiteSource : `https://${websiteSource}`)
     : "";
   const primarySender = community.senders?.find((s) => s.isPrimary) ?? community.senders?.[0] ?? null;
+  // Secondary senders contribute their email only (never a second name) and are
+  // the default contents of the Additional Emails boxes, always below the primary.
+  const secondarySenderEmails = (community.senders ?? [])
+    .filter((s) => s !== primarySender && s.email?.trim())
+    .map((s) => s.email.trim());
 
   const footer = `
   <tr data-section="Footer">
@@ -430,7 +435,7 @@ export function buildEblastHtml(
       ${primarySender?.name ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 2px 0;">${escapeHtml(primarySender.name)}</p>` : ""}
       <p data-field="footerName" style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${renderInlineField(flyer.footerName ?? community.displayName)}</p>
       ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" data-field="footerSenderEmail" style="font-family: ${brand.fontBody}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${flyer.footerSenderEmail ? renderInlineField(flyer.footerSenderEmail) : escapeHtml(primarySender.email)}</a>` : ""}
-      ${(flyer.additionalFooterEmails ?? [])
+      ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
         .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${brand.fontBody}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${renderInlineField(e)}</a></div>`)
         .join("")}

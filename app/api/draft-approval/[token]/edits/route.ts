@@ -12,6 +12,7 @@ import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { randomBytes } from "node:crypto";
+import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
 
 export const runtime = "nodejs";
 // Auto-refine can take up to 30 s for the Claude call + image processing.
@@ -103,6 +104,18 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
   if (approval.decision !== "pending") {
     return NextResponse.json({ ok: false, error: "This draft has already been decided" }, { status: 409 });
+  }
+
+  // Same lifetime as the Approve link — an aged-out request shouldn't be able
+  // to rewrite a draft and trigger a fresh approval email either.
+  if (isApprovalExpired(approval.sentAt)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `This approval link expired after ${APPROVAL_LINK_TTL_DAYS} days. Please ask the marketing team to send this eblast for approval again.`,
+      },
+      { status: 410 },
+    );
   }
 
   // ── Fallback: route to the marketing team, with a reason for context ───────

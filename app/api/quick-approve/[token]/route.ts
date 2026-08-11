@@ -7,6 +7,7 @@ import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generate
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { renderSavedDraftHtml, draftEventCategory } from "@/lib/draft-render-server";
 import { sendPushFailureEmail } from "@/lib/email";
+import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 
@@ -136,6 +137,17 @@ async function loadApproval(token: string) {
   };
 }
 
+/** Response for a pending approval whose link has aged out. */
+function expiredPage(community: string, subject: string) {
+  return page({
+    icon: "⌛", iconColor: "#8a8378",
+    title: "This Link Has Expired",
+    community,
+    subject,
+    body: `Approval links are only valid for ${APPROVAL_LINK_TTL_DAYS} days, and this one was sent longer ago than that. Nothing has been sent to HubSpot. Please ask the marketing team to send this eblast for approval again.`,
+  });
+}
+
 /** Response for an approval that is no longer awaiting a decision. */
 function decidedPage(decision: string, community: string, subject: string, pushedEmailId?: string | null) {
   if (decision === "approved") {
@@ -201,6 +213,10 @@ export async function GET(
     );
   }
 
+  if (isApprovalExpired(approval.sentAt)) {
+    return new NextResponse(expiredPage(displayName, subject), { headers: HTML_HEADERS });
+  }
+
   const retryNote = approval.pushError
     ? `<div class="error">A previous attempt didn&rsquo;t reach HubSpot: ${esc(approval.pushError)}<br><br>You can safely try again.</div>`
     : "";
@@ -229,6 +245,23 @@ export async function POST(
 ) {
   const { token } = params;
 
+  const preCheck = await loadApproval(token);
+  if (!preCheck) {
+    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid."), {
+      status: 404,
+      headers: HTML_HEADERS,
+    });
+  }
+
+  // Refuse an aged-out link before anything can be claimed or pushed.
+  if (preCheck.approval.decision === "pending" && isApprovalExpired(preCheck.approval.sentAt)) {
+    const stale = await getCommunity(preCheck.approval.communitySlug).catch(() => null);
+    return new NextResponse(
+      expiredPage(stale?.displayName ?? preCheck.approval.communitySlug, preCheck.subject),
+      { headers: HTML_HEADERS },
+    );
+  }
+
   // Atomically claim the approval: pending → approving in a single statement.
   // Whoever wins this UPDATE owns the push; everyone else (a double-click, a
   // second tab, a scanner racing the human) gets zero rows and pushes nothing.
@@ -241,7 +274,7 @@ export async function POST(
 
   const ctx = await loadApproval(token);
   if (!ctx) {
-    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid or has expired."), {
+    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid."), {
       status: 404,
       headers: HTML_HEADERS,
     });

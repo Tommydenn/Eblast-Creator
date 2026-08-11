@@ -101,6 +101,33 @@ function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
 }
 
 /**
+ * Darkest color in a community's brand palette — used for the footer
+ * salesperson emails so they read as text rather than as a bright accent link.
+ *
+ * Considers the palette's text-capable colors only. `background` is excluded
+ * deliberately: it's a surface color, and on brands with a dark surface it
+ * would win here and make the address effectively invisible against the
+ * footer. Falls back to a near-black if the palette has nothing usable.
+ */
+function darkestBrandColor(brand: Community["brand"]): string {
+  const candidates = [
+    brand.primary,
+    brand.accent,
+    (brand as any).secondary as string | undefined,
+    ...(((brand as any).supporting as string[] | undefined) ?? []),
+  ].filter((c): c is string => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c.trim()));
+
+  let best: string | null = null;
+  let bestLum = Infinity;
+  for (const c of candidates) {
+    const lum = relLuminance(c);
+    if (lum === null) continue;
+    if (lum < bestLum) { bestLum = lum; best = c; }
+  }
+  return best ?? "#2D2926";
+}
+
+/**
  * Normalize a user-typed photo link into an href we're willing to emit.
  *
  * Deliberately allow-list only: http(s)/mailto/tel, plus bare domains typed
@@ -327,7 +354,7 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
-            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
             <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
               const plainLen = stripHtml(flyer.scriptSubheadline).length;
@@ -434,7 +461,7 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
+            ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
             ${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
@@ -457,6 +484,9 @@ export function buildEblastHtml(
   const primarySender = community.senders?.find((s) => s.isPrimary) ?? community.senders?.[0] ?? null;
   // Secondary senders contribute their email only (never a second name) and are
   // the default contents of the Additional Emails boxes, always below the primary.
+  // Salesperson addresses read as contact text, not as a bright accent link,
+  // so they take the darkest color in the brand palette rather than the accent.
+  const senderEmailColor = darkestBrandColor(brand);
   const secondarySenderEmails = (community.senders ?? [])
     .filter((s) => s !== primarySender && s.email?.trim())
     .map((s) => s.email.trim());
@@ -475,10 +505,10 @@ export function buildEblastHtml(
       <p data-field="thankYouText" style="font-family: ${brand.fontHeadline}; font-size: 26px; color: ${brand.primary}; margin: 0 0 10px 0;">${flyer.thankYouText ? renderInlineField(flyer.thankYouText) : "Thank You!"}</p>
       ${primarySender?.name ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 2px 0;">${escapeHtml(primarySender.name)}</p>` : ""}
       <p data-field="footerName" style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${renderInlineField(flyer.footerName ?? community.displayName)}</p>
-      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" data-field="footerSenderEmail" style="font-family: ${brand.fontBody}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${flyer.footerSenderEmail ? renderInlineField(flyer.footerSenderEmail) : escapeHtml(primarySender.email)}</a>` : ""}
+      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" data-field="footerSenderEmail" style="font-family: ${brand.fontBody}; font-size: 14px; color: ${senderEmailColor}; text-decoration: none;">${flyer.footerSenderEmail ? renderInlineField(flyer.footerSenderEmail) : escapeHtml(primarySender.email)}</a>` : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
-        .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${brand.fontBody}; font-size: 13px; color: ${brand.accent}; text-decoration: none;">${renderInlineField(e)}</a></div>`)
+        .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${brand.fontBody}; font-size: 14px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)
         .join("")}
     </td>
   </tr>`;

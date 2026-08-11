@@ -9,8 +9,14 @@ interface Props {
 
 export default function ApprovalModal({ onClose }: Props) {
   const { fields, community, save, isSaving, sendForApproval } = useDraft();
-  const [recipientEmail, setRecipientEmail] = useState("jwalls@greatlakesmc.com");
+  // Default the reviewer to this community's primary salesperson — they're who
+  // the approval is almost always for, and they're already on the community
+  // record. Falls back to the marketing address when a community has no
+  // senders set up yet.
+  const primarySender = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
+  const [recipientEmail, setRecipientEmail] = useState(primarySender?.email ?? "jwalls@greatlakesmc.com");
   const [notifyEmail, setNotifyEmail] = useState("jwalls@greatlakesmc.com");
+  const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +32,7 @@ export default function ApprovalModal({ onClose }: Props) {
       await sendForApproval({
         recipientEmail: recipientEmail.trim(),
         notifyEmail: notifyEmail.trim() || undefined,
+        note: note.trim() || undefined,
       });
       setSent(true);
     } catch (e) {
@@ -92,6 +99,22 @@ export default function ApprovalModal({ onClose }: Props) {
               />
               <p className="mt-1 text-[11px] text-[#9aaba4]">
                 If the reviewer requests edits our AI can&rsquo;t apply automatically, this address gets the notes so a human can make the change.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">
+                Note <span className="normal-case tracking-normal font-normal text-[#9aaba4]">(optional)</span>
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                placeholder="Anything you want them to know before they review…"
+                className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] resize-y"
+              />
+              <p className="mt-1 text-[11px] text-[#9aaba4]">
+                Shown to the reviewer above the eblast preview.
               </p>
             </div>
 

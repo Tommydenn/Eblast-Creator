@@ -106,10 +106,12 @@ export interface SendApprovalEmailParams {
   draftSubject: string;
   draftHtml: string;
   token: string;
+  /** Optional personal note from the marketing team, shown above the preview. */
+  note?: string | null;
 }
 
 export async function sendApprovalEmail(params: SendApprovalEmailParams) {
-  const { to, recipientName, communityName, draftSubject, draftHtml, token } = params;
+  const { to, recipientName, communityName, draftSubject, draftHtml, token, note } = params;
   const approveUrl = `${APP_URL}/api/quick-approve/${token}`;
   const editsUrl = `${APP_URL}/approve/${token}/edits`;
   const greeting = firstName(recipientName);
@@ -152,9 +154,18 @@ ${eblastStyleBlock}
             <p style="margin:12px 0 6px;font-size:16px;line-height:1.6;color:#3d3530;">
               Hi ${greeting},
             </p>
-            <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#3d3530;">
+            <p style="margin:0 0 ${note?.trim() ? "18px" : "24px"};font-size:16px;line-height:1.6;color:#3d3530;">
               A new Eblast draft is ready for your review. Please take a look at the email below and let us know if it looks good or if you&rsquo;d like any changes made before it goes out. Thanks!
             </p>
+            ${note?.trim() ? `
+            <table cellpadding="0" cellspacing="0" role="presentation" width="100%" style="margin:0 0 24px;">
+              <tr>
+                <td style="background:#faf8f4;border-left:3px solid #c9b99a;border-radius:0 6px 6px 0;padding:14px 20px;">
+                  <p style="margin:0 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9e9484;font-family:Arial,sans-serif;">A note from the marketing team</p>
+                  <p style="margin:0;font-size:15px;line-height:1.6;color:#2d2926;white-space:pre-wrap;">${escapeHtmlText(note.trim())}</p>
+                </td>
+              </tr>
+            </table>` : ""}
 
             <!-- CTA buttons -->
             <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:20px;">

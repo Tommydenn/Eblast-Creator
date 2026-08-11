@@ -75,6 +75,8 @@ export async function POST(req: NextRequest) {
     recipientName?: string;
     notifyEmail?: string;
     html?: string;
+    /** Optional personal note shown to the reviewer above the preview. */
+    note?: string;
   };
   try {
     body = await req.json();
@@ -82,7 +84,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Body must be JSON" }, { status: 400 });
   }
 
-  const { savedDraftId, communitySlug, recipientEmail, recipientName, notifyEmail, html: bodyHtml } = body;
+  const { savedDraftId, communitySlug, recipientEmail, recipientName, notifyEmail, html: bodyHtml, note } = body;
   if (!savedDraftId || !communitySlug || !recipientEmail) {
     return NextResponse.json({ ok: false, error: "Missing required fields" }, { status: 400 });
   }
@@ -180,6 +182,7 @@ export async function POST(req: NextRequest) {
       draftSubject,
       draftHtml: emailHtml,
       token,
+      note,
     });
   } catch (e: any) {
     await db.delete(savedDraftApprovals).where(eq(savedDraftApprovals.token, token));

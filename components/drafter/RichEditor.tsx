@@ -476,13 +476,13 @@ const FIELD_FONT_SIZES: Record<string, number> = {
   scriptSubheadline: 36,
   eventDate: 22,
   eventTime: 22,
-  rsvpLabel: 11,
+  rsvpLabel: 14,
   storyEyebrow: 11,
   storyScriptTitle: 38,
   bodyParagraphs: 15,
   ctaEventDate: 28,
   ctaEventTime: 28,
-  ctaRsvpLabel: 11,
+  ctaRsvpLabel: 14,
   footerName: 14,
   thankYouText: 26,
   heroAddress: 12,
@@ -490,7 +490,7 @@ const FIELD_FONT_SIZES: Record<string, number> = {
   ctaButtonLabel: 14,
   finalCtaButtonLabel: 14,
   footerButtonLabel: 13,
-  footerSenderEmail: 13,
+  footerSenderEmail: 14,
 };
 
 // Formatting the email template forces on a field's container. The toolbar uses

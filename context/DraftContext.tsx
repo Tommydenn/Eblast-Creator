@@ -219,7 +219,7 @@ export interface DraftContextValue {
   discard: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
   push: () => Promise<void>;
-  sendForApproval: (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string }) => Promise<void>;
+  sendForApproval: (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string; note?: string }) => Promise<void>;
   setActiveSection: (section: EditorSection) => void;
   swapSubjectLine: (subject: string, previewText: string) => void;
   buildHtml: () => string;
@@ -835,8 +835,12 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ─── Save (explicit — shows "Saving…" indicator) ─────────────────────────
+  // Deliberately NOT lock-guarded. Saving doesn't change the eblast — every
+  // mutator that could change it is already blocked while locked, so this can
+  // only ever persist the content that's already there. Prompting for a copy
+  // here meant a locked draft couldn't even be re-saved, which reads as the
+  // app refusing an action that changes nothing.
   const save = useCallback(async () => {
-    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     const payload = buildDraftPayload();
     if (!payload) return;
     const { id, draft } = payload;
@@ -1035,11 +1039,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, [buildDraftPayload]);
 
   // ─── Push ─────────────────────────────────────────────────────────────────
+  // Not lock-guarded: pushing sends the draft to HubSpot, it doesn't alter it.
+  // A draft that's already been pushed or approved is exactly the one you'd
+  // legitimately want to push again (a failed push, a second segment), and the
+  // copy prompt made that impossible.
   const push = useCallback(async () => {
     const f = fieldsRef.current;
     const c = communityRef.current;
     if (!f || !c) return;
-    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setIsPushing(true);
     setPushError(null);
     setPushResult(null);
@@ -1078,9 +1085,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, [draftId, buildHtml, refreshCommunity, requestCopyPrompt]);
 
   // ─── Send for approval ───────────────────────────────────────────────────
-  const sendForApproval = useCallback(async (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string }) => {
+  // Not lock-guarded either — sending for approval mails the draft out, it
+  // doesn't edit it. Re-sending to a second reviewer, or re-sending after an
+  // expired link, are both normal and were blocked by the copy prompt.
+  const sendForApproval = useCallback(async (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string; note?: string }) => {
     if (!draftId) throw new Error("Save the draft first before sending for approval.");
-    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     const c = communityRef.current;
     if (!c) throw new Error("No community selected.");
     // Same freshness guarantee as push() — the approval email must reflect

@@ -501,7 +501,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "763-363-1935",
       hubspot: {},
       brand: AMIRA_CHOICE_BRAND,
-      logos: [],
+      logos: twoLogos("amira-corcoran"),
       socials: {},
     },
     senders: [],

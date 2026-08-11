@@ -603,7 +603,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "651-240-2861",
       hubspot: {},
       brand: AMIRA_CHOICE_BRAND,
-      logos: [],
+      logos: twoLogos("amira-roseville"),
       socials: {},
     },
     senders: [],

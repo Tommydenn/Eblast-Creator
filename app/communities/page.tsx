@@ -35,15 +35,23 @@ async function countAwaitingApproval(): Promise<number> {
   return row?.n ?? 0;
 }
 
-/** Everything a community needs before it can produce a complete eblast. */
+/**
+ * Everything a community needs before it can produce a complete eblast.
+ *
+ * Only genuine presence/absence checks belong here. Brand colors and fonts are
+ * deliberately NOT flagged: every community always has values for them, and
+ * the only signal that they were still placeholders — brand.paletteSource /
+ * fontsSource — is written by the seed file and never updated when someone
+ * edits the brand through this page. Keying off it meant a community whose
+ * colors and fonts had been set by hand stayed red forever with no way to
+ * clear it, which is worse than not flagging them at all.
+ */
 function missingPieces(c: Awaited<ReturnType<typeof listCommunities>>[number]): string[] {
   const missing: string[] = [];
   if (c.logos.length === 0) missing.push("Logo");
   if (c.senders.length === 0) missing.push("Salesperson");
   if (!c.trackingPhone) missing.push("Tracking number");
   if (!c.websiteUrl) missing.push("Website");
-  if (c.brand.paletteSource !== "brand-guide-extracted") missing.push("Brand colors");
-  if (c.brand.fontsSource !== "brand-guide-extracted") missing.push("Brand fonts");
   return missing;
 }
 

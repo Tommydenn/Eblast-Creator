@@ -497,6 +497,8 @@ const FIELD_FONT_SIZES: Record<string, number> = {
 // these so a single click toggles the field's default off, and turning a toggle
 // off writes the explicit neutral value that overrides the template.
 const FIELD_DEFAULTS: Record<string, { bold?: boolean; italic?: boolean }> = {
+  rsvpLabel: { bold: true },
+  ctaRsvpLabel: { bold: true },
   storyEyebrow: { bold: true },
   galleryLabel: { bold: true },
   ctaButtonLabel: { bold: true },

@@ -101,6 +101,14 @@ function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
 }
 
 /**
+ * Warm cream used for the hero address line, and — since they're meant to read
+ * as the same tier of supporting detail — for the RSVP label in both the hero
+ * and the CTA. Shared as a constant so the RSVP label can't drift away from
+ * the address again.
+ */
+const HERO_ADDRESS_COLOR = "#E8DDC4";
+
+/**
  * Darkest color in a community's brand palette — used for the footer
  * salesperson emails so they read as text rather than as a bright accent link.
  *
@@ -354,7 +362,7 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
-            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 4px; color: #C8B98A; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 14px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
             <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
               const plainLen = stripHtml(flyer.scriptSubheadline).length;
@@ -366,7 +374,7 @@ export function buildEblastHtml(
               <tr>
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
                   <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
-                  ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 1px; color: #E8DDC4; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
+                  ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -461,7 +469,7 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; letter-spacing: 4px; text-transform: uppercase; color: #FBE2CD; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
+            ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: ${HERO_ADDRESS_COLOR}; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
             ${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">

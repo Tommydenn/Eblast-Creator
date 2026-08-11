@@ -20,7 +20,8 @@ export interface ExtractedFlyer {
   eventLocation?: string;
 
   // Body
-  /** Section eyebrow above the story, e.g. "A Look Inside Our Kitchen". */
+  /** Section eyebrow above the story, e.g. "Inside Our Kitchen". Never opens
+   * with an article — see the storyEyebrow guidance in lib/anthropic.ts. */
   storyEyebrow: string;
   /** Optional script-styled section title, e.g. "Get a Taste of Life at Caretta". */
   storyScriptTitle?: string;

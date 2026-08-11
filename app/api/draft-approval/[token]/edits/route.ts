@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
-import { sendEditNotificationEmail, sendApprovalEmail } from "@/lib/email";
+import { sendEditNotificationEmail, sendApprovalEmail, sendAutoRefineNotificationEmail } from "@/lib/email";
+import type { AutoRefineChange } from "@/lib/email";
 import { swapDataUrisForHostedImages } from "@/lib/hubspot";
 import { refineFlyerContent, classifyEditRequestScope } from "@/lib/anthropic";
 import { buildEblastHtml } from "@/lib/render-email";
@@ -42,6 +43,28 @@ function extractGalleryImgs(html: string): string[] {
     if (src) srcs.push(src);
   }
   return srcs;
+}
+
+/** Human-readable rendering of one ExtractedFlyer field, for the change summary. */
+function displayFieldValue(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (Array.isArray(v)) return v.map((x) => displayFieldValue(x)).filter(Boolean).join("\n\n");
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v).replace(/<[^>]+>/g, "").trim();
+}
+
+/**
+ * Field-by-field diff of what the AI actually altered, so the marketing-team
+ * notification can show it rather than just asserting "an edit was applied".
+ */
+function diffFlyerFields(before: Record<string, any>, after: Record<string, any>): AutoRefineChange[] {
+  const keys = Array.from(new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})]));
+  const changes: AutoRefineChange[] = [];
+  for (const k of keys) {
+    if (stableStringify(before?.[k]) === stableStringify(after?.[k])) continue;
+    changes.push({ field: k, before: displayFieldValue(before?.[k]), after: displayFieldValue(after?.[k]) });
+  }
+  return changes;
 }
 
 /** Order-independent stringify for change detection. */
@@ -261,6 +284,28 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       draftHtml: emailHtml,
       token: newToken,
     });
+
+    // Keep the marketing team in the loop. Without this the whole exchange is
+    // invisible on their side: the draft silently changes and the salesperson
+    // gets a second approval email hours after the first (whenever they got
+    // around to replying), with nothing explaining why. Never let a failure
+    // here fail the request — the revision has already gone out.
+    if (approval.notifyEmail) {
+      try {
+        await sendAutoRefineNotificationEmail({
+          to: approval.notifyEmail,
+          reviewerName: approval.recipientName,
+          reviewerEmail: approval.recipientEmail,
+          communityName: community.displayName,
+          draftSubject: mergedExtracted.subject,
+          editNotes,
+          savedDraftId: approval.savedDraftId,
+          changes: diffFlyerFields(currentExtracted as any, mergedExtracted as any),
+        });
+      } catch (e) {
+        console.error("[draft-approval/edits] auto-refine notification failed:", e);
+      }
+    }
 
     return NextResponse.json({ ok: true, autoRefined: true, refineNote: result.refineNote ?? null });
   } catch (e: any) {

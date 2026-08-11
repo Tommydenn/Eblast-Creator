@@ -88,6 +88,15 @@ function firstName(name: string | null | undefined): string {
   return name.trim().split(/\s+/)[0];
 }
 
+/** Escape untrusted text (edit notes, field values) before it goes into email HTML. */
+function escapeHtmlText(s: string): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface SendApprovalEmailParams {
@@ -242,6 +251,104 @@ ${eblastStyleBlock}
   return sendMail({
     to,
     subject: `Draft review: ${draftSubject} — ${communityName}`,
+    html,
+  });
+}
+
+export interface AutoRefineChange {
+  /** Field name on ExtractedFlyer, e.g. "subject" or "bodyParagraphs". */
+  field: string;
+  before: string;
+  after: string;
+}
+
+export interface SendAutoRefineNotificationParams {
+  to: string;
+  /** The salesperson who asked for the change. */
+  reviewerName: string | null | undefined;
+  reviewerEmail: string;
+  communityName: string;
+  draftSubject: string;
+  editNotes: string;
+  savedDraftId: string;
+  changes: AutoRefineChange[];
+}
+
+/**
+ * Tell the marketing team that a salesperson's edit request was auto-applied
+ * by the AI and a revised eblast has ALREADY been emailed back to them.
+ *
+ * Without this, the whole exchange is invisible from the marketing side: the
+ * saved draft changes and the salesperson gets a second approval email hours
+ * after the first, with nothing explaining why.
+ */
+export async function sendAutoRefineNotificationEmail(params: SendAutoRefineNotificationParams) {
+  const { to, reviewerName, reviewerEmail, communityName, draftSubject, editNotes, savedDraftId, changes } = params;
+  const reviewerFirst = firstName(reviewerName);
+
+  const truncate = (s: string, n = 600) => (s.length > n ? `${s.slice(0, n)}…` : s);
+  const changeRows = changes.length
+    ? changes
+        .map(
+          (c) => `
+      <tr>
+        <td style="padding:12px 0 0;">
+          <p style="margin:0 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9e9484;">${escapeHtmlText(c.field)}</p>
+          <p style="margin:0 0 4px;font-size:14px;line-height:1.55;color:#a3564b;text-decoration:line-through;white-space:pre-wrap;">${escapeHtmlText(truncate(c.before)) || "<em>(empty)</em>"}</p>
+          <p style="margin:0;font-size:14px;line-height:1.55;color:#2d6a4f;white-space:pre-wrap;">${escapeHtmlText(truncate(c.after)) || "<em>(empty)</em>"}</p>
+        </td>
+      </tr>`,
+        )
+        .join("")
+    : `<tr><td style="padding:12px 0 0;"><p style="margin:0;font-size:14px;color:#7a7066;">No field-level differences were recorded.</p></td></tr>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Edit auto-applied</title></head>
+<body style="margin:0;padding:32px 16px;background:#f5f4f1;font-family:Arial,sans-serif;">
+  <table width="560" cellpadding="0" cellspacing="0" role="presentation"
+         style="background:#ffffff;border-radius:8px;padding:40px 48px;border:1px solid #e0ddd7;margin:0 auto;">
+    <tr>
+      <td>
+        <p style="margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9e9484;">
+          Edit Auto-Applied &mdash; Revised Draft Already Sent
+        </p>
+        <h2 style="margin:0 0 24px;font-size:20px;color:#2d2926;font-weight:normal;">
+          ${escapeHtmlText(communityName)}
+        </h2>
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#3d3530;">
+          <strong>${escapeHtmlText(reviewerFirst)}</strong> (${escapeHtmlText(reviewerEmail)}) requested a copy change.
+          The AI applied it and has <strong>already emailed them the revised eblast</strong> for approval &mdash;
+          no action needed from you unless something below looks wrong.
+        </p>
+        <p style="margin:0 0 8px;font-size:13px;color:#7a7066;">Subject: <em>${escapeHtmlText(draftSubject)}</em></p>
+
+        <div style="background:#faf8f4;border-left:3px solid #c9b99a;border-radius:0 6px 6px 0;
+                    padding:16px 20px;margin:16px 0 24px;">
+          <p style="margin:0 0 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#9e9484;">What they asked for:</p>
+          <p style="margin:0;font-size:15px;line-height:1.6;color:#2d2926;white-space:pre-wrap;">${escapeHtmlText(editNotes)}</p>
+        </div>
+
+        <p style="margin:0 0 4px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#9e9484;">
+          What the AI changed
+        </p>
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+               style="border-top:1px solid #ede9e1;margin:0 0 24px;">
+          ${changeRows}
+        </table>
+
+        <p style="margin:0;font-size:14px;color:#7a7066;">
+          Draft ID for reference: <code style="font-size:12px;color:#5c4a3a;">${escapeHtmlText(savedDraftId)}</code>
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  return sendMail({
+    to,
+    subject: `Auto-applied ${reviewerFirst}'s edit: ${draftSubject} — ${communityName}`,
     html,
   });
 }

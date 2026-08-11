@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { listCommunities } from "@/data/communities";
 import { db } from "@/lib/db";
-import { pastSends } from "@/lib/db/schema";
+import { savedDraftApprovals } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
 
 export const dynamic = "force-dynamic";
@@ -21,38 +21,34 @@ const FAMILY_COLORS: Record<string, string> = {
 };
 const DEFAULT_BAR_COLOR = "#a0a89e";
 
-interface CommunityStats {
-  sendCount: number;
-  avgOpenPct: number | null;
-  lastSentAt: string | null;
+/**
+ * Approvals still sitting with a salesperson. This is the one number worth
+ * surfacing here: it's live, it's actionable (someone needs chasing), and
+ * nothing else in the app shows it. The old Sends / Avg-open figures were
+ * accurate but not actionable, so they're gone rather than replaced.
+ */
+async function countAwaitingApproval(): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(savedDraftApprovals)
+    .where(eq(savedDraftApprovals.decision, "pending"));
+  return row?.n ?? 0;
 }
 
-async function loadStats(): Promise<Map<string, CommunityStats>> {
-  const rows = await db
-    .select({
-      communityId: pastSends.communityId,
-      sendCount: sql<number>`COUNT(*)::int`,
-      avgOpenPct: sql<string | null>`ROUND(AVG((${pastSends.openCount}::numeric / NULLIF(${pastSends.recipientCount}, 0)) * 100)::numeric, 1)`,
-      lastSentAt: sql<string | null>`MAX(${pastSends.publishedAt})::text`,
-    })
-    .from(pastSends)
-    .where(and(eq(pastSends.state, "PUBLISHED"), sql`${pastSends.recipientCount} > 0`))
-    .groupBy(pastSends.communityId);
-
-  const map = new Map<string, CommunityStats>();
-  for (const r of rows) {
-    if (!r.communityId) continue;
-    map.set(r.communityId, {
-      sendCount: r.sendCount,
-      avgOpenPct: r.avgOpenPct ? Number(r.avgOpenPct) : null,
-      lastSentAt: r.lastSentAt,
-    });
-  }
-  return map;
+/** Everything a community needs before it can produce a complete eblast. */
+function missingPieces(c: Awaited<ReturnType<typeof listCommunities>>[number]): string[] {
+  const missing: string[] = [];
+  if (c.logos.length === 0) missing.push("Logo");
+  if (c.senders.length === 0) missing.push("Salesperson");
+  if (!c.trackingPhone) missing.push("Tracking number");
+  if (!c.websiteUrl) missing.push("Website");
+  if (c.brand.paletteSource !== "brand-guide-extracted") missing.push("Brand colors");
+  if (c.brand.fontsSource !== "brand-guide-extracted") missing.push("Brand fonts");
+  return missing;
 }
 
 export default async function CommunitiesPage() {
-  const [communities, statsByCommunity] = await Promise.all([listCommunities(), loadStats()]);
+  const [communities, awaitingApproval] = await Promise.all([listCommunities(), countAwaitingApproval()]);
 
   const grouped = new Map<string, typeof communities>();
   for (const c of communities) {
@@ -61,11 +57,6 @@ export default async function CommunitiesPage() {
   }
 
   const total = communities.length;
-  const withRecentSends = communities.filter((c) => statsByCommunity.has(c.id)).length;
-  const pushReady = communities.filter(
-    (c) => c.senders.length > 0 && (c.hubspot.includedListIds?.length ?? 0) > 0 && !!c.trackingPhone
-  ).length;
-  const withSenders = communities.filter((c) => c.senders.length > 0).length;
 
   return (
     <>
@@ -82,12 +73,18 @@ export default async function CommunitiesPage() {
             </p>
           </div>
 
-          {/* Inline health summary */}
-          <div className="hidden sm:flex items-stretch gap-px rounded-xl border border-sand-200 bg-sand-200 overflow-hidden shrink-0">
-            <StatPill label="Active sending" value={`${withRecentSends}/${total}`} pct={withRecentSends / total} />
-            <StatPill label="Push-ready" value={`${pushReady}/${total}`} pct={pushReady / total} />
-            <StatPill label="Senders" value={`${withSenders}/${total}`} pct={withSenders / total} />
-          </div>
+          {/* The one actionable number: approvals a salesperson hasn't answered. */}
+          {awaitingApproval > 0 && (
+            <div className="hidden sm:flex items-center gap-2.5 rounded-xl border border-sand-200 bg-white px-5 py-3 shrink-0">
+              <span className="h-2 w-2 rounded-full bg-amber-400 shrink-0" aria-hidden />
+              <div>
+                <div className="text-[17px] font-semibold leading-none text-sand-900 tabular-nums">{awaitingApproval}</div>
+                <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-sand-400">
+                  Awaiting approval
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Community groups */}
@@ -112,31 +109,22 @@ export default async function CommunitiesPage() {
                 <div className="rounded-xl border border-sand-200 bg-white overflow-hidden">
                   <table className="w-full table-fixed text-sm">
                     <colgroup>
+                      <col style={{ width: "56%" }} />
                       <col style={{ width: "36%" }} />
-                      <col style={{ width: "22%" }} />
-                      <col style={{ width: "12%" }} />
-                      <col style={{ width: "12%" }} />
-                      <col style={{ width: "18%" }} />
+                      <col style={{ width: "8%" }} />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-sand-100 bg-sand-50/70 text-[10px] font-semibold uppercase tracking-widest text-sand-400">
                         <th className="px-5 py-2.5 text-left">Community</th>
                         <th className="px-4 py-2.5 text-left">Sender</th>
-                        <th className="px-4 py-2.5 text-right">Sends</th>
-                        <th className="px-4 py-2.5 text-right">Avg open</th>
-                        <th className="px-5 py-2.5 text-left">Status</th>
+                        <th className="px-5 py-2.5 text-center">Setup</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-sand-100">
                       {list.map((c) => {
-                        const stats = statsByCommunity.get(c.id);
-                        const openPct = stats?.avgOpenPct ?? null;
                         const barColor = FAMILY_COLORS[family] ?? DEFAULT_BAR_COLOR;
-
-                        const gaps: string[] = [];
-                        if (c.senders.length === 0) gaps.push("No sender");
-                        if (!c.trackingPhone) gaps.push("No tracking #");
-                        const isReady = gaps.length === 0;
+                        const missing = missingPieces(c);
+                        const isReady = missing.length === 0;
 
                         return (
                           <tr key={c.slug} className="group align-middle hover:bg-sand-50 transition-colors duration-100">
@@ -176,41 +164,15 @@ export default async function CommunitiesPage() {
                                 <span className="text-xs text-sand-400">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-right tabular-nums text-sm text-sand-700">
-                              {stats?.sendCount ?? <span className="text-sand-300">0</span>}
-                            </td>
-                            <td className="px-4 py-3 text-right tabular-nums text-sm">
-                              {openPct !== null ? (
-                                <span
-                                  className={
-                                    openPct >= 40
-                                      ? "text-forest-700 font-medium"
-                                      : openPct >= 25
-                                      ? "text-sand-800"
-                                      : "text-clay-700"
-                                  }
-                                >
-                                  {openPct}%
-                                </span>
-                              ) : (
-                                <span className="text-sand-300">—</span>
-                              )}
-                            </td>
-                            <td className="px-5 py-3">
-                              {isReady ? (
-                                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-forest-700">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-forest-500 shrink-0" />
-                                  Ready
-                                </span>
-                              ) : (
-                                <span
-                                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-clay-700 cursor-help"
-                                  title={gaps.join(" · ")}
-                                >
-                                  <span className="h-1.5 w-1.5 rounded-full bg-clay-400 shrink-0" />
-                                  {gaps.length === 1 ? gaps[0] : `${gaps.length} gaps`}
-                                </span>
-                              )}
+                            {/* Green when the community has everything an eblast
+                                needs; red otherwise, with the specifics on hover. */}
+                            <td className="px-5 py-3 text-center">
+                              <span
+                                className="inline-flex h-2.5 w-2.5 rounded-full cursor-help align-middle"
+                                style={{ backgroundColor: isReady ? "#4f9a6a" : "#c0553f" }}
+                                title={isReady ? "Everything set up" : `Missing: ${missing.join(", ")}`}
+                                aria-label={isReady ? "Everything set up" : `Missing: ${missing.join(", ")}`}
+                              />
                             </td>
                           </tr>
                         );
@@ -226,15 +188,3 @@ export default async function CommunitiesPage() {
   );
 }
 
-function StatPill({ label, value, pct }: { label: string; value: string; pct: number }) {
-  const dotColor = pct >= 0.85 ? "bg-forest-500" : pct >= 0.5 ? "bg-amber-400" : "bg-clay-500";
-  return (
-    <div className="flex flex-col items-center justify-center gap-0.5 bg-white px-5 py-3 min-w-[100px]">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotColor}`} />
-        <span className="text-sm font-semibold tabular-nums text-sand-900">{value}</span>
-      </div>
-      <span className="text-[10px] text-sand-400 whitespace-nowrap">{label}</span>
-    </div>
-  );
-}

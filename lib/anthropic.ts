@@ -132,11 +132,58 @@ Output format: call the \`extract_flyer\` tool with a fully-populated structured
 /**
  * Read a flyer PDF and return structured marketing-email content.
  */
+/**
+ * Build the source content for the drafter: a flyer PDF, pasted event details,
+ * or both. Pasted notes are authoritative where they conflict with the flyer —
+ * they're what the marketing team typed just now, versus a document that may
+ * be out of date.
+ */
+export function draftSourceBlocks(pdfBase64?: string, notes?: string): any[] {
+  const blocks: any[] = [];
+  if (pdfBase64) {
+    blocks.push({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: pdfBase64 },
+    });
+  }
+  const trimmedNotes = notes?.trim();
+  if (pdfBase64 && trimmedNotes) {
+    blocks.push({
+      type: "text",
+      text:
+        `Read this flyer and extract its content as a marketing email by calling the extract_flyer tool.\n\n` +
+        `The marketing team also provided these details. Where they conflict with the flyer, THESE WIN — ` +
+        `they are more current than the document:\n\n${trimmedNotes}`,
+    });
+  } else if (trimmedNotes) {
+    blocks.push({
+      type: "text",
+      text:
+        `Write a marketing email from the event details below by calling the extract_flyer tool. ` +
+        `There is no flyer for this one — work only from these details, and do not invent specifics ` +
+        `(dates, times, prices, names) that aren't stated here. If a detail isn't given, leave that ` +
+        `field empty rather than guessing.\n\n${trimmedNotes}`,
+    });
+  } else {
+    blocks.push({
+      type: "text",
+      text: "Read this flyer and extract its content as a marketing email by calling the extract_flyer tool.",
+    });
+  }
+  return blocks;
+}
+
 export async function extractFlyerContent(opts: {
-  pdfBase64: string;
+  /** Omitted when generating purely from pasted details. */
+  pdfBase64?: string;
+  /** Free-text event details pasted by the marketing team. */
+  notes?: string;
   community: Community;
   pastSends?: PastSendForContext[];
 }): Promise<ExtractedFlyer> {
+  if (!opts.pdfBase64 && !opts.notes?.trim()) {
+    throw new Error("Provide a flyer PDF, pasted details, or both.");
+  }
   const c = client();
 
   const response = await c.messages.create({
@@ -157,16 +204,7 @@ export async function extractFlyerContent(opts: {
         // Cast to any: the SDK's published types still classify "document" as
         // a beta content block in some minor versions. The runtime API accepts
         // it cleanly on Sonnet 4.6.
-        content: [
-          {
-            type: "document",
-            source: { type: "base64", media_type: "application/pdf", data: opts.pdfBase64 },
-          },
-          {
-            type: "text",
-            text: "Read this flyer and extract its content as a marketing email by calling the extract_flyer tool.",
-          },
-        ] as any,
+        content: draftSourceBlocks(opts.pdfBase64, opts.notes) as any,
       },
     ],
   });

@@ -45,6 +45,8 @@ export async function POST(req: NextRequest) {
   const file = formData.get("file");
   const uploadId = formData.get("uploadId");
   const communitySlug = formData.get("communitySlug");
+  const notesRaw = formData.get("notes");
+  const notes = typeof notesRaw === "string" ? notesRaw.trim() : "";
 
   if (typeof communitySlug !== "string") {
     return NextResponse.json({ ok: false, error: "Missing communitySlug" }, { status: 400 });
@@ -55,7 +57,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: `Unknown community: ${communitySlug}` }, { status: 404 });
   }
 
-  let buffer: Buffer;
+  // A draft can come from a flyer PDF, from pasted event details, or both.
+  // With no PDF there are no images to extract, so the loop runs text-only.
+  let buffer: Buffer | null = null;
 
   if (typeof uploadId === "string") {
     // Large PDF was uploaded in chunks — reassemble from DB.
@@ -82,8 +86,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `Expected application/pdf, got ${file.type}` }, { status: 415 });
     }
     buffer = Buffer.from(await file.arrayBuffer());
-  } else {
-    return NextResponse.json({ ok: false, error: "Provide either a 'file' or an 'uploadId'." }, { status: 400 });
+  } else if (!notes) {
+    return NextResponse.json(
+      { ok: false, error: "Provide a flyer PDF, pasted event details, or both." },
+      { status: 400 },
+    );
   }
 
   // Pull recent sends for this community first — feeds both the initial
@@ -94,8 +101,13 @@ export async function POST(req: NextRequest) {
   // loop has both ready before its first critic review. The critic now looks
   // at the actual images, so they need to exist by then.
   const [imagesResult, initialDraftResult] = await Promise.allSettled([
-    extractImagesFromPdf(buffer),
-    extractFlyerContent({ pdfBase64: buffer.toString("base64"), community, pastSends }),
+    buffer ? extractImagesFromPdf(buffer) : Promise.reject(new Error("No PDF — text-only draft")),
+    extractFlyerContent({
+      pdfBase64: buffer ? buffer.toString("base64") : undefined,
+      notes: notes || undefined,
+      community,
+      pastSends,
+    }),
   ]);
 
   if (initialDraftResult.status === "rejected") {

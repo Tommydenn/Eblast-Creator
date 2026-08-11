@@ -581,6 +581,7 @@ export default function GenerateView() {
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [notes, setNotes] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [tab, setTab] = useState<"new" | "drafts" | "deleted">("new");
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
@@ -646,8 +647,8 @@ export default function GenerateView() {
   }
 
   async function handleGenerate() {
-    if (!file || !selectedCommunitySlug) return;
-    await generate(file);
+    if ((!file && !notes.trim()) || !selectedCommunitySlug) return;
+    await generate(file, notes);
   }
 
   return (
@@ -661,7 +662,7 @@ export default function GenerateView() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-semibold text-[#1F4538] tracking-tight">Eblast Drafter</h1>
             <p className="mt-2 text-[#5a6b63] text-sm">
-              Create a new draft from a flyer PDF, or continue editing a saved one.
+              Create a new draft from a flyer PDF, pasted event details, or both — or continue editing a saved one.
             </p>
           </div>
 
@@ -745,9 +746,10 @@ export default function GenerateView() {
                   </select>
                 </div>
 
-                <div className="mb-6">
+                <div className="mb-6 grid gap-4 md:grid-cols-2">
+                  <div>
                   <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-2">
-                    Flyer PDF
+                    Flyer PDF <span className="normal-case tracking-normal font-normal text-[#9aaba4]">(optional)</span>
                   </label>
                   <button
                     type="button"
@@ -786,11 +788,34 @@ export default function GenerateView() {
                   </button>
                   <input ref={fileRef} type="file" accept="application/pdf" className="hidden"
                     onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+                  </div>
+
+                  {/* Either input works on its own. With both, the pasted
+                      details take precedence where they contradict the flyer. */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-2">
+                      Event details <span className="normal-case tracking-normal font-normal text-[#9aaba4]">(optional)</span>
+                    </label>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      disabled={isGenerating}
+                      placeholder={"Paste or type the details here — what the event is, date and time, where, who to RSVP to, anything else worth including.\n\nWorks on its own, or alongside a flyer."}
+                      className="w-full rounded-xl border-2 border-dashed border-[#ddd8d0] bg-[#faf9f6] px-3.5 py-3 text-sm text-[#1a1a1a] placeholder:text-[#9aaba4] focus:outline-none focus:border-[#1F4538]/40 focus:bg-white transition-colors resize-none"
+                      style={{ height: 148 }}
+                    />
+                  </div>
                 </div>
+
+                {file && notes.trim() && (
+                  <p className="-mt-2 mb-4 text-xs text-[#7a8c85]">
+                    Using both — where your notes and the flyer disagree, your notes win.
+                  </p>
+                )}
 
                 <button
                   onClick={handleGenerate}
-                  disabled={!file || !selectedCommunitySlug || isGenerating}
+                  disabled={(!file && !notes.trim()) || !selectedCommunitySlug || isGenerating}
                   className="w-full rounded-lg bg-[#1F4538] text-white font-semibold py-3 px-6 text-sm tracking-wide hover:bg-[#173829] active:bg-[#112d21] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {isGenerating ? "Generating…" : "Generate Eblast"}

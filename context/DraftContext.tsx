@@ -33,7 +33,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(parts.join(""));
 }
 
-async function uploadPdfChunked(file: File, communitySlug: string, signal?: AbortSignal): Promise<Response> {
+async function uploadPdfChunked(file: File, communitySlug: string, signal?: AbortSignal, notes?: string): Promise<Response> {
   const uploadId = crypto.randomUUID();
   const bytes = new Uint8Array(await file.arrayBuffer());
   const totalChunks = Math.ceil(bytes.length / CHUNK_BYTES);
@@ -50,6 +50,7 @@ async function uploadPdfChunked(file: File, communitySlug: string, signal?: Abor
   const fd = new FormData();
   fd.append("uploadId", uploadId);
   fd.append("communitySlug", communitySlug);
+  if (notes?.trim()) fd.append("notes", notes.trim());
   return fetch("/api/draft-from-pdf", { method: "POST", body: fd, signal });
 }
 
@@ -111,6 +112,8 @@ export interface SavedDraft {
   agentLoop?: AgentLoopSummary | null;
   pastSendsContext?: PastSendForContext[];
   subjectSpecialist?: SubjectSpecialistResult | null;
+  /** Persisted AI-edit history so undo/redo survives closing and reopening. */
+  editHistory?: { undo: RefineSnapshot[]; redo: RefineSnapshot[] } | null;
   /**
    * Lock-relevant metadata, present only when loaded via GET /api/saved-drafts/[id]
    * (never part of the stored payload itself) — see loadSavedDraft/lockInfo.
@@ -137,8 +140,26 @@ function computeLockInfo(draft: Pick<SavedDraft, "approvedAt" | "pushedAt" | "pe
 
 interface RefineSnapshot {
   fields: ExtractedFlyer;
-  images: DraftImages;
+  /**
+   * Undefined for history restored from a saved draft: image data URIs are
+   * multi-MB and can't ride along in the save payload (same reason
+   * buildDraftPayload strips them), so persisted history is text-only and
+   * undo/redo leaves images untouched. Present for in-session snapshots.
+   */
+  images?: DraftImages;
   instruction: string;
+}
+
+/**
+ * How many AI-edit steps ride along with a saved draft. Each snapshot is a
+ * full ExtractedFlyer (text only), so ~10 KB apiece — 25 each way stays far
+ * inside the save payload's budget while covering any realistic session.
+ */
+const MAX_PERSISTED_HISTORY = 25;
+
+/** Drop the in-memory image data before a snapshot goes into the save payload. */
+function stripSnapshotImages(s: RefineSnapshot): RefineSnapshot {
+  return { fields: s.fields, instruction: s.instruction };
 }
 
 export interface PushStep { step: string; ok: boolean; status?: number; body?: any }
@@ -203,7 +224,7 @@ export interface DraftContextValue {
   activeFieldNameRef: React.MutableRefObject<string | null>;
 
   selectCommunity: (slug: string) => void;
-  generate: (file: File) => Promise<void>;
+  generate: (file: File | null, notes?: string) => Promise<void>;
   cancelGenerate: () => void;
   setField: <K extends keyof ExtractedFlyer>(key: K, value: ExtractedFlyer[K]) => void;
   setFields: (patch: Partial<ExtractedFlyer>) => void;
@@ -330,6 +351,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [refineError, setRefineError] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<RefineSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<RefineSnapshot[]>([]);
+  // Read inside undo()/redo() so their setState calls can stay pure updaters.
+  const undoStackRef = useRef<RefineSnapshot[]>([]);
+  const redoStackRef = useRef<RefineSnapshot[]>([]);
 
   // Push
   const [isPushing, setIsPushing] = useState(false);
@@ -376,6 +400,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Keep refs in sync
   useEffect(() => { fieldsRef.current = fields; }, [fields]);
   useEffect(() => { imagesRef.current = images; }, [images]);
+  useEffect(() => { undoStackRef.current = undoStack; }, [undoStack]);
+  useEffect(() => { redoStackRef.current = redoStack; }, [redoStack]);
   useEffect(() => { imageBankRef.current = imageBank; }, [imageBank]);
 
   // Derived community object
@@ -542,9 +568,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ─── Generate ──────────────────────────────────────────────────────────────
-  const generate = useCallback(async (file: File) => {
+  // Either input alone is enough: a flyer PDF, pasted event details, or both.
+  const generate = useCallback(async (file: File | null, notes?: string) => {
     const slug = selectedCommunitySlug;
     if (!slug) return;
+    if (!file && !notes?.trim()) return;
     const ctrl = new AbortController();
     generateAbortRef.current = ctrl;
     setIsGenerating(true);
@@ -553,11 +581,12 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     try {
       const MAX_DIRECT = 4 * 1024 * 1024;
       let res: Response;
-      if (file.size > MAX_DIRECT) {
-        res = await uploadPdfChunked(file, slug, ctrl.signal);
+      if (file && file.size > MAX_DIRECT) {
+        res = await uploadPdfChunked(file, slug, ctrl.signal, notes);
       } else {
         const fd = new FormData();
-        fd.append("file", file);
+        if (file) fd.append("file", file);
+        if (notes?.trim()) fd.append("notes", notes.trim());
         fd.append("communitySlug", slug);
         res = await fetch("/api/draft-from-pdf", { method: "POST", body: fd, signal: ctrl.signal });
       }
@@ -729,36 +758,55 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     }
   }, [requestCopyPrompt]);
 
+  // Both stacks are read through refs and every setState below is a plain,
+  // pure updater. The previous version nested setRedoStack inside the
+  // setUndoStack updater (and vice versa) — React treats updaters as pure and
+  // is free to invoke them more than once for a single dispatch, which it does
+  // under StrictMode. Each undo click could therefore push the same snapshot
+  // onto the redo stack twice, so the stacks drifted out of step and undo/redo
+  // stopped lining up with what was actually on screen.
   const undo = useCallback(() => {
-    setUndoStack((prev) => {
-      if (prev.length === 0) return prev;
-      const snap = prev[prev.length - 1];
-      const current = fieldsRef.current;
-      const currentImgs = imagesRef.current;
-      if (current) {
-        setRedoStack((r) => [...r, { fields: { ...current }, images: { ...currentImgs, gallery: [...currentImgs.gallery] }, instruction: snap.instruction }]);
-      }
-      setFields_(snap.fields);
-      setImages(snap.images);
-      setIsSaved(false);
-      return prev.slice(0, -1);
-    });
+    const stack = undoStackRef.current;
+    if (stack.length === 0) return;
+    const snap = stack[stack.length - 1];
+    const current = fieldsRef.current;
+    const currentImgs = imagesRef.current;
+    if (current) {
+      const redoEntry: RefineSnapshot = {
+        fields: { ...current },
+        // Only capture images when the snapshot being restored carries them;
+        // otherwise redo would "restore" images that undo never changed.
+        images: snap.images ? { ...currentImgs, gallery: [...currentImgs.gallery] } : undefined,
+        instruction: snap.instruction,
+      };
+      setRedoStack((r) => [...r, redoEntry]);
+    }
+    setFields_(snap.fields);
+    if (snap.images) setImages(snap.images);
+    setUndoStack((prev) => prev.slice(0, -1));
+    setIsSaved(false);
+    setLastEditTimestamp(Date.now());
   }, []);
 
   const redo = useCallback(() => {
-    setRedoStack((prev) => {
-      if (prev.length === 0) return prev;
-      const snap = prev[prev.length - 1];
-      const current = fieldsRef.current;
-      const currentImgs = imagesRef.current;
-      if (current) {
-        setUndoStack((u) => [...u, { fields: { ...current }, images: { ...currentImgs, gallery: [...currentImgs.gallery] }, instruction: snap.instruction }]);
-      }
-      setFields_(snap.fields);
-      setImages(snap.images);
-      setIsSaved(false);
-      return prev.slice(0, -1);
-    });
+    const stack = redoStackRef.current;
+    if (stack.length === 0) return;
+    const snap = stack[stack.length - 1];
+    const current = fieldsRef.current;
+    const currentImgs = imagesRef.current;
+    if (current) {
+      const undoEntry: RefineSnapshot = {
+        fields: { ...current },
+        images: snap.images ? { ...currentImgs, gallery: [...currentImgs.gallery] } : undefined,
+        instruction: snap.instruction,
+      };
+      setUndoStack((u) => [...u, undoEntry]);
+    }
+    setFields_(snap.fields);
+    if (snap.images) setImages(snap.images);
+    setRedoStack((prev) => prev.slice(0, -1));
+    setIsSaved(false);
+    setLastEditTimestamp(Date.now());
   }, []);
 
   // ─── Build draft payload (shared by save + autoSave) ─────────────────────
@@ -792,6 +840,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       agentLoop,
       pastSendsContext,
       subjectSpecialist,
+      // AI-edit history, so undo/redo still works after reopening a draft.
+      // Text only (see RefineSnapshot.images) and capped, since this rides in
+      // the same body as the draft and must stay well under Vercel's limit.
+      editHistory: {
+        undo: undoStackRef.current.slice(-MAX_PERSISTED_HISTORY).map(stripSnapshotImages),
+        redo: redoStackRef.current.slice(-MAX_PERSISTED_HISTORY).map(stripSnapshotImages),
+      },
     };
     return { id, draft };
   }, [draftId, imageBank, review, agentLoop, pastSendsContext, subjectSpecialist]);
@@ -919,8 +974,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setPastSendsContext(draft.pastSendsContext ?? []);
     setDraftId(draft.id);
     setIsSaved(true);
-    setUndoStack([]);
-    setRedoStack([]);
+    // Restore the AI-edit history so undo/redo works on a reopened draft.
+    // Snapshots come back text-only, so undo will roll back copy but leave
+    // images where they are — see RefineSnapshot.images.
+    setUndoStack(draft.editHistory?.undo ?? []);
+    setRedoStack(draft.editHistory?.redo ?? []);
+    undoStackRef.current = draft.editHistory?.undo ?? [];
+    redoStackRef.current = draft.editHistory?.redo ?? [];
     setActiveSection("hero");
     setStage("editing");
     setSelectedCommunitySlug(draft.communitySlug);

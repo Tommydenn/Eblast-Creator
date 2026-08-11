@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { renderSavedDraftHtml, draftEventCategory } from "@/lib/draft-render-server";
+import { sendPushFailureEmail } from "@/lib/email";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 
 export const runtime = "nodejs";
+// The approval push is the heaviest operation in the app: re-render the
+// eblast, upload every photo to HubSpot File Manager, upload the template,
+// resolve segments, then create the marketing email. With a few images that
+// comfortably exceeds Vercel's short default, and a timeout part-way through
+// is exactly how an approval ends up with no HubSpot email, a photo-less one,
+// or a duplicate on the next click. Match the edits route's proven ceiling.
+export const maxDuration = 60;
 
 function safeSlug(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
@@ -102,26 +110,17 @@ function errorPage(title: string, body: string) {
 </html>`;
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { token: string } },
-) {
-  const { token } = params;
+const HTML_HEADERS = { "Content-Type": "text/html; charset=utf-8" } as const;
 
+/** Load the approval + its draft, or null if the token is unknown. */
+async function loadApproval(token: string) {
   const [approval] = await db
     .select()
     .from(savedDraftApprovals)
     .where(eq(savedDraftApprovals.token, token))
     .limit(1);
+  if (!approval) return null;
 
-  if (!approval) {
-    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid or has expired."), {
-      status: 404,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
-  }
-
-  // Fetch subject for display on all response pages.
   const [draftRow] = await db
     .select()
     .from(savedDrafts)
@@ -129,32 +128,138 @@ export async function GET(
     .limit(1);
 
   const draftData = draftRow?.data as Record<string, any> | undefined;
-  const subject = draftRow?.subject ?? draftData?.subject ?? "Draft";
-  const communityName = approval.communitySlug; // replaced with displayName below if available
+  return {
+    approval,
+    draftRow,
+    draftData,
+    subject: draftRow?.subject ?? draftData?.subject ?? "Draft",
+  };
+}
 
-  if (approval.decision === "approved") {
-    return new NextResponse(page({
+/** Response for an approval that is no longer awaiting a decision. */
+function decidedPage(decision: string, community: string, subject: string, pushedEmailId?: string | null) {
+  if (decision === "approved") {
+    return page({
       icon: "✓", iconColor: "#2d6a4f",
       title: "Already Approved",
-      community: communityName,
+      community,
       subject,
-      body: "This draft has already been approved and queued in HubSpot.",
-    }), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+      body: pushedEmailId
+        ? "This draft has already been approved and created in HubSpot. You can close this tab."
+        : "This draft has already been approved. You can close this tab.",
+    });
+  }
+  if (decision === "approving") {
+    return page({
+      icon: "⏳", iconColor: "#b45309",
+      title: "Approval In Progress",
+      community,
+      subject,
+      body: "This draft is being sent to HubSpot right now &mdash; that can take up to a minute. Please wait a moment, then refresh this page rather than clicking Approve again.",
+    });
+  }
+  return page({
+    icon: "✎", iconColor: "#b45309",
+    title: "Edits Requested",
+    community,
+    subject,
+    body: "Edit notes were already submitted for this draft. A revised version will be sent once it&rsquo;s ready.",
+  });
+}
+
+/**
+ * GET renders a confirmation page and NEVER changes anything.
+ *
+ * This used to perform the approval directly, which meant anything that
+ * follows links in an email — Outlook Safe Links, corporate mail scanners,
+ * inbox previewers — could approve an eblast and push it to HubSpot before
+ * the salesperson ever opened it. That produced the two reported symptoms:
+ * "Already Approved" on their first real click, and duplicate HubSpot drafts
+ * from a single approval. Only the human's POST below approves anything.
+ */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { token: string } },
+) {
+  const { token } = params;
+  const ctx = await loadApproval(token);
+  if (!ctx) {
+    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid or has expired."), {
+      status: 404,
+      headers: HTML_HEADERS,
+    });
   }
 
-  if (approval.decision === "edits_requested") {
-    return new NextResponse(page({
-      icon: "✎", iconColor: "#b45309",
-      title: "Edits Requested",
-      community: communityName,
-      subject,
-      body: "Edit notes were already submitted for this draft. A revised version will be sent once it&rsquo;s ready.",
-    }), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  const { approval, subject } = ctx;
+  const community = await getCommunity(approval.communitySlug).catch(() => null);
+  const displayName = community?.displayName ?? approval.communitySlug;
+
+  if (approval.decision !== "pending") {
+    return new NextResponse(
+      decidedPage(approval.decision, displayName, subject, approval.pushedEmailId),
+      { headers: HTML_HEADERS },
+    );
+  }
+
+  const retryNote = approval.pushError
+    ? `<div class="error">A previous attempt didn&rsquo;t reach HubSpot: ${esc(approval.pushError)}<br><br>You can safely try again.</div>`
+    : "";
+
+  return new NextResponse(page({
+    icon: "✓", iconColor: "#2d6a4f",
+    title: "Approve This Eblast?",
+    community: displayName,
+    subject,
+    body: `Confirm below and this eblast will be created in HubSpot, ready to send.
+      <form method="POST" style="margin-top:22px;">
+        <button type="submit"
+          style="display:inline-block;padding:13px 30px;background:#2d6a4f;color:#ffffff;
+                 font-family:Arial,sans-serif;font-size:15px;font-weight:600;border:none;
+                 border-radius:6px;cursor:pointer;letter-spacing:.02em;">
+          ✓ &nbsp;Yes, approve and send to HubSpot
+        </button>
+      </form>${retryNote}`,
+  }), { headers: HTML_HEADERS });
+}
+
+/** POST performs the approval — one claim, one push. */
+export async function POST(
+  _req: NextRequest,
+  { params }: { params: { token: string } },
+) {
+  const { token } = params;
+
+  // Atomically claim the approval: pending → approving in a single statement.
+  // Whoever wins this UPDATE owns the push; everyone else (a double-click, a
+  // second tab, a scanner racing the human) gets zero rows and pushes nothing.
+  // This is what stops one approval producing multiple HubSpot drafts.
+  const claimed = await db
+    .update(savedDraftApprovals)
+    .set({ decision: "approving", decidedAt: new Date(), pushError: null })
+    .where(and(eq(savedDraftApprovals.token, token), eq(savedDraftApprovals.decision, "pending")))
+    .returning();
+
+  const ctx = await loadApproval(token);
+  if (!ctx) {
+    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid or has expired."), {
+      status: 404,
+      headers: HTML_HEADERS,
+    });
+  }
+  const { approval, draftRow, draftData, subject } = ctx;
+
+  if (claimed.length === 0) {
+    const community = await getCommunity(approval.communitySlug).catch(() => null);
+    return new NextResponse(
+      decidedPage(approval.decision, community?.displayName ?? approval.communitySlug, subject, approval.pushedEmailId),
+      { headers: HTML_HEADERS },
+    );
   }
 
   // ── Run the HubSpot push ──────────────────────────────────────────────────
   let pushError: string | null = null;
-  let displayName = communityName;
+  let hubspotEmailId: string | null = null;
+  let displayName = approval.communitySlug;
 
   try {
     if (!draftRow) throw new Error("Draft not found");
@@ -183,7 +288,18 @@ export async function GET(
     const hubspotAccount = community.hubspot.account ?? "primary";
     let emailHtml = await inlineRelativeImages(rawHtml);
     const swap = await swapDataUrisForHostedImages({ html: emailHtml, folderPath: `/eblast-drafter/${community.slug}`, account: hubspotAccount });
-    if (swap.failures.length > 0) throw new Error(`Image upload failed (status ${swap.failures[0].status})`);
+    // Never push a partially-uploaded eblast. Failing here (and resetting to
+    // pending below) means the salesperson can just click Approve again, which
+    // is far better than silently creating a HubSpot email missing its photos.
+    if (swap.failures.length > 0) {
+      throw new Error(
+        `${swap.failures.length} of ${swap.attempted} image(s) failed to upload to HubSpot ` +
+        `(status ${swap.failures[0].status}). Nothing was created — please try again.`,
+      );
+    }
+    if (swap.attempted === 0 && /<img\b/i.test(emailHtml)) {
+      console.warn(`[quick-approve] ${token}: eblast has <img> tags but no data URIs to upload`);
+    }
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const templateFileName = `${safeSlug(subject)}-${stamp}.html`;
@@ -216,39 +332,66 @@ export async function GET(
       ...segments,
     });
     if (!create.ok) throw new Error(`HubSpot create failed: ${create.status}`);
+    // The created email's ID is the only proof the push actually landed.
+    // Without it we must not claim the draft was approved.
+    hubspotEmailId = create.body?.id ? String(create.body.id) : null;
+    if (!hubspotEmailId) throw new Error("HubSpot did not return an email ID — treating this push as failed.");
 
     if (segments.includedListIds.length > 0 || segments.excludedListIds.length > 0) {
       updateCommunitySegments(community.slug, segments.includedListIds, segments.excludedListIds).catch(() => null);
     }
   } catch (e: any) {
     pushError = e.message ?? String(e);
+    console.error(`[quick-approve] ${token}: push failed —`, pushError);
   }
 
+  if (pushError) {
+    // Release the claim so the link still works. Previously the approval was
+    // marked "approved" even when the push failed, which permanently consumed
+    // the link and left "Already Approved" showing for an eblast that never
+    // reached HubSpot.
+    await db
+      .update(savedDraftApprovals)
+      .set({ decision: "pending", decidedAt: null, pushError })
+      .where(eq(savedDraftApprovals.token, token));
+
+    // Don't let a failure be silent — the marketing team needs to know a
+    // salesperson tried to approve and nothing reached HubSpot.
+    if (approval.notifyEmail) {
+      sendPushFailureEmail({
+        to: approval.notifyEmail,
+        reviewerEmail: approval.recipientEmail,
+        communityName: displayName,
+        draftSubject: subject,
+        savedDraftId: approval.savedDraftId,
+        error: pushError,
+      }).catch((e) => console.error("[quick-approve] failure notification failed:", e));
+    }
+
+    return new NextResponse(page({
+      icon: "⚠", iconColor: "#b45309",
+      title: "Couldn&rsquo;t Send to HubSpot",
+      community: displayName,
+      subject,
+      body: "Nothing was created in HubSpot, so this eblast has <strong>not</strong> been approved yet. The marketing team has been notified. You can click Approve again from your email — the link still works.",
+      errorDetail: pushError,
+    }), { headers: HTML_HEADERS });
+  }
+
+  // Only now is it genuinely approved: HubSpot confirmed the email exists.
   await db
     .update(savedDraftApprovals)
-    .set({ decision: "approved", decidedAt: new Date() })
+    .set({ decision: "approved", decidedAt: new Date(), pushedEmailId: hubspotEmailId, pushError: null })
     .where(eq(savedDraftApprovals.token, token));
 
-  // Mark the underlying saved draft as approved — but only once the HubSpot
-  // push actually succeeded, so "Approved" in the Saved Drafts tab means it
-  // genuinely went out, not just that someone clicked the link. This also
-  // exempts it from the per-community save cap (see /api/saved-drafts).
-  if (!pushError && draftRow) {
+  // Mark the underlying saved draft as approved — only once the HubSpot push
+  // actually succeeded, so "Approved" in the Saved Drafts tab means it
+  // genuinely went out, not just that someone clicked the link.
+  if (draftRow) {
     await db
       .update(savedDrafts)
       .set({ approvedAt: new Date() })
       .where(eq(savedDrafts.id, draftRow.id));
-  }
-
-  if (pushError) {
-    return new NextResponse(page({
-      icon: "⚠", iconColor: "#b45309",
-      title: "Approved — Push Failed",
-      community: displayName,
-      subject,
-      body: "Your approval was recorded, but the HubSpot push encountered an error. Please notify the marketing team so they can re-push manually.",
-      errorDetail: pushError,
-    }), { headers: { "Content-Type": "text/html; charset=utf-8" } });
   }
 
   return new NextResponse(page({
@@ -256,6 +399,6 @@ export async function GET(
     title: "Approved",
     community: displayName,
     subject,
-    body: "This eblast has been approved and queued in HubSpot. You can close this tab.",
-  }), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    body: "This eblast has been created in HubSpot and is ready to send. You can close this tab.",
+  }), { headers: HTML_HEADERS });
 }

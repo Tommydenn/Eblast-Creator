@@ -255,6 +255,64 @@ ${eblastStyleBlock}
   });
 }
 
+export interface SendPushFailureParams {
+  to: string;
+  reviewerEmail: string;
+  communityName: string;
+  draftSubject: string;
+  savedDraftId: string;
+  error: string;
+}
+
+/**
+ * Tell the marketing team that a salesperson clicked Approve but the HubSpot
+ * push failed, so nothing was created. Without this the failure is only ever
+ * visible on the salesperson's own screen, and the eblast silently never ships.
+ */
+export async function sendPushFailureEmail(params: SendPushFailureParams) {
+  const { to, reviewerEmail, communityName, draftSubject, savedDraftId, error } = params;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Approval push failed</title></head>
+<body style="margin:0;padding:32px 16px;background:#f5f4f1;font-family:Arial,sans-serif;">
+  <table width="560" cellpadding="0" cellspacing="0" role="presentation"
+         style="background:#ffffff;border-radius:8px;padding:40px 48px;border:1px solid #e0ddd7;margin:0 auto;">
+    <tr>
+      <td>
+        <p style="margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#a5762f;">
+          Approval Received &mdash; HubSpot Push Failed
+        </p>
+        <h2 style="margin:0 0 24px;font-size:20px;color:#2d2926;font-weight:normal;">
+          ${escapeHtmlText(communityName)}
+        </h2>
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#3d3530;">
+          <strong>${escapeHtmlText(reviewerEmail)}</strong> approved this eblast, but it could
+          <strong>not</strong> be created in HubSpot. Nothing was sent, and the draft is still
+          marked pending &mdash; their approval link still works, so it can be retried.
+        </p>
+        <p style="margin:0 0 8px;font-size:13px;color:#7a7066;">Subject: <em>${escapeHtmlText(draftSubject)}</em></p>
+        <div style="background:#fdf6ec;border-left:3px solid #d6a95c;border-radius:0 6px 6px 0;
+                    padding:14px 20px;margin:16px 0 24px;">
+          <p style="margin:0 0 4px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#a5762f;">Error</p>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:#3d3530;word-break:break-word;">${escapeHtmlText(error)}</p>
+        </div>
+        <p style="margin:0;font-size:14px;color:#7a7066;">
+          Draft ID for reference: <code style="font-size:12px;color:#5c4a3a;">${escapeHtmlText(savedDraftId)}</code>
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  return sendMail({
+    to,
+    subject: `Push failed after approval: ${draftSubject} — ${communityName}`,
+    html,
+  });
+}
+
 export interface AutoRefineChange {
   /** Field name on ExtractedFlyer, e.g. "subject" or "bodyParagraphs". */
   field: string;

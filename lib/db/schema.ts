@@ -334,11 +334,27 @@ export const savedDraftApprovals = pgTable("saved_draft_approvals", {
    * later autosave of the draft can't wipe it out from under the pending approval.
    */
   html: text("html"),
-  /** "pending" | "approved" | "edits_requested" */
+  /**
+   * "pending" | "approving" | "approved" | "edits_requested"
+   *
+   * "approving" is a transient claim: the approve handler flips pending →
+   * approving in a single conditional UPDATE, so only one request can ever
+   * own the HubSpot push. Concurrent clicks (or a mail scanner racing the
+   * human) lose the claim and do nothing instead of pushing a duplicate.
+   * It only becomes "approved" once HubSpot confirms the email was created;
+   * a failed push resets it to "pending" so the link still works on retry.
+   */
   decision: text("decision").notNull().default("pending"),
   editNotes: text("edit_notes"),
   sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
+  /**
+   * HubSpot marketing-email ID created by the approval push. Proof the push
+   * actually landed — "approved" without this means it never reached HubSpot.
+   */
+  pushedEmailId: text("pushed_email_id"),
+  /** Why the last approval push failed, if it did. Cleared on success. */
+  pushError: text("push_error"),
 });
 
 export type SavedDraftApprovalRow = InferSelectModel<typeof savedDraftApprovals>;

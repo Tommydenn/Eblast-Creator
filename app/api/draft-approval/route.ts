@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { savedDraftApprovals, savedDrafts, communitySenders } from "@/lib/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { sendApprovalEmail } from "@/lib/email";
 import { swapDataUrisForHostedImages } from "@/lib/hubspot";
@@ -9,6 +9,62 @@ import { inlineRelativeImages } from "@/lib/inline-images";
 import { randomBytes } from "node:crypto";
 
 export const runtime = "nodejs";
+
+/**
+ * Best-effort first name from an email address, used only when the community
+ * has no sender matching the reviewer. Handles the separator-style locals
+ * ("kasey.krieger", "kasey_krieger", "kasey-krieger" → "Kasey"); returns null
+ * for opaque ones like "kkrieger" rather than guessing wrong, so the greeting
+ * falls back to "Hi there" instead of "Hi Kkrieger".
+ */
+function nameFromEmail(email: string): string | null {
+  const local = email.split("@")[0]?.trim();
+  if (!local) return null;
+  const first = local.split(/[._-]+/)[0];
+  if (!first || first.length < 2 || !/^[a-z]+$/i.test(first)) return null;
+  // A local part with no separator is usually an initial+surname ("jwalls",
+  // "kkrieger") — not a first name. Only trust it when it was separated.
+  if (!/[._-]/.test(local)) return null;
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
+/**
+ * Name for the "Hi {name}," greeting in the approval email.
+ *
+ * The send-for-approval modal only collects an email address, so recipientName
+ * was always null and every approval email opened with "Hi there". Reviewers
+ * are almost always already on file as a community sender — but frequently
+ * under a DIFFERENT community than the one being sent (a regional salesperson
+ * covers several), so the lookup is global rather than scoped to this
+ * community. That resolves 21 of the 24 reviewers used to date; the rest fall
+ * back to "there" rather than guessing from an opaque local part.
+ */
+async function resolveReviewerName(
+  email: string,
+  provided: string | undefined,
+  community: NonNullable<Awaited<ReturnType<typeof getCommunity>>>,
+): Promise<string | null> {
+  if (provided?.trim()) return provided.trim();
+  const normalized = email.trim().toLowerCase();
+
+  const onThisCommunity = community.senders.find(
+    (s) => s.email?.trim().toLowerCase() === normalized,
+  );
+  if (onThisCommunity?.name) return onThisCommunity.name;
+
+  try {
+    const [row] = await db
+      .select({ name: communitySenders.name })
+      .from(communitySenders)
+      .where(sql`lower(${communitySenders.email}) = ${normalized}`)
+      .limit(1);
+    if (row?.name) return row.name;
+  } catch {
+    // Name lookup must never block sending the approval.
+  }
+
+  return nameFromEmail(email);
+}
 
 /** POST /api/draft-approval — send a draft for approval */
 export async function POST(req: NextRequest) {
@@ -64,6 +120,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Community not found" }, { status: 404 });
   }
 
+  const resolvedRecipientName = await resolveReviewerName(recipientEmail, recipientName, community);
+
   // Generate a random opaque token for the magic link.
   const token = randomBytes(24).toString("base64url");
 
@@ -73,7 +131,7 @@ export async function POST(req: NextRequest) {
       token,
       savedDraftId,
       communitySlug,
-      recipientName: recipientName ?? null,
+      recipientName: resolvedRecipientName ?? null,
       recipientEmail,
       notifyEmail: notifyEmail ?? null,
       draftSubject,
@@ -117,7 +175,7 @@ export async function POST(req: NextRequest) {
   try {
     await sendApprovalEmail({
       to: recipientEmail,
-      recipientName: recipientName ?? null,
+      recipientName: resolvedRecipientName ?? null,
       communityName: community.displayName,
       draftSubject,
       draftHtml: emailHtml,

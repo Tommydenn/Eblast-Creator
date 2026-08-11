@@ -100,6 +100,47 @@ function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
     : pickTextColor(buttonBgHex);
 }
 
+/**
+ * Normalize a user-typed photo link into an href we're willing to emit.
+ *
+ * Deliberately allow-list only: http(s)/mailto/tel, plus bare domains typed
+ * without a scheme ("example.com/tour"). Anything else — most importantly
+ * javascript: — returns null and the photo simply renders unlinked, so a
+ * pasted value can never become an executable href in a recipient's inbox.
+ */
+export function normalizePhotoLink(raw: string | undefined | null): string | null {
+  const v = (raw ?? "").trim();
+  if (!v) return null;
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(v)) return v;
+  if (/^[\w-]+(\.[\w-]+)+([/?#].*)?$/.test(v)) return `https://${v}`;
+  return null;
+}
+
+/**
+ * Tag a photo with the attributes the live preview uses to identify it, and
+ * wrap it in its click-through link when one is set.
+ *
+ * data-linkfield / data-linkindex are present whether or not a link exists —
+ * the preview needs them to know which photo was clicked so a link can be
+ * added in the first place (see PreviewPanel's link-click handling).
+ */
+function linkedImage(
+  imgTag: string,
+  href: string | undefined,
+  field: "heroImageLink" | "secondaryImageLink" | "galleryImageLinks",
+  index?: number,
+): string {
+  const tagged = imgTag.replace(
+    /^<img\b/i,
+    `<img data-linkfield="${field}"${index === undefined ? "" : ` data-linkindex="${index}"`}`,
+  );
+  const url = normalizePhotoLink(href);
+  if (!url) return tagged;
+  // display:block keeps the anchor from adding inline-element descender space
+  // under the photo in Outlook/Gmail.
+  return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="display:block; text-decoration:none; border:0;">${tagged}</a>`;
+}
+
 export interface RenderOptions {
   /** Hero image URL or data URI. If omitted, the hero block has no photo — just brand color. */
   heroImageUrl?: string;
@@ -281,7 +322,7 @@ export function buildEblastHtml(
         ${heroImg ? `
         <tr>
           <td style="padding: 0; line-height: 0; font-size: 0; overflow: hidden;">
-            <img src="${heroImg}" data-img-label="Hero image" width="600" height="340" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:600px; max-width:100%; height:auto; border:0;">
+            ${linkedImage(`<img src="${heroImg}" data-img-label="Hero image" width="600" height="340" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:600px; max-width:100%; height:auto; border:0;">`, flyer.heroImageLink, "heroImageLink")}
           </td>
         </tr>` : ""}
         <tr>
@@ -332,7 +373,7 @@ export function buildEblastHtml(
   ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
   <tr data-section="Secondary Image" data-deletefield="secondaryImageSectionHidden">
     <td style="padding: 0 36px 28px 36px;">
-      <img src="${secondaryImg}" data-img-label="Secondary image" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:528px; max-width:100%; height:auto; border:0;">
+      ${linkedImage(`<img src="${secondaryImg}" data-img-label="Secondary image" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:528px; max-width:100%; height:auto; border:0;">`, flyer.secondaryImageLink, "secondaryImageLink")}
     </td>
   </tr>` : ""}
   `;
@@ -352,8 +393,8 @@ export function buildEblastHtml(
     // Each tile carries a stable 1-based name ("Gallery image N") that matches
     // the hover label in the preview and the refine manifest, so users can call
     // out a specific gallery photo by name.
-    const tiles = galleryImgs.map((src, i) => ({ src, label: `Gallery image ${i + 1}` }));
-    const rows: Array<Array<{ src: string; label: string }>> = [];
+    const tiles = galleryImgs.map((src, i) => ({ src, label: `Gallery image ${i + 1}`, index: i }));
+    const rows: Array<Array<{ src: string; label: string; index: number }>> = [];
     for (let i = 0; i < tiles.length; i += cols) {
       rows.push(tiles.slice(i, i + cols));
     }
@@ -375,7 +416,7 @@ export function buildEblastHtml(
             .map(
               (tile) => `
           <td valign="top" width="${tileW}" style="padding:0; overflow:hidden;">
-            <img src="${tile.src}" data-img-label="${tile.label}" width="${tileW}" height="${tileH}" alt="${escapeHtml(community.displayName)}" style="display:block; width:${tileW}px; height:${tileH}px; border:0;">
+            ${linkedImage(`<img src="${tile.src}" data-img-label="${tile.label}" width="${tileW}" height="${tileH}" alt="${escapeHtml(community.displayName)}" style="display:block; width:${tileW}px; height:${tileH}px; border:0;">`, (flyer.galleryImageLinks ?? [])[tile.index], "galleryImageLinks", tile.index)}
           </td>`,
             )
             .join("")}

@@ -232,6 +232,13 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     }
 
     const mergedExtracted: ExtractedFlyer = { ...currentExtracted, ...result.flyer };
+    // Photo click-through links are set by hand in the editor and are not the
+    // AI's to change. The spread above already preserves anything the model
+    // omits, but this makes it explicit that a copy edit can never drop a
+    // link the marketer attached to a photo.
+    mergedExtracted.heroImageLink = currentExtracted.heroImageLink;
+    mergedExtracted.secondaryImageLink = currentExtracted.secondaryImageLink;
+    mergedExtracted.galleryImageLinks = currentExtracted.galleryImageLinks;
     const textChanged = stableStringify(mergedExtracted) !== stableStringify(currentExtracted);
 
     if (!textChanged) {

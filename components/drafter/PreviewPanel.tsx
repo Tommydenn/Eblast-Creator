@@ -7,6 +7,7 @@ import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { buildEblastHtml } from "@/lib/render-email";
 import { ColorPickerPopover } from "@/components/drafter/ColorPickerPopover";
 import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
+import { ImageLinkPopover } from "@/components/drafter/ImageLinkPopover";
 
 const PREVIEW_SCRIPT = /* javascript */`(function(){
   // Walk from the event target up to <body>, returning the innermost element
@@ -76,12 +77,16 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
     var x=e.clientX, y=e.clientY;
     if(delBtn && pointInRect(x,y,delBtn.getBoundingClientRect(),4)){ cancelRemove(); return; }
     var el=document.elementFromPoint(x,y);
-    var found=el?findAncestors(el,['bgfield','deletefield','section']):{};
-    document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield]').forEach(function(s){
+    var found=el?findAncestors(el,['bgfield','deletefield','section','linkfield']):{};
+    document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield],[data-linkfield]').forEach(function(s){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
     if(found.deletefield){ showDelBtnFor(found.deletefield); } else { scheduleHideDelBtn(); }
-    if(found.bgfield){
+    if(found.linkfield){
+      found.linkfield.style.outline='2px dashed rgba(31,69,56,0.55)';
+      found.linkfield.style.outlineOffset='-2px';
+      found.linkfield.style.cursor='pointer';
+    } else if(found.bgfield){
       found.bgfield.style.outline='2px dashed rgba(31,69,56,0.55)';
       found.bgfield.style.outlineOffset='-2px';
       found.bgfield.style.cursor='pointer';
@@ -93,7 +98,7 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   },true);
 
   document.addEventListener('mouseleave',function(){
-    document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield]').forEach(function(s){
+    document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield],[data-linkfield]').forEach(function(s){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
     hideDelBtn();
@@ -115,7 +120,23 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
       hideDelBtn();
       return;
     }
-    var found=findAncestors(e.target,['bgfield','section']);
+    var found=findAncestors(e.target,['bgfield','section','linkfield']);
+    // Photos first: a linked photo is an <a>, and in the editor clicking it
+    // must ALWAYS open the link editor rather than navigating. preventDefault
+    // here is what stops the anchor from being followed.
+    if(found.linkfield){
+      e.preventDefault();
+      e.stopPropagation();
+      var lr=found.linkfield.getBoundingClientRect();
+      window.parent.postMessage({
+        type:'link-click',
+        field:found.linkfield.dataset.linkfield,
+        index:found.linkfield.dataset.linkindex,
+        label:found.linkfield.getAttribute('data-img-label')||'Photo',
+        left:lr.left,bottom:lr.bottom,top:lr.top,width:lr.width
+      },'*');
+      return;
+    }
     if(found.bgfield){
       e.preventDefault();
       e.stopPropagation();
@@ -191,6 +212,42 @@ const DELETE_FIELD_LABELS: Record<DeleteFieldKey, string> = {
   footerButtonHidden: "the Visit Website button",
 };
 
+// Photo click-through links. galleryImageLinks is positional (index i is the
+// link for gallery photo i), so it carries an index; the other two don't.
+type LinkFieldKey = "heroImageLink" | "secondaryImageLink" | "galleryImageLinks";
+
+/** Current link for the photo the popover is editing, "" when unset. */
+function currentPhotoLink(
+  fields: ExtractedFlyer | null,
+  field: LinkFieldKey,
+  index: number | null,
+): string {
+  if (!fields) return "";
+  if (field === "galleryImageLinks") {
+    return (fields.galleryImageLinks ?? [])[index ?? 0] ?? "";
+  }
+  return (fields[field] as string | undefined) ?? "";
+}
+
+/**
+ * Write a photo link back. Gallery links are positional, so the array is
+ * padded rather than compacted — removing photo 1's link must not shift
+ * photo 2's link onto photo 1.
+ */
+function withPhotoLink(
+  fields: ExtractedFlyer | null,
+  field: LinkFieldKey,
+  index: number | null,
+  url: string | undefined,
+): string[] | string | undefined {
+  if (field !== "galleryImageLinks") return url;
+  const next = [...(fields?.galleryImageLinks ?? [])];
+  const i = index ?? 0;
+  while (next.length <= i) next.push("");
+  next[i] = url ?? "";
+  return next.some((v) => v) ? next : undefined;
+}
+
 function injectScript(doc: Document) {
   // Guarded on the Document itself (not a DOM node under <body>) because
   // patchIframe() below replaces doc.body.innerHTML wholesale on every edit,
@@ -222,6 +279,9 @@ export default function PreviewPanel() {
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const [bgPopover, setBgPopover] = useState<{ field: BgFieldKey; left: number; top: number } | null>(null);
   const [deletePopover, setDeletePopover] = useState<{ field: DeleteFieldKey; left: number; top: number } | null>(null);
+  const [linkPopover, setLinkPopover] = useState<
+    { field: LinkFieldKey; index: number | null; label: string; left: number; top: number } | null
+  >(null);
 
   const html = useMemo(() => {
     if (!fields || !community) return "";
@@ -287,6 +347,20 @@ export default function PreviewPanel() {
         if (!iframeRect || !containerRect) return;
         setBgPopover({
           field: e.data.field as BgFieldKey,
+          left: iframeRect.left - containerRect.left + (e.data.left as number),
+          top: iframeRect.top - containerRect.top + (e.data.bottom as number),
+        });
+        return;
+      }
+      if (e.data.type === "link-click") {
+        const iframeRect = iframeRef.current?.getBoundingClientRect();
+        const containerRect = containerRef.current?.getBoundingClientRect();
+        if (!iframeRect || !containerRect) return;
+        const rawIndex = e.data.index;
+        setLinkPopover({
+          field: e.data.field as LinkFieldKey,
+          index: rawIndex === undefined || rawIndex === null || rawIndex === "" ? null : Number(rawIndex),
+          label: (e.data.label as string) ?? "Photo",
           left: iframeRect.left - containerRect.left + (e.data.left as number),
           top: iframeRect.top - containerRect.top + (e.data.bottom as number),
         });
@@ -381,6 +455,31 @@ export default function PreviewPanel() {
               }
               resetLabel={`Reset ${BG_FIELD_LABELS[bgPopover.field]} to default`}
               onClose={() => setBgPopover(null)}
+            />
+          </div>
+        </>
+      )}
+
+      {linkPopover && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setLinkPopover(null)} />
+          <div className="absolute z-40" style={{ left: linkPopover.left, top: linkPopover.top + 4 }}>
+            <ImageLinkPopover
+              label={linkPopover.label}
+              currentValue={currentPhotoLink(fields, linkPopover.field, linkPopover.index)}
+              onSave={(url) =>
+                setField(
+                  linkPopover.field as keyof ExtractedFlyer,
+                  withPhotoLink(fields, linkPopover.field, linkPopover.index, url) as never,
+                )
+              }
+              onRemove={() =>
+                setField(
+                  linkPopover.field as keyof ExtractedFlyer,
+                  withPhotoLink(fields, linkPopover.field, linkPopover.index, undefined) as never,
+                )
+              }
+              onClose={() => setLinkPopover(null)}
             />
           </div>
         </>

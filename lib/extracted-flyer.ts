@@ -161,4 +161,22 @@ export interface ExtractedFlyer {
    * removed directly in the editor, not sourced from the community record.
    */
   additionalFooterEmails?: string[];
+
+  /**
+   * Click-through destinations for the photos. When set, that image is wrapped
+   * in an <a href> in the rendered email, so a recipient clicking the photo
+   * opens the link. Set only from the editor (click a photo in the live
+   * preview), never by the drafter.
+   *
+   * These live on ExtractedFlyer rather than alongside the image data because
+   * every downstream render — the approval email, the auto-refine revision,
+   * and the HubSpot push — rebuilds the HTML from these fields, so a link set
+   * once survives the whole approval pipeline through to the real send.
+   *
+   * galleryImageLinks is positional: index i is the link for gallery photo i,
+   * with holes left as undefined/"" for photos that have no link.
+   */
+  heroImageLink?: string;
+  secondaryImageLink?: string;
+  galleryImageLinks?: string[];
 }

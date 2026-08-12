@@ -749,10 +749,14 @@ export default function GenerateView() {
                   </select>
                 </div>
 
+                {/* Neither field is individually required, but one of them is —
+                    so the requirement lives here rather than as "(optional)" on
+                    both, which read as though you could skip both. */}
+                <p className="mb-2 text-xs text-[#9aaba4]">Add a flyer, some context, or both.</p>
                 <div className="mb-6 grid gap-4 md:grid-cols-2">
                   <div>
                   <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-2">
-                    Flyer PDF <span className="normal-case tracking-normal font-normal text-[#9aaba4]">(optional)</span>
+                    Flyer PDF
                   </label>
                   <button
                     type="button"
@@ -800,16 +804,33 @@ export default function GenerateView() {
                       details take precedence where they contradict the flyer. */}
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-2">
-                      More context <span className="normal-case tracking-normal font-normal text-[#9aaba4]">(optional)</span>
+                      More context
                     </label>
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      disabled={isGenerating}
-                      placeholder="Event details, dates, RSVP info…"
-                      className="w-full rounded-xl border-2 border-dashed border-[#ddd8d0] bg-[#faf9f6] px-3.5 py-3 text-sm text-[#1a1a1a] placeholder:text-[#9aaba4] focus:outline-none focus:border-[#1F4538]/40 focus:bg-white transition-colors resize-none"
-                      style={{ height: INPUT_BOX_H }}
-                    />
+                    {/* A textarea's own placeholder can't be vertically centred
+                        or carry an icon, so the empty state is an overlay that
+                        mirrors the flyer box exactly. pointer-events-none keeps
+                        clicks falling through to the textarea underneath. */}
+                    <div className="relative">
+                      {/* `block` matters: as an inline-block the textarea adds a
+                          descender gap to its wrapper, which offsets the centred
+                          overlay by a few pixels. */}
+                      <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        disabled={isGenerating}
+                        className="block w-full rounded-xl border-2 border-dashed border-[#ddd8d0] bg-[#faf9f6] px-3.5 py-3 text-sm text-[#1a1a1a] focus:outline-none focus:border-[#1F4538]/40 focus:bg-white transition-colors resize-none"
+                        style={{ height: INPUT_BOX_H }}
+                      />
+                      {!notes && (
+                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm">
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9aaba4" strokeWidth="1.8">
+                            <path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h9" />
+                          </svg>
+                          <span className="font-medium text-[#5a6b63]">Type or paste details</span>
+                          <span className="text-[#9aaba4] text-xs">Dates, RSVP info, anything else</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 

@@ -73,22 +73,52 @@ Prefer none. A comma, a period or a new sentence is almost always better. One
 is acceptable where it genuinely reads more naturally, but never more than one
 in a paragraph and never as a habit.
 
-Logistics live outside the body
-Date, time, address and RSVP are rendered by the template in their own blocks.
-Do not repeat them in the body paragraphs or the reader sees them twice. Write
-about what the event IS and why it's worth their time.
+Structure — follow the reference eblasts
+The reference eblasts below are the format, not just the tone. Build every
+email the same way:
+
+1. A one-line opening hook that names the community and the occasion, and
+   carries the energy of the piece. This is the header.
+   "Summer is kicking off at Talamore Senior Living Sun Prairie!"
+   "America's 250th Birthday Bash is here, and we're celebrating in style!"
+   "Your next chapter is closer than you think!"
+   For a serious topic the hook is quieter but still does the same job:
+   "Watching a parent slow down is hard. Knowing what to do next doesn't have
+   to be."
+
+2. One or two substantive paragraphs carrying the actual detail — what is
+   happening, who is involved, what the reader gets. This is where the
+   specifics live. Two paragraphs is typical; one is fine if it says enough.
+
+3. A short closing line that looks forward and invites.
+   "Come see what's in store this summer!"
+   "We hope you'll stop by, enjoy the music, grab a bite, and celebrate 250
+   years of history with us!"
+   "We'd love to welcome you home this summer."
+
+Keep it tight. These emails are short — the whole body is usually three or
+four sentences per paragraph at most. When in doubt, cut.
+
+Where each piece goes
+The reference eblasts were written as flat emails; this template renders
+structured fields. Map them like this:
+- The opening hook becomes the headline.
+- The paragraphs and closing line become the body paragraphs.
+- WHEN / WHERE / phone are NOT body copy. The template already renders the
+  date, time, address and phone in their own blocks, so repeating them in the
+  body shows them twice.
+- "RSVP is requested for this event." is not body copy either — it is the
+  rsvpLabel field.
 `;
 
 /**
- * Real approved eblasts, spanning the three registers. These carry more weight
- * than any rule above — they show the actual voice rather than describing it.
- *
- * Note the container differs: these were written as flat emails, so their
- * WHEN/WHERE blocks and contact lines correspond to template fields, not body
- * copy. Take the voice from them, not the layout.
+ * Real approved eblasts, spanning the registers. These carry more weight than
+ * any rule above — they define both the voice AND the structure. The prose
+ * rules only describe what these already demonstrate.
  */
 export const EBLAST_EXAMPLES = `
-REFERENCE EBLASTS — these are the voice. Match their feel, not their wording.
+REFERENCE EBLASTS — these are the voice AND the format. Match their shape and
+feel; never their exact wording.
 
 --- Festive event (upbeat, exclamation points, specific) ---
 Summer is kicking off at Talamore Senior Living Sun Prairie! Celebrate the

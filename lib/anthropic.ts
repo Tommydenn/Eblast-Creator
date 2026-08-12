@@ -35,7 +35,7 @@ const extractFlyerToolSchema = {
     previewText: { type: "string", description: "Inbox preview text. <=120 chars. Reinforces subject without repeating it." },
 
     eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
-    headline: { type: "string", description: "The event name or a short factual description. 2–5 words. Title-case. Name the thing clearly rather than teasing it." },
+    headline: { type: "string", description: "The opening hook from the voice doctrine's structure — a single line naming the community and the occasion, carrying the register of the piece ('Summer is kicking off at Talamore Senior Living Sun Prairie!'). Sentence case, written as a real sentence rather than a 2–5 word label. Keep it under about 70 characters so it fits the hero without dominating it. Name the occasion; don't tease it." },
     scriptSubheadline: { type: "string", description: "Optional short subtitle in cursive under the headline. Only include if there's a natural one worth showing — don't invent one. Aim under 25 chars, hard limit 35. Examples: 'With Live Entertainment', 'Families Welcome', 'Dinner Included'. Leave empty if nothing fits naturally." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
@@ -47,7 +47,7 @@ const extractFlyerToolSchema = {
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2–4 short paragraphs of original marketing prose, written per the voice doctrine. Every fact comes from the source; the wording is yours. Say each thing once. Do NOT include logistical details (date, time, location, RSVP) — the template renders those separately and the reader would see them twice.",
+      description: "The body, built to the voice doctrine's structure: one or two substantive paragraphs carrying the actual detail, then a short closing line that looks forward and invites. 2–3 entries total. The opening hook is NOT here — it's the headline. Original prose; every fact from the source, the wording yours. Keep it tight, and say each thing once. Do NOT include date, time, location, phone or RSVP — the template renders those separately and the reader would see them twice.",
     },
 
     rsvpRequired: { type: "boolean", description: "True only if the flyer explicitly requires or requests RSVP (phrases like 'RSVP required', 'RSVP requested', 'please RSVP', 'reservations required'). False if attendance is open/walk-in." },

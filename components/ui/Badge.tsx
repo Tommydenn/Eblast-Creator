@@ -20,7 +20,11 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em]",
+        // whitespace-nowrap + shrink-0: a badge is usually a flex item beside a
+        // longer title, and without these it gets squeezed until its label
+        // wraps onto two lines, which reads as off-centre text in a cramped
+        // pill. justify-center keeps the label centred if a width is ever set.
+        "inline-flex items-center justify-center gap-1 whitespace-nowrap shrink-0 rounded-full px-2.5 py-1 text-[10px] leading-none font-medium uppercase tracking-[0.08em]",
         variants[variant],
         className,
       )}

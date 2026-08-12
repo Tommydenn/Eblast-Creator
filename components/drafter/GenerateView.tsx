@@ -781,7 +781,9 @@ export default function GenerateView() {
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                           <polyline points="14,2 14,8 20,8"/>
                         </svg>
-                        <span className="font-medium text-[#1F4538]">{file.name}</span>
+                        {/* Long PDF names have no natural break point, so they
+                            must be clamped or they run past the box edges. */}
+                        <span className="font-medium text-[#1F4538] max-w-full truncate px-4" title={file.name}>{file.name}</span>
                         <span className="text-[#7a8c85] text-xs">{(file.size / 1024 / 1024).toFixed(1)} MB · Click to change</span>
                       </>
                     ) : (

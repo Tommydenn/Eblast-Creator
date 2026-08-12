@@ -485,7 +485,7 @@ const FIELD_FONT_SIZES: Record<string, number> = {
   ctaRsvpLabel: 14,
   footerName: 14,
   thankYouText: 26,
-  heroAddress: 12,
+  heroAddress: 13,
   galleryLabel: 11,
   ctaButtonLabel: 14,
   finalCtaButtonLabel: 14,

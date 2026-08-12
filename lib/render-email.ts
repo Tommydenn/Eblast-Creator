@@ -374,7 +374,7 @@ export function buildEblastHtml(
               <tr>
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
                   <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
-                  ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 12px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
+                  ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
                 </td>
               </tr>
             </table>` : ""}

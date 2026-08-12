@@ -567,6 +567,9 @@ interface ResumeDraft {
   savedAt: string;
 }
 
+/** Shared height for the two side-by-side inputs so they read as a pair. */
+const INPUT_BOX_H = 150;
+
 export default function GenerateView() {
   const {
     communities,
@@ -759,11 +762,14 @@ export default function GenerateView() {
                     onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0] ?? null); }}
                     disabled={isGenerating}
                     className={[
-                      "w-full rounded-xl border-2 border-dashed transition-colors py-10 flex flex-col items-center gap-2 text-sm",
+                      // Height is fixed rather than derived from padding so the
+                      // notes box beside it can match exactly — see INPUT_BOX_H.
+                      "w-full rounded-xl border-2 border-dashed transition-colors flex flex-col items-center justify-center gap-2 text-sm",
                       dragOver ? "border-[#1F4538] bg-[#1F4538]/5"
                         : file ? "border-[#1F4538]/40 bg-[#f0f5f2]"
                         : "border-[#ddd8d0] bg-[#faf9f6] hover:border-[#1F4538]/40 hover:bg-[#f5f3ef]",
                     ].join(" ")}
+                    style={{ height: INPUT_BOX_H }}
                   >
                     {file ? (
                       <>
@@ -794,22 +800,22 @@ export default function GenerateView() {
                       details take precedence where they contradict the flyer. */}
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-2">
-                      Event details <span className="normal-case tracking-normal font-normal text-[#9aaba4]">(optional)</span>
+                      More context <span className="normal-case tracking-normal font-normal text-[#9aaba4]">(optional)</span>
                     </label>
                     <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       disabled={isGenerating}
-                      placeholder={"Paste or type the details here — what the event is, date and time, where, who to RSVP to, anything else worth including.\n\nWorks on its own, or alongside a flyer."}
+                      placeholder="Event details, dates, RSVP info…"
                       className="w-full rounded-xl border-2 border-dashed border-[#ddd8d0] bg-[#faf9f6] px-3.5 py-3 text-sm text-[#1a1a1a] placeholder:text-[#9aaba4] focus:outline-none focus:border-[#1F4538]/40 focus:bg-white transition-colors resize-none"
-                      style={{ height: 148 }}
+                      style={{ height: INPUT_BOX_H }}
                     />
                   </div>
                 </div>
 
                 {file && notes.trim() && (
                   <p className="-mt-2 mb-4 text-xs text-[#7a8c85]">
-                    Using both — where your notes and the flyer disagree, your notes win.
+                    Your notes override the flyer.
                   </p>
                 )}
 

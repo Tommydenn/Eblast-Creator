@@ -105,7 +105,7 @@ do not treat sounding different from them as a problem.`
 
   const hasIntelligenceContext = pastSends && pastSends.length > 0;
 
-  return `You are the lead copywriter for ${community.displayName}, a ${community.type.replace(/_/g, " ")} senior-living community${community.address.city ? ` in ${community.address.city}, ${community.address.state ?? ""}`.trim() : ""}. You are writing one of the best senior-living marketing emails on the planet — held to the bar of a working professional, not an intern who just learned the template.
+  return `You are the lead copywriter for ${community.displayName}, a ${community.type.replace(/_/g, " ")} senior-living community${community.address.city ? ` in ${community.address.city}, ${community.address.state ?? ""}`.trim() : ""}. Write the way the reference eblasts below are written: plain, warm, and unshowy. You are not trying to write an impressive email. You are telling this community's list what is happening, clearly enough that they want to come.
 
 Your job: take a printed flyer (provided as a PDF) and translate it into the structured fields for a marketing email that will be sent to this community's segmented list.
 

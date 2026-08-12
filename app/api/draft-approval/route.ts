@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
     html?: string;
     /** Optional personal note shown to the reviewer above the preview. */
     note?: string;
+    /** Dry-run of the whole flow — see savedDraftApprovals.isTest. */
+    isTest?: boolean;
   };
   try {
     body = await req.json();
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Body must be JSON" }, { status: 400 });
   }
 
-  const { savedDraftId, communitySlug, recipientEmail, recipientName, notifyEmail, html: bodyHtml, note } = body;
+  const { savedDraftId, communitySlug, recipientEmail, recipientName, notifyEmail, html: bodyHtml, note, isTest } = body;
   if (!savedDraftId || !communitySlug || !recipientEmail) {
     return NextResponse.json({ ok: false, error: "Missing required fields" }, { status: 400 });
   }
@@ -138,6 +140,7 @@ export async function POST(req: NextRequest) {
       notifyEmail: notifyEmail ?? null,
       draftSubject,
       decision: "pending",
+      isTest: !!isTest,
     });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: `Database error: ${e.message ?? String(e)}` }, { status: 500 });

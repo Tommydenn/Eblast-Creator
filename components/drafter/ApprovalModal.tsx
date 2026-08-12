@@ -5,16 +5,26 @@ import { useDraft } from "@/context/DraftContext";
 
 interface Props {
   onClose: () => void;
+  /**
+   * "test" sends the identical email and link, but the request is flagged so
+   * nothing it does is recorded — see savedDraftApprovals.isTest.
+   */
+  mode?: "real" | "test";
 }
 
-export default function ApprovalModal({ onClose }: Props) {
+export default function ApprovalModal({ onClose, mode = "real" }: Props) {
+  const isTest = mode === "test";
   const { fields, community, save, isSaving, sendForApproval } = useDraft();
   // Default the reviewer to this community's primary salesperson — they're who
   // the approval is almost always for, and they're already on the community
   // record. Falls back to the marketing address when a community has no
   // senders set up yet.
+  // A test defaults to you rather than the salesperson — the address is still
+  // editable so a test can be sent to a colleague to check rendering.
   const primarySender = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
-  const [recipientEmail, setRecipientEmail] = useState(primarySender?.email ?? "jwalls@greatlakesmc.com");
+  const [recipientEmail, setRecipientEmail] = useState(
+    isTest ? "jwalls@greatlakesmc.com" : primarySender?.email ?? "jwalls@greatlakesmc.com",
+  );
   const [notifyEmail, setNotifyEmail] = useState("jwalls@greatlakesmc.com");
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
@@ -33,6 +43,7 @@ export default function ApprovalModal({ onClose }: Props) {
         recipientEmail: recipientEmail.trim(),
         notifyEmail: notifyEmail.trim() || undefined,
         note: note.trim() || undefined,
+        isTest,
       });
       setSent(true);
     } catch (e) {
@@ -49,9 +60,13 @@ export default function ApprovalModal({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 pt-6 pb-4 border-b border-[#f0ede7]">
-          <h2 className="text-base font-semibold text-[#1F4538]">Send for Approval</h2>
+          <h2 className="text-base font-semibold text-[#1F4538]">
+            {isTest ? "Send Test Approval" : "Send for Approval"}
+          </h2>
           <p className="mt-1 text-xs text-[#7a8c85]">
-            An email preview will be sent to the reviewer with a link to approve or request changes.
+            {isTest
+              ? "The same email and the same link, so you can walk the whole flow. Approving it creates a [TEST] email in HubSpot — but nothing here is recorded: the draft won't be marked approved, won't lock, and won't count as awaiting approval."
+              : "An email preview will be sent to the reviewer with a link to approve or request changes."}
           </p>
         </div>
 
@@ -62,7 +77,9 @@ export default function ApprovalModal({ onClose }: Props) {
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
-            <p className="text-sm font-semibold text-[#1F4538]">Approval request sent!</p>
+            <p className="text-sm font-semibold text-[#1F4538]">
+              {isTest ? "Test email sent!" : "Approval request sent!"}
+            </p>
             <p className="mt-1 text-xs text-[#7a8c85]">We notified {recipientEmail}.</p>
             <button
               onClick={onClose}
@@ -139,7 +156,7 @@ export default function ApprovalModal({ onClose }: Props) {
                 disabled={!recipientEmail.trim() || sending || isSaving}
                 className="flex-1 rounded-lg bg-[#1F4538] text-white text-sm font-semibold py-2 hover:bg-[#173829] transition-colors disabled:opacity-40"
               >
-                {sending || isSaving ? "Sending…" : "Send for approval"}
+                {sending || isSaving ? "Sending…" : isTest ? "Send test email" : "Send for approval"}
               </button>
             </div>
           </div>

@@ -355,6 +355,17 @@ export const savedDraftApprovals = pgTable("saved_draft_approvals", {
   pushedEmailId: text("pushed_email_id"),
   /** Why the last approval push failed, if it did. Cleared on success. */
   pushError: text("push_error"),
+  /**
+   * A dry-run of the whole approval flow, for testing the app.
+   *
+   * Behaves exactly like a real approval request — same email, same link, and
+   * approving it really does create the email in HubSpot — but it is invisible
+   * to the app's own bookkeeping: never counted as awaiting approval, never
+   * badges the draft as pending, never marks the draft approved, never writes a
+   * past-send, and never supersedes (or is superseded by) a real request. The
+   * HubSpot email it creates is named with a [TEST] prefix so it's obvious.
+   */
+  isTest: boolean("is_test").notNull().default(false),
 });
 
 export type SavedDraftApprovalRow = InferSelectModel<typeof savedDraftApprovals>;

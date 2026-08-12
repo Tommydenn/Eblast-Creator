@@ -13,6 +13,7 @@ import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { randomBytes } from "node:crypto";
 import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
+import { approvalBlockedReason, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
 export const runtime = "nodejs";
 // Auto-refine can take up to 30 s for the Claude call + image processing.
@@ -104,6 +105,34 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
   if (approval.decision !== "pending") {
     return NextResponse.json({ ok: false, error: "This draft has already been decided" }, { status: 409 });
+  }
+
+  // A leftover request — draft already approved, pushed, deleted, or re-sent —
+  // must not be able to rewrite the draft or trigger another approval email.
+  const siblings = await db
+    .select({
+      token: savedDraftApprovals.token,
+      savedDraftId: savedDraftApprovals.savedDraftId,
+      sentAt: savedDraftApprovals.sentAt,
+    })
+    .from(savedDraftApprovals)
+    .where(eq(savedDraftApprovals.savedDraftId, approval.savedDraftId));
+  const [draftForCheck] = await db
+    .select({ deletedAt: savedDrafts.deletedAt, approvedAt: savedDrafts.approvedAt, pushedAt: savedDrafts.pushedAt })
+    .from(savedDrafts)
+    .where(eq(savedDrafts.id, approval.savedDraftId))
+    .limit(1);
+  const blocked = approvalBlockedReason({
+    decision: approval.decision,
+    sentAt: approval.sentAt,
+    draft: draftForCheck ?? null,
+    isNewestForDraft: newestApprovalTokenByDraft(siblings).get(approval.savedDraftId) === approval.token,
+  });
+  if (blocked && !isApprovalExpired(approval.sentAt)) {
+    return NextResponse.json(
+      { ok: false, error: `This request is no longer open — ${blocked}.` },
+      { status: 409 },
+    );
   }
 
   // Same lifetime as the Approve link — an aged-out request shouldn't be able

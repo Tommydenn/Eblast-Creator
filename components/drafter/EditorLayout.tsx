@@ -16,7 +16,7 @@ function errorCode(msg: string): string {
   return "ERR_" + Math.abs(h).toString(36).toUpperCase().slice(0, 5);
 }
 
-function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSaveLabel: string | null }) {
+function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () => void; onTestApproval: () => void; autoSaveLabel: string | null }) {
   const {
     community,
     fields,
@@ -187,6 +187,15 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
           ) : "Send for Approval"}
         </button>
 
+        {/* Test run of the same flow — nothing it does is recorded. */}
+        <button
+          onClick={onTestApproval}
+          title="Send yourself the approval email and walk the whole flow. Approving it creates a [TEST] email in HubSpot but changes nothing in the drafter."
+          className="text-xs font-medium border border-dashed border-[#9aaba4] text-[#5a6b63] rounded-lg px-3 py-1.5 hover:bg-[#5a6b63]/5 transition-colors"
+        >
+          Send Test
+        </button>
+
         {/* Push to HubSpot button + error */}
         <div className="relative">
           <button
@@ -231,6 +240,7 @@ function TopBar({ onApproval, autoSaveLabel }: { onApproval: () => void; autoSav
 export default function EditorLayout() {
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [approvalMode, setApprovalMode] = useState<"real" | "test">("real");
   const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
   const {
     isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, activeFieldNameRef, community,
@@ -281,7 +291,11 @@ export default function EditorLayout() {
 
   return (
     <div className="h-screen flex flex-col bg-[#f5f3ef]">
-      <TopBar onApproval={() => setApprovalOpen(true)} autoSaveLabel={autoSaveLabel} />
+      <TopBar
+        onApproval={() => { setApprovalMode("real"); setApprovalOpen(true); }}
+        onTestApproval={() => { setApprovalMode("test"); setApprovalOpen(true); }}
+        autoSaveLabel={autoSaveLabel}
+      />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left: editor panel */}
@@ -338,7 +352,7 @@ export default function EditorLayout() {
         </div>
       </div>
 
-      {approvalOpen && <ApprovalModal onClose={() => setApprovalOpen(false)} />}
+      {approvalOpen && <ApprovalModal mode={approvalMode} onClose={() => setApprovalOpen(false)} />}
 
       {copyPromptOpen && lockInfo && (
         <CopyPromptModal

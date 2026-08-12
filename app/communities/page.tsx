@@ -2,7 +2,8 @@ import Link from "next/link";
 import { eq, sql } from "drizzle-orm";
 import { listCommunities } from "@/data/communities";
 import { db } from "@/lib/db";
-import { savedDraftApprovals } from "@/lib/db/schema";
+import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
+import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 import { Header } from "@/components/Header";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +29,37 @@ const DEFAULT_BAR_COLOR = "#a0a89e";
  * accurate but not actionable, so they're gone rather than replaced.
  */
 async function countAwaitingApproval(): Promise<number> {
-  const [row] = await db
-    .select({ n: sql<number>`count(*)::int` })
+  // Counting decision='pending' alone badly overstates this: rows survive
+  // their draft being approved through a newer request, pushed straight to
+  // HubSpot, deleted, or re-sent. Of 8 such rows, only 2 were real requests.
+  // approvalBlockedReason is the single source of truth for what counts.
+  const rows = await db
+    .select({
+      token: savedDraftApprovals.token,
+      savedDraftId: savedDraftApprovals.savedDraftId,
+      decision: savedDraftApprovals.decision,
+      sentAt: savedDraftApprovals.sentAt,
+      isTest: savedDraftApprovals.isTest,
+      deletedAt: savedDrafts.deletedAt,
+      approvedAt: savedDrafts.approvedAt,
+      pushedAt: savedDrafts.pushedAt,
+    })
     .from(savedDraftApprovals)
-    .where(eq(savedDraftApprovals.decision, "pending"));
-  return row?.n ?? 0;
+    .leftJoin(savedDrafts, eq(savedDraftApprovals.savedDraftId, savedDrafts.id));
+
+  const newestByDraft = newestApprovalTokenByDraft(rows);
+  return rows.filter((r) =>
+    isApprovalActionable({
+      decision: r.decision,
+      sentAt: r.sentAt,
+      // A left join miss means the draft row is gone entirely.
+      draft: r.deletedAt === undefined && r.approvedAt === undefined && r.pushedAt === undefined
+        ? null
+        : { deletedAt: r.deletedAt, approvedAt: r.approvedAt, pushedAt: r.pushedAt },
+      isNewestForDraft: newestByDraft.get(r.savedDraftId) === r.token,
+      isTest: r.isTest,
+    }),
+  ).length;
 }
 
 /**

@@ -8,6 +8,7 @@ import { inlineRelativeImages } from "@/lib/inline-images";
 import { renderSavedDraftHtml, draftEventCategory } from "@/lib/draft-render-server";
 import { sendPushFailureEmail } from "@/lib/email";
 import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
+import { approvalBlockedReason, newestApprovalTokenByDraft } from "@/lib/approval-status";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 
@@ -128,12 +129,41 @@ async function loadApproval(token: string) {
     .where(eq(savedDrafts.id, approval.savedDraftId))
     .limit(1);
 
+  // Sibling requests decide whether this one has been superseded by a re-send.
+  const siblings = await db
+    .select({
+      token: savedDraftApprovals.token,
+      savedDraftId: savedDraftApprovals.savedDraftId,
+      sentAt: savedDraftApprovals.sentAt,
+      isTest: savedDraftApprovals.isTest,
+    })
+    .from(savedDraftApprovals)
+    .where(eq(savedDraftApprovals.savedDraftId, approval.savedDraftId));
+  const newestToken = newestApprovalTokenByDraft(siblings).get(approval.savedDraftId);
+
   const draftData = draftRow?.data as Record<string, any> | undefined;
   return {
     approval,
     draftRow,
     draftData,
     subject: draftRow?.subject ?? draftData?.subject ?? "Draft",
+    /**
+     * Why this link can't be acted on, or null. Checked on both GET and POST
+     * so a leftover link — one whose draft was already approved, pushed,
+     * deleted, or re-sent — is refused instead of creating a second HubSpot
+     * email. This is what makes the existing stale links safe without
+     * rewriting any approval records.
+     */
+    blockedReason:
+      approval.decision === "pending"
+        ? approvalBlockedReason({
+            decision: approval.decision,
+            sentAt: approval.sentAt,
+            draft: draftRow ?? null,
+            isNewestForDraft: approval.token === newestToken,
+            isTest: approval.isTest,
+          })
+        : null,
   };
 }
 
@@ -217,6 +247,17 @@ export async function GET(
     return new NextResponse(expiredPage(displayName, subject), { headers: HTML_HEADERS });
   }
 
+  // Superseded / already-handled elsewhere. Nothing to approve.
+  if (ctx.blockedReason) {
+    return new NextResponse(page({
+      icon: "✓", iconColor: "#8a8378",
+      title: "Nothing Left To Approve",
+      community: displayName,
+      subject,
+      body: `This request is no longer open &mdash; ${esc(ctx.blockedReason)}. Nothing was sent to HubSpot. You can close this tab.`,
+    }), { headers: HTML_HEADERS });
+  }
+
   const retryNote = approval.pushError
     ? `<div class="error">A previous attempt didn&rsquo;t reach HubSpot: ${esc(approval.pushError)}<br><br>You can safely try again.</div>`
     : "";
@@ -260,6 +301,20 @@ export async function POST(
       expiredPage(stale?.displayName ?? preCheck.approval.communitySlug, preCheck.subject),
       { headers: HTML_HEADERS },
     );
+  }
+
+  // Same for a leftover request whose draft was already resolved another way —
+  // without this, an old link could create a duplicate HubSpot email even
+  // though the atomic claim below already prevents double-pushing this token.
+  if (preCheck.blockedReason) {
+    const c = await getCommunity(preCheck.approval.communitySlug).catch(() => null);
+    return new NextResponse(page({
+      icon: "✓", iconColor: "#8a8378",
+      title: "Nothing Left To Approve",
+      community: c?.displayName ?? preCheck.approval.communitySlug,
+      subject: preCheck.subject,
+      body: `This request is no longer open &mdash; ${esc(preCheck.blockedReason)}. Nothing was sent to HubSpot.`,
+    }), { headers: HTML_HEADERS });
   }
 
   // Atomically claim the approval: pending → approving in a single statement.
@@ -352,11 +407,14 @@ export async function POST(
       fallbackExcluded: [],
       account: hubspotAccount,
     });
+    // A test approval really does create the email — that's the point — but the
+    // [TEST] prefix makes it unmistakable in HubSpot's list and easy to delete.
+    const baseName = generateHubspotEmailName({
+      acronym: community.hubspot.acronym,
+      eventCategory: draftEventCategory(draftData),
+    });
     const create = await createEmail({
-      name: generateHubspotEmailName({
-        acronym: community.hubspot.acronym,
-        eventCategory: draftEventCategory(draftData),
-      }),
+      name: approval.isTest ? `[TEST] ${baseName}` : baseName,
       subject,
       fromName: community.senders[0]?.name ?? community.displayName,
       replyTo: community.senders[0]?.email ?? "",
@@ -420,11 +478,28 @@ export async function POST(
   // Mark the underlying saved draft as approved — only once the HubSpot push
   // actually succeeded, so "Approved" in the Saved Drafts tab means it
   // genuinely went out, not just that someone clicked the link.
-  if (draftRow) {
+  //
+  // Skipped entirely for a test: leaving approvedAt unset is what keeps the
+  // draft unlocked, unbadged, and re-testable.
+  if (draftRow && !approval.isTest) {
     await db
       .update(savedDrafts)
       .set({ approvedAt: new Date() })
       .where(eq(savedDrafts.id, draftRow.id));
+  }
+
+  if (approval.isTest) {
+    return new NextResponse(page({
+      icon: "🧪", iconColor: "#5a6b63",
+      title: "Test Approval Complete",
+      community: displayName,
+      subject,
+      body:
+        `The full approval flow ran and the email was created in HubSpot as ` +
+        `<strong>[TEST]</strong> &mdash; delete it there when you're done with it.<br><br>` +
+        `Nothing in the drafter changed: the draft is not marked approved, it stays editable, ` +
+        `and this doesn't count toward anything. You can send another test on the same draft.`,
+    }), { headers: HTML_HEADERS });
   }
 
   return new NextResponse(page({

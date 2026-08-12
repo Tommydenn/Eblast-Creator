@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { savedDrafts, savedDraftApprovals } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
 // GET /api/saved-drafts/[id]  — returns the full draft including image data,
 // plus lock-relevant metadata (approvedAt/pushedAt/pendingApproval) so the
@@ -14,17 +15,35 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     if (rows.length === 0) {
       return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
     }
-    const [pending] = await db
-      .select({ token: savedDraftApprovals.token })
+    // A leftover pending row is not an outstanding request — see
+    // approvalBlockedReason. Without this an approved draft reported both
+    // "Approved" and "Pending Approval" at the same time.
+    const approvals = await db
+      .select({
+        token: savedDraftApprovals.token,
+        savedDraftId: savedDraftApprovals.savedDraftId,
+        decision: savedDraftApprovals.decision,
+        sentAt: savedDraftApprovals.sentAt,
+        isTest: savedDraftApprovals.isTest,
+      })
       .from(savedDraftApprovals)
-      .where(and(eq(savedDraftApprovals.savedDraftId, id), eq(savedDraftApprovals.decision, "pending")))
-      .limit(1);
+      .where(eq(savedDraftApprovals.savedDraftId, id));
+    const newestToken = newestApprovalTokenByDraft(approvals).get(id);
+    const pendingApproval = approvals.some((a) =>
+      isApprovalActionable({
+        decision: a.decision,
+        sentAt: a.sentAt,
+        draft: rows[0],
+        isNewestForDraft: a.token === newestToken,
+        isTest: a.isTest,
+      }),
+    );
     return NextResponse.json({
       ok: true,
       draft: rows[0].data,
       approvedAt: rows[0].approvedAt,
       pushedAt: rows[0].pushedAt,
-      pendingApproval: !!pending,
+      pendingApproval,
     });
   } catch (err) {
     console.error("[saved-drafts/[id] GET]", err);

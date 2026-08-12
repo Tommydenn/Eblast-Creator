@@ -5,7 +5,7 @@ import {
   formatPastSendsForPrompt,
   type PastSendForContext,
 } from "@/lib/past-sends-retrieval";
-import { SENIOR_LIVING_CRAFT_DOCTRINE } from "@/lib/senior-living-craft";
+import { VOICE_DOCTRINE } from "@/lib/voice";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -28,30 +28,33 @@ const extractFlyerToolSchema = {
     "audienceHints",
   ],
   properties: {
-    subject: { type: "string", description: "Email subject line. <=60 chars. Specific, benefit-led, no clickbait." },
+    // Field descriptions carry FORMAT only — length, structure, what belongs
+    // where. Tone lives in the voice doctrine (lib/voice.ts) so the two can't
+    // contradict each other, which is what made this untunable before.
+    subject: { type: "string", description: "Email subject line. <=60 chars. Specific about what this is. Tone follows the voice doctrine — match the register of the event." },
     previewText: { type: "string", description: "Inbox preview text. <=120 chars. Reinforces subject without repeating it." },
 
     eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
-    headline: { type: "string", description: "The event name or a short factual description from the flyer. 2–5 words. Title-case. No exclamation points. Do NOT be clever — no 'Discover...', 'Experience...', 'An Evening of...', or any tagline-style phrase. Just name the event clearly and warmly, exactly as the flyer does." },
-    scriptSubheadline: { type: "string", description: "Optional short subtitle in cursive under the headline. Only include if the flyer itself has a natural subtitle worth showing — do NOT invent one. Must be a plain, warm factual phrase, not a tagline. No exclamation points. Aim under 25 chars, hard limit 35. Examples: 'With Live Entertainment', 'Families Welcome', 'Dinner Included'. Leave empty if nothing from the flyer fits naturally." },
+    headline: { type: "string", description: "The event name or a short factual description. 2–5 words. Title-case. Name the thing clearly rather than teasing it." },
+    scriptSubheadline: { type: "string", description: "Optional short subtitle in cursive under the headline. Only include if there's a natural one worth showing — don't invent one. Aim under 25 chars, hard limit 35. Examples: 'With Live Entertainment', 'Families Welcome', 'Dinner Included'. Leave empty if nothing fits naturally." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
     eventTime: { type: "string", description: "Event time, e.g. '2:00 PM'." },
     eventLocation: { type: "string" },
 
-    storyEyebrow: { type: "string", description: "2–4 word label that names what the story section is about. NEVER begin with an article — no 'The', 'A', or 'An'. Open with the subject itself or a descriptor: 'Summer Concert Series', 'Friday's Dinner Menu', 'Live Jazz on the Patio', 'Inside Our Kitchen'. Be specific — not 'About the Event'. Must NOT echo the hero headline. No exclamation points. No sales language." },
-    storyScriptTitle: { type: "string", description: "Optional script-styled line below the eyebrow. The ONLY valid use: adding a specific detail or warmth that the eyebrow left out, so together they read as one idea. NEVER use 'Come join us', 'Join us', 'Join us for...', or any invitation phrase — those are body copy, not a title. NEVER echo the eyebrow or state a different topic. If the eyebrow already says enough on its own, leave this empty. Good pair: eyebrow 'Summer Concert Series' → title 'Live Music by the Garden'. Bad pair: eyebrow 'About the Concert' → title 'Come Join Us' (invitation, unrelated to the label)." },
+    storyEyebrow: { type: "string", description: "2–4 word label naming what the story section covers. NEVER begin with an article — no 'The', 'A', or 'An'. Open with the subject itself or a descriptor: 'Summer Concert Series', 'Friday's Dinner Menu', 'Live Jazz on the Patio', 'Inside Our Kitchen'. Be specific — not 'About the Event'. Must NOT echo the hero headline." },
+    storyScriptTitle: { type: "string", description: "Optional script-styled line below the eyebrow. Its ONLY valid use: adding a specific detail the eyebrow left out, so the two read as one idea. Not an invitation — 'Come join us' belongs in body copy. Never echo the eyebrow or introduce a different topic. Leave empty if the eyebrow stands alone. Good: 'Summer Concert Series' → 'Live Music by the Garden'." },
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "2–4 short paragraphs. Copy the flyer's wording as closely as possible — treat it almost like a copy-paste with minor adaptation for email format. Do not rephrase, restructure, or add your own angles. Keep it short and non-redundant: say each thing once. For cheerful events (open house, social, dining), the tone must be upbeat and friendly — use exclamation points freely and naturally throughout, not just once. If the flyer is informational, be warm but measured. Do NOT include logistical details (date, time, location, RSVP) — those are in the hero and CTA. No em dashes. NEVER invent quotes or put words in residents' or families' mouths — not even paraphrased ('many residents say...' or 'families tell us...'). Only use wording that is actually in the flyer.",
+      description: "2–4 short paragraphs of original marketing prose, written per the voice doctrine. Every fact comes from the source; the wording is yours. Say each thing once. Do NOT include logistical details (date, time, location, RSVP) — the template renders those separately and the reader would see them twice.",
     },
 
     rsvpRequired: { type: "boolean", description: "True only if the flyer explicitly requires or requests RSVP (phrases like 'RSVP required', 'RSVP requested', 'please RSVP', 'reservations required'). False if attendance is open/walk-in." },
 
     ctaEyebrow: { type: "string", description: "Action label above the final CTA block. Must NOT repeat the hero eyebrow. Verb-led and specific: 'Reserve Your Seat', 'Save Saturday', 'Join the Table'." },
     ctaHeadline: { type: "string", description: "CTA headline — state the date+time OR a final reason to act (not the event name again). E.g. 'Saturday, June 28 · 5:30 PM' or 'Seating Is Limited'." },
-    ctaSubline: { type: "string", description: "One supporting, factual line that lowers friction or adds a useful detail (cost, who's invited, what to bring). If the flyer requires or requests RSVP, this line MUST say so explicitly (e.g. 'RSVP required — seating is limited'). Never include a person's name. No urgency, scarcity, or hype. Omit if nothing fresh to add." },
+    ctaSubline: { type: "string", description: "One supporting, factual line that lowers friction or adds a useful detail (cost, who's invited, what to bring). If the source requires or requests RSVP, this line MUST say so explicitly. Never include a person's name. Omit if there's nothing fresh to add." },
     ctaButtonLabel: { type: "string", description: "Button text that matches the flyer's call to action. Always include the phone number formatted as XXX.XXX.XXXX, followed by a SHORT context-appropriate phrase. Examples: 'Call 920.504.3443 to RSVP', 'Call 920.504.3443 to Schedule a Tour', 'Call 920.504.3443 to Request Info', 'Call 920.504.3443 for Details'. Follow the flyer's intent — do not default to 'to RSVP' if the flyer is not about RSVPing. Keep it as short as possible. Never include a salesperson's name." },
     ctaButtonHref: { type: "string", description: "Button href: tel:, mailto:, or https:// URL. Pull from the flyer." },
 
@@ -91,13 +94,13 @@ function systemPrompt(community: Community, pastSends?: PastSendForContext[]): s
     pastSends && pastSends.length > 0
       ? `
 
-Recent eblasts from ${community.displayName} (use as voice/style/length reference; do NOT copy lines verbatim):
+Recent eblasts from ${community.displayName}, for context only:
 ${formatPastSendsForPrompt(pastSends)}
 
-Notes on using this:
-- High-performing past subjects (higher open %) tell you what tone and angle resonates with this specific audience. Use them as your primary style cue for the story section — if past high-performers are warm and upbeat, match that; if they are measured and informational, match that.
-- The body copy tone and energy of this email's story section should feel consistent with what has worked for this community before.
-- The drafts that already shipped represent the brand's accepted voice — match it. If your draft sounds noticeably different, that's a yellow flag.`
+These tell you what this list has already seen, which is useful for avoiding a
+repeat angle or a recycled opening. They are NOT the quality bar and NOT the
+voice reference — the voice section above is. Do not imitate a past send, and
+do not treat sounding different from them as a problem.`
       : "";
 
   const hasIntelligenceContext = pastSends && pastSends.length > 0;
@@ -106,18 +109,13 @@ Notes on using this:
 
 Your job: take a printed flyer (provided as a PDF) and translate it into the structured fields for a marketing email that will be sent to this community's segmented list.
 
-${SENIOR_LIVING_CRAFT_DOCTRINE}
+${VOICE_DOCTRINE}
 
-This community's voice
-Warm, hospitable, dignified. Speak to both prospective residents and the adult children making the decision for a parent.
-
-Inviolable rules
-- Never use em dashes (—) anywhere in the email. Replace with a comma, a period, or a new sentence.
-- Never invent quotes or testimonials. Do not put words in anyone's mouth — not a resident, not a family member, not staff. This includes paraphrased "what residents say" framing. The phrase "My only regret is that I didn't move here sooner" is a banned example of exactly this — never use it or anything like it.
-- Never invent facts. Every name, date, phone number, time, location, and quote in your output must appear in the flyer. If a detail isn't in the flyer, leave that field empty.
-- Use the community's actual name (${community.displayName}) — never generic substitutes like "our community" or "the community."${trackingPhoneNote}
-- The CTA href is the tracking number above (or a real mailto:/https:// from the flyer). The CTA label is human-formatted ("Call 920.504.3028", not "Click here").
-- Honor the flyer's intent. If the flyer is event-focused, your email is event-focused. Do not invent angles the flyer doesn't support.${pastSendsBlock}
+Facts and accuracy — these are absolute, and they are not style rules
+- Every name, date, phone number, time, location and price in your output must come from the source. If a detail isn't there, leave that field empty rather than inventing it.
+- Name the community as ${community.displayName} at least once so the reader knows who is writing. "Our community" is fine after that.${trackingPhoneNote}
+- The CTA href is the tracking number above (or a real mailto:/https:// from the source). The CTA label is human-formatted ("Call 920.504.3028", not "Click here").
+- Honor the source's intent. If it is event-focused, your email is event-focused. Do not invent angles it doesn't support.${pastSendsBlock}
 
 ${
     hasIntelligenceContext
@@ -126,7 +124,7 @@ ${
       : "If no past sends or voice rules were in context, leave drafterRationale empty — don't pretend memory you don't have."
   }
 
-Output format: call the \`extract_flyer\` tool with a fully-populated structured object. Do not write prose; only call the tool. Write to inform, not to sell: the reader should finish knowing exactly what the event or offering is and why it might genuinely matter to them. Favor plain, specific, honest language over clever hooks or persuasion — clarity and concrete detail carry the email, not salesmanship. Never tease curiosity the body doesn't pay off, and never comment on your own selling (no "this isn't a sales pitch," "no pressure," "no obligation" framing).`;
+Output format: call the \`extract_flyer\` tool with a fully-populated structured object. Do not write prose; only call the tool.`;
 }
 
 /**

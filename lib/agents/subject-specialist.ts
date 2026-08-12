@@ -22,7 +22,7 @@ import {
   formatPastSendsForPrompt,
   type PastSendForContext,
 } from "@/lib/past-sends-retrieval";
-import { SENIOR_LIVING_CRAFT_DOCTRINE } from "@/lib/senior-living-craft";
+import { VOICE_DOCTRINE } from "@/lib/voice";
 import { SENIOR_60_PLUS_SUBJECT_RESEARCH } from "@/lib/senior-60-plus-research";
 
 const MODEL = "claude-sonnet-4-6";
@@ -146,7 +146,7 @@ ${SENIOR_60_PLUS_SUBJECT_RESEARCH}
 
 # Craft doctrine (style-level rules, applied AFTER the research filter)
 
-${SENIOR_LIVING_CRAFT_DOCTRINE}
+${VOICE_DOCTRINE}
 
 Your specific craft for subject lines
 

@@ -70,19 +70,35 @@ Be specific
 Name the band, the dish, the partner organization, the speaker. Concrete
 details are what make an eblast feel real.
 
-The house formulas are welcome
-This is a template family, not a literary exercise. Familiar connective
-sentences are part of the voice and should be reused:
+Plain closing lines are welcome
+This is a template family, not a literary exercise. A short, familiar closing
+line is part of the voice and does not need to be reinvented:
+"Come see what's in store this summer!"
+"We'd love to welcome you home."
+"We hope you'll stop by."
+Vary the opening hook so consecutive sends don't start the same way, but do
+NOT invent a fresh clever construction for the closing line when a plain one
+fits. Reaching for novelty is what produces the flourish above.
+
+What is NOT a house formula
+Long value-proposition sentences are not reusable furniture, even though one
+appears in a reference eblast below. This sentence and anything like it:
 "Whether you're exploring options for yourself or a loved one, this is a
 wonderful opportunity to experience the vibrant and welcoming lifestyle that
 makes [community] the perfect place to call home."
-"Come see what's in store this summer!"
-"We'd love to welcome you home."
-Vary the opening hook so consecutive sends don't start the same way, but do
-NOT invent a fresh clever construction for the middle and closing lines when a
-house sentence fits. Reaching for novelty is what produces the flourish above.
+It names nothing, could be pasted into any email for any community, and reads
+as a sales pitch. Do not reproduce it, and do not write a variant of it. If a
+sentence would be equally true of every community in the country, cut it.
 
 Never
+- Write a generic value paragraph. The failure mode: one good factual
+  paragraph, then a second that sells the lifestyle instead of saying anything
+  ("a wonderful opportunity to experience the vibrant and welcoming
+  lifestyle", "the perfect place to call home", "whether you're exploring
+  options for yourself or a loved one"). Banned words and phrases in body
+  copy: "vibrant", "wonderful opportunity", "experience the", "lifestyle",
+  "perfect place to call home", "next chapter awaits". One factual paragraph
+  is a finished eblast.
 - Invent quotes or testimonials, including paraphrased ones ("many residents
   say…", "families tell us…"). If there is no real quote in the source, there
   is no quote.
@@ -114,9 +130,13 @@ email the same way:
    "Watching a parent slow down is hard. Knowing what to do next doesn't have
    to be."
 
-2. One or two substantive paragraphs carrying the actual detail — what is
-   happening, who is involved, what the reader gets. This is where the
-   specifics live. Two paragraphs is typical; one is fine if it says enough.
+2. The substantive detail — what is happening, who is involved, what the
+   reader gets. This is where the specifics live.
+   Paragraph count follows the SOURCE, not a template. Most sources support
+   exactly one paragraph, and one is the normal answer. Write a second only
+   when there is genuinely more real material that doesn't fit in the first.
+   Never add a paragraph that introduces no new information from the source.
+   Running out of facts is the signal to stop writing, not to start selling.
 
 3. A short closing line that looks forward and invites.
    "Come see what's in store this summer!"

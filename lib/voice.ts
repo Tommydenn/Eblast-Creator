@@ -2,7 +2,7 @@
  * THE single source of truth for how eblast copy sounds.
  *
  * Voice guidance used to be spread across five places — this doctrine, the
- * drafter's system prompt, the per-field tool-schema descriptions, the critic's
+ * drafter's system prompt, the per-field tool-schema descriptions, the reviewer's
  * own craft rules, and the subject specialist — which contradicted each other
  * and made tuning impossible. Everything that shapes tone now lives here and is
  * imported by all of them. If you want to change how eblasts sound, change this

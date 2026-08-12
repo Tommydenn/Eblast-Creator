@@ -24,7 +24,7 @@ export function RecentSendsPanel({ sends }: { sends: RecentSend[] }) {
         <div>
           <h2 className="text-sm font-semibold text-sand-900">Recent sends</h2>
           <p className="mt-0.5 text-xs text-sand-500">
-            What the drafter and critic reference to match voice, format, and send cadence.
+            What the drafter references to match voice, format, and send cadence.
             {sends.length > 0 && (
               <> · <span className="font-medium">{sends.length} send{sends.length === 1 ? "" : "s"}</span> on record</>
             )}

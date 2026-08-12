@@ -87,13 +87,6 @@ export interface DraftImages {
   gallery: Array<{ url: string; originalUrl: string }>;
 }
 
-export type FindingSeverity = "blocker" | "important" | "nice_to_have";
-export type FindingCategory = "voice" | "brand" | "field_completeness" | "subject_line" | "preview_text" | "cta" | "structure" | "compliance" | "send_strategy" | "image_quality" | "craft";
-export interface ReviewFinding { severity: FindingSeverity; category: FindingCategory; field?: string; issue: string; suggestion?: string; rationale: string }
-export type ReviewVerdict = "ready" | "needs_revision" | "blocking_issues";
-export interface DraftReview { verdict: ReviewVerdict; summary: string; findings: ReviewFinding[]; subjectLineAlternatives?: string[]; sendTimeRecommendation?: string; recipientListNote?: string }
-export interface AgentLoopIteration { round: number; verdict: string; findingsCount: number; appliedSuggestions: string[]; droppedImageSlots: string[] }
-export interface AgentLoopSummary { stoppedReason: string; totalRounds: number; imagesExcluded: number; iterations: AgentLoopIteration[] }
 export interface PastSendForContext { subject: string; openRate?: number; clickRate?: number; sentAt?: string }
 export interface SubjectAlternative { subject: string; previewText: string; rationale: string; score: number }
 export interface SubjectSpecialistResult { winner: SubjectAlternative; alternatives: SubjectAlternative[]; reasoning: string }
@@ -108,8 +101,6 @@ export interface SavedDraft {
   images: DraftImages;
   imageBank: string[];
   imageCount: number;
-  review?: DraftReview | null;
-  agentLoop?: AgentLoopSummary | null;
   pastSendsContext?: PastSendForContext[];
   subjectSpecialist?: SubjectSpecialistResult | null;
   /** Persisted AI-edit history so undo/redo survives closing and reopening. */
@@ -197,8 +188,6 @@ export interface DraftContextValue {
   draftId: string | null;
   isSaved: boolean;
   saveNotice: string | null;
-  review: DraftReview | null;
-  agentLoop: AgentLoopSummary | null;
   subjectSpecialist: SubjectSpecialistResult | null;
   pastSendsContext: PastSendForContext[];
   activeSection: EditorSection;
@@ -333,8 +322,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // AI outputs
-  const [review, setReview] = useState<DraftReview | null>(null);
-  const [agentLoop, setAgentLoop] = useState<AgentLoopSummary | null>(null);
   const [subjectSpecialist, setSubjectSpecialist] = useState<SubjectSpecialistResult | null>(null);
   const [pastSendsContext, setPastSendsContext] = useState<PastSendForContext[]>([]);
 
@@ -622,8 +609,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setFields_(newFields);
       setImages(newImages);
       setImageBank(bank);
-      setReview(data.review ?? null);
-      setAgentLoop(data.agentLoop ?? null);
       setSubjectSpecialist(data.subjectSpecialist ?? null);
       setPastSendsContext(data.pastSendsContext ?? []);
       setIsSaved(false);
@@ -654,8 +639,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           images: { hero: null, secondary: null, gallery: [] },
           imageBank: [],
           imageCount: (newImages.hero ? 1 : 0) + (newImages.secondary ? 1 : 0) + newImages.gallery.length,
-          review: data.review ?? null,
-          agentLoop: data.agentLoop ?? null,
           pastSendsContext: data.pastSendsContext ?? [],
           subjectSpecialist: data.subjectSpecialist ?? null,
         };
@@ -836,8 +819,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       images: filteredImages,
       imageBank: [],
       imageCount: (imgs.hero ? 1 : 0) + (imgs.secondary ? 1 : 0) + imgs.gallery.length,
-      review,
-      agentLoop,
       pastSendsContext,
       subjectSpecialist,
       // AI-edit history, so undo/redo still works after reopening a draft.
@@ -849,7 +830,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       },
     };
     return { id, draft };
-  }, [draftId, imageBank, review, agentLoop, pastSendsContext, subjectSpecialist]);
+  }, [draftId, imageBank, pastSendsContext, subjectSpecialist]);
 
   // ─── Save images to separate endpoint ────────────────────────────────────
   // imageBank entries: idx ≥ 0
@@ -967,9 +948,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setFields_(draft.fields ?? null);
     setImages(draft.images ?? EMPTY_IMAGES);
     setImageBank([]);
-
-    setReview(draft.review ?? null);
-    setAgentLoop(draft.agentLoop ?? null);
     setSubjectSpecialist(draft.subjectSpecialist ?? null);
     setPastSendsContext(draft.pastSendsContext ?? []);
     setDraftId(draft.id);
@@ -1080,8 +1058,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setFields_(null);
     setImages(EMPTY_IMAGES);
     setImageBank([]);
-    setReview(null);
-    setAgentLoop(null);
     setSubjectSpecialist(null);
     setPastSendsContext([]);
     setDraftId(null);
@@ -1232,8 +1208,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         images: filteredImages,
         imageBank: [],
         imageCount: (imgs.hero ? 1 : 0) + (imgs.secondary ? 1 : 0) + imgs.gallery.length,
-        review,
-        agentLoop,
         pastSendsContext,
         subjectSpecialist,
       };
@@ -1259,7 +1233,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsMakingCopy(false);
     }
-  }, [review, agentLoop, pastSendsContext, subjectSpecialist, saveImagesForDraft]);
+  }, [pastSendsContext, subjectSpecialist, saveImagesForDraft]);
 
   // "Cancel" discards whatever's been typed since the lock was hit by
   // reloading the untouched original from the server — safe because setField/
@@ -1295,8 +1269,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     draftId,
     isSaved,
     saveNotice,
-    review,
-    agentLoop,
     subjectSpecialist,
     pastSendsContext,
     activeSection,

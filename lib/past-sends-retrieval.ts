@@ -1,8 +1,8 @@
-// Past-sends retrieval — what the drafter and critic actually consume.
+// Past-sends retrieval — what the drafter actually consumes.
 // Returns a slim, ranked list of past sends for a community: subject,
 // when sent, opens / clicks / recipient count, plus a quick top-line metric
 // (open rate, click rate). The drafter uses these as voice/style references;
-// the critic uses them to compare patterns and flag drift.
+// they show what this list has already seen.
 
 import { eq, sql, and } from "drizzle-orm";
 import { db } from "@/lib/db";

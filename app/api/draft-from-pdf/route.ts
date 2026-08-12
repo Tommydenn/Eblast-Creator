@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, asc } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
-import { agenticDraftLoop } from "@/lib/agentic-draft";
+import { buildDraft } from "@/lib/build-draft";
 import { extractFlyerContent } from "@/lib/anthropic";
 import { extractImagesFromPdf, cropDataUriToAspectRatio } from "@/lib/pdf-images";
 import { classifyImagesForSlots } from "@/lib/image-selector";
@@ -13,8 +13,8 @@ import { db } from "@/lib/db";
 import { pdfChunks } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
-// The agentic loop can take 3 rounds × (refine + review). Bumped from 60 →
-// 300 (Vercel Pro max) so we don't 504 mid-loop.
+// A draft is one Claude call plus the subject specialist; 300s (Vercel Pro
+// max) leaves ample headroom.
 export const maxDuration = 300;
 
 /**
@@ -93,13 +93,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Pull recent sends for this community first — feeds both the initial
-  // draft and the critic so the agents have memory.
+  // Recent sends for this community, threaded into the drafter as context.
   const pastSends = await getRecentSendsForCommunity({ communityId: community.id, limit: 12 });
 
-  // Image extraction runs in parallel with the initial draft so the agentic
-  // loop has both ready before its first critic review. The critic now looks
-  // at the actual images, so they need to exist by then.
+  // Image extraction runs in parallel with the draft so both are ready before
+  // slots are assigned.
   const [imagesResult, initialDraftResult] = await Promise.allSettled([
     buffer ? extractImagesFromPdf(buffer) : Promise.reject(new Error("No PDF — text-only draft")),
     extractFlyerContent({
@@ -151,27 +149,25 @@ export async function POST(req: NextRequest) {
     // fall back to area-sorted order
   }
 
-  // Run the drafter ↔ critic loop. The critic now sees the images and can
-  // flag broken/blank/off-topic ones; the loop drops those slots and
-  // re-renders before the next review.
+  // Single pass: the drafter's output stands as written. There is no reviewer.
   let loop;
   try {
-    loop = await agenticDraftLoop({
+    loop = await buildDraft({
       initialDraft: initialDraftResult.value,
       community,
       availableImages: rankedImages,
       pastSends,
     });
   } catch (e: any) {
-    console.error("[draft-from-pdf] Agent loop threw:", e);
+    console.error("[draft-from-pdf] Draft assembly threw:", e);
     const isTransient = e?.status === 500 || e?.status === 503 || e?.status === 529;
     return NextResponse.json(
       {
         ok: false,
         error: isTransient
           ? "Anthropic's API returned a temporary error. Please try generating again — it usually resolves on the next attempt."
-          : `Agent loop failed: ${e.message ?? String(e)}`,
-        step: "loop",
+          : `Draft assembly failed: ${e.message ?? String(e)}`,
+        step: "draft",
         retryable: isTransient,
         stack: process.env.NODE_ENV === "development" ? e.stack : undefined,
       },
@@ -211,22 +207,6 @@ export async function POST(req: NextRequest) {
     .map((img) => img.dataUri)
     .filter((u): u is string => !!u);
 
-  // Append a programmatic finding if no CallRail tracking number is set.
-  const finalReview = community.trackingPhone
-    ? loop.finalReview
-    : {
-        ...loop.finalReview,
-        findings: [
-          ...loop.finalReview.findings,
-          {
-            severity: "important" as const,
-            category: "cta" as const,
-            issue: "No CallRail tracking number set — CTA links to the flyer's phone instead of a tracked line.",
-            rationale: "Add a trackingPhone to this community's record to enable call attribution.",
-          },
-        ],
-      };
-
   return NextResponse.json({
     ok: true,
     community: { slug: community.slug, displayName: community.displayName },
@@ -241,21 +221,7 @@ export async function POST(req: NextRequest) {
     allExtractedImageUrls,
     imageCount: imageRun.images.length,
     imageDiagnostic: imageRun.diagnostic,
-    review: finalReview,
-    agentLoop: {
-      stoppedReason: loop.stoppedReason,
-      totalRounds: loop.totalRounds,
-      imagesExcluded: loop.finalImages.excludedCount,
-      iterations: loop.iterations.map((it) => ({
-        round: it.round,
-        verdict: it.review.verdict,
-        summary: it.review.summary,
-        findingsCount: it.review.findings.length,
-        appliedSuggestions: it.appliedSuggestions ?? [],
-        droppedImageSlots: it.droppedImageSlots ?? [],
-      })),
-    },
-    // Echo back the past sends the agents saw this round so the UI can
+    // Echo back the past sends the drafter saw this round so the UI can
     // render an "Intelligence applied" panel — proof of memory.
     pastSendsContext: pastSends,
     subjectSpecialist: loop.subjectSpecialist,

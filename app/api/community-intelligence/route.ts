@@ -1,5 +1,5 @@
 // Community intelligence summary — surfaces the same data the drafter and
-// critic see, so the user can verify the agents have memory before clicking
+// drafter sees, so the user can verify it has memory before clicking
 // "Generate eblast draft."
 
 import { NextResponse } from "next/server";

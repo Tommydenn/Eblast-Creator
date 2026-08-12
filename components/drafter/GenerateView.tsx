@@ -866,7 +866,7 @@ export default function GenerateView() {
                       </svg>
                     </div>
                     <p className="text-xs text-[#3d5249] leading-relaxed">
-                      Extracting images · Reading copy · Drafting subject · Building email · Running review
+                      Extracting images · Reading copy · Drafting subject · Building email
                     </p>
                   </div>
                 )}

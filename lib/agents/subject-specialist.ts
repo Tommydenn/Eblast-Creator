@@ -3,8 +3,8 @@
 // Subject lines have a different objective function from the rest of the
 // email (open rate vs. engagement) and benefit from multi-candidate
 // generation + evaluation rather than single-shot drafting. This agent runs
-// AFTER the drafter produces an initial draft and BEFORE the critic reviews,
-// so the email arriving at the critic already has its strongest possible
+// AFTER the drafter produces an initial draft, so the email ends up with its
+// strongest possible
 // subject + preview pair.
 //
 // Inputs: the full extracted flyer (so the specialist knows the email's
@@ -159,7 +159,7 @@ Force structural diversity in the slate. The drafter's original subject is prese
 For each candidate, evaluate against (in priority order — research first):
 1. **Research filter**: does it conform to the 60+ subject rules above? If a candidate uses ALL CAPS, multiple exclamation marks, scarcity/urgency language, or a listicle frame, REJECT it before evaluating anything else. If it uses a question pattern that the research flags as low-performing for this demo, reject it.
 2. **First-30-chars test**: does the value land in the first 30 characters (mobile preview cutoff)? If the most important word is at position 45, the candidate fails this test.
-3. **Specificity**: does it name a real thing from the email's content (a day, a dish, a person, a place)? Generic subjects like "Spring Open House at X" lose to specific ones like "Sunday open house — bourbon tasting at 4."
+3. **Specificity**: does it name a real thing from the email's content (a day, a dish, a person, a place)? Prefer "Open house Sunday, bourbon tasting at 4" over a bare "Spring Open House" — but a plain, accurate subject is fine and must not be rejected for being plain.
 4. **Pattern match against history**: does it echo the structure of past sends that opened above the community's average?
 5. **Length**: 35–55 characters is the sweet spot for 60+. Hard cap at 60. Subjects under 25 chars feel low-effort — usually fail.
 6. **Sender harmony**: the From line carries who's writing — don't waste subject characters re-stating the brand. Use the saved characters for specificity.

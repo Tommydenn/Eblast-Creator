@@ -58,7 +58,7 @@ export interface Address {
 }
 
 export interface CommunityBrand {
-  // Legacy/required fields preserved so existing render/critic code keeps
+  // Legacy/required fields preserved so existing render code keeps
   // working without refactors.
   primary: string;
   accent: string;

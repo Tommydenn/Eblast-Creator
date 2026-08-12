@@ -49,56 +49,6 @@ const AI_TAB = {
   ),
 };
 
-// ── AI Review panel ───────────────────────────────────────────────────────────
-
-function ReviewPanel() {
-  const { review } = useDraft();
-  if (!review) return null;
-  const [open, setOpen] = useState(true);
-
-  const verdictColor = {
-    ready: "text-emerald-700 bg-emerald-50 border-emerald-200",
-    needs_revision: "text-amber-700 bg-amber-50 border-amber-200",
-    blocking_issues: "text-red-700 bg-red-50 border-red-200",
-  }[review.verdict] ?? "text-[#5a6b63] bg-[#f0f5f2] border-[#c8d8d0]";
-
-  const blockers = review.findings.filter((f) => f.severity === "blocker");
-  const important = review.findings.filter((f) => f.severity === "important");
-
-  return (
-    <div className="rounded-xl border border-[#e8e3dc] bg-white overflow-hidden">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#faf9f6] transition-colors"
-      >
-        <span className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">Review results</span>
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full border ${verdictColor}`}>
-            {review.verdict.replace("_", " ")}
-          </span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9aaba4" strokeWidth="2" className={`transition-transform ${open ? "rotate-180" : ""}`}>
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </div>
-      </button>
-
-      {open && (
-        <div className="px-4 pb-4 space-y-2 border-t border-[#f0ede7]">
-          {review.summary && <p className="text-xs text-[#5a6b63] leading-relaxed pt-3">{review.summary}</p>}
-          {[...blockers, ...important].map((f, i) => (
-            <div key={i} className={`rounded-lg p-2.5 text-xs ${f.severity === "blocker" ? "bg-red-50 border border-red-100" : "bg-amber-50 border border-amber-100"}`}>
-              <p className={`font-semibold ${f.severity === "blocker" ? "text-red-700" : "text-amber-700"}`}>{f.issue}</p>
-              {f.suggestion && <p className="text-[#5a6b63] mt-0.5">{f.suggestion}</p>}
-            </div>
-          ))}
-          {review.sendTimeRecommendation && (
-            <p className="text-xs text-[#7a8c85] italic pt-1">Send: {review.sendTimeRecommendation}</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── AI Refine panel ───────────────────────────────────────────────────────────
 
@@ -242,7 +192,6 @@ export default function EditorPanel() {
         {localTab === "ai" ? (
           <div className="p-4 space-y-3">
             <RefinePanel />
-            <ReviewPanel />
           </div>
         ) : (
           <div className="p-5">

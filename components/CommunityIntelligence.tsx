@@ -36,7 +36,7 @@ interface IntelligenceResponse {
 /**
  * The "this is what the agents see" panel. Shown next to the inputs card
  * once the user has picked a community, so the user knows the drafter and
- * critic aren't blind.
+ * drafter isn't blind.
  */
 export function CommunityIntelligence({ communitySlug }: { communitySlug: string }) {
   const [data, setData] = useState<IntelligenceResponse | null>(null);
@@ -78,7 +78,7 @@ export function CommunityIntelligence({ communitySlug }: { communitySlug: string
         <div>
           <CardTitle className="text-base">Agent intelligence</CardTitle>
           <CardDescription>
-            What the drafter and critic will read when they generate this eblast.
+            What the drafter will read when it generates this eblast.
           </CardDescription>
         </div>
         {!fetchError && (

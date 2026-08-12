@@ -323,6 +323,10 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
       // push matches what the salesperson approved (survives draft saves).
       html: emailHtml,
       decision: "pending",
+      // Carry test status down the chain. Without this, requesting edits from
+      // a test email would produce a REAL pending request — counting as
+      // awaiting approval and locking the draft — halfway through a test run.
+      isTest: approval.isTest,
     });
 
     await sendApprovalEmail({

@@ -93,8 +93,8 @@ export async function POST(req: NextRequest) {
     const imageManifestText = pool.length
       ? pool.map((p, i) =>
           p.isOriginal
-            ? `  [${i}] "${p.name}" — full-resolution original, use for imageCropInstructions`
-            : `  [${i}] "${p.name}" — already placed and cropped`
+            ? `  [${i}] "${p.name}", full-resolution original, use for imageCropInstructions`
+            : `  [${i}] "${p.name}", already placed and cropped`
         ).join("\n")
       : "  (no photos are currently in this email)";
 

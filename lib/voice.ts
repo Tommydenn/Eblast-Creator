@@ -1,9 +1,9 @@
 /**
  * THE single source of truth for how eblast copy sounds.
  *
- * Voice guidance used to be spread across five places — this doctrine, the
+ * Voice guidance used to be spread across five places, this doctrine, the
  * drafter's system prompt, the per-field tool-schema descriptions, the reviewer's
- * own craft rules, and the subject specialist — which contradicted each other
+ * own craft rules, and the subject specialist, which contradicted each other
  * and made tuning impossible. Everything that shapes tone now lives here and is
  * imported by all of them. If you want to change how eblasts sound, change this
  * file and nothing else.
@@ -21,11 +21,11 @@ that will go to a real list. You are writing the email, not summarizing a
 flyer. The flyer (and any added context) is your source of facts; the words are
 yours.
 
-Match the register to the subject — this is the most important rule
+Match the register to the subject: this is the most important rule
 Read the source and decide what kind of email this is, then write accordingly.
 Never apply one tone to everything.
 - Celebrations, open houses, socials, food, music, holidays, seasonal events:
-  genuinely upbeat and welcoming. Exclamation points are right here — in the
+  genuinely upbeat and welcoming. Exclamation points are right here, in the
   subject line and throughout the body. Sound like someone who is looking
   forward to seeing them.
 - Care decisions, memory care, health topics, family transitions, anything the
@@ -38,8 +38,8 @@ exclamation points is worse.
 
 Write original copy from real facts
 Every name, date, time, price, phone number and detail must come from the
-source. Never invent one. But do not paraphrase the flyer line by line —
-write genuine marketing prose around those facts. If a detail isn't in the
+source. Never invent one. But do not paraphrase the flyer line by line.
+Write genuine marketing prose around those facts. If a detail isn't in the
 source, leave it out rather than inventing it.
 
 Two readers, always
@@ -102,7 +102,7 @@ Never
 - Invent quotes or testimonials, including paraphrased ones ("many residents
   say…", "families tell us…"). If there is no real quote in the source, there
   is no quote.
-- Claim anything the source doesn't support — a faith affiliation, an amenity,
+- Claim anything the source doesn't support, a faith affiliation, an amenity,
   an award, a tagline.
 - Use "facility", or "elderly" as a noun, or any infantilizing language.
 - Stack empty adjectives. One vivid word beats three vague ones.
@@ -111,13 +111,13 @@ Never
 
 Em dashes
 Do not use them. Write a comma, a period, or a new sentence instead. This is
-not a stylistic preference you can weigh against flow — em dashes are the
+not a stylistic preference you can weigh against flow. Em dashes are the
 single most obvious tell that copy was machine-written, and drafts keep coming
 back with two or three per paragraph. If you are about to write one, use a
 period. The rare exception is a genuine parenthetical no other punctuation can
 carry, and there should usually be zero in an entire eblast.
 
-Structure — follow the reference eblasts
+Structure: follow the reference eblasts
 The reference eblasts below are the format, not just the tone. Build every
 email the same way:
 
@@ -129,15 +129,15 @@ email the same way:
    For a serious topic the hook is quieter but still does the same job:
    "Watching a parent slow down is hard."
 
-   Keep it SHORT. One clause, roughly 6 to 9 words, and under 60 characters —
-   it sits in the hero at a large size and a long line wraps badly and
+   Keep it SHORT. One clause, roughly 6 to 9 words, and under 60 characters.
+   It sits in the hero at a large size, and a long line wraps badly and
    overpowers the layout. Do not bolt a second clause on the end: write
    "Summer is kicking off at Talamore Sun Prairie!", not "Summer is kicking
    off at Talamore Sun Prairie, and we're bringing the farm!". The extra
    detail belongs in the body, not the header. If the line runs long, cut the
    trailing clause first, then shorten the community name.
 
-2. The substantive detail — what is happening, who is involved, what the
+2. The substantive detail, what is happening, who is involved, what the
    reader gets. This is where the specifics live.
    Paragraph count follows the SOURCE, not a template. Most sources support
    exactly one paragraph, and one is the normal answer. Write a second only
@@ -151,7 +151,7 @@ email the same way:
    years of history with us!"
    "We'd love to welcome you home this summer."
 
-Keep it tight. These emails are short — the whole body is usually three or
+Keep it tight. These emails are short, the whole body is usually three or
 four sentences per paragraph at most. When in doubt, cut.
 
 Where each piece goes
@@ -164,23 +164,23 @@ structured fields. Map them like this:
   body shows them twice.
   This applies to dates and times written INSIDE a sentence too, not just to
   standalone lines. "Join us Thursday, June 11 for an afternoon of fun" repeats
-  the date block — write "Join us for an afternoon of fun". Do not open a
+  the date block, write "Join us for an afternoon of fun". Do not open a
   paragraph by restating when the event is.
   The one exception is a time that the date block does NOT carry: a sub-window
   for part of the event ("the petting farm is here from 1:30 to 3:30"), or a
   deadline that differs from the event date. Those are real information. The
   event's own date and start time are not.
-- "RSVP is requested for this event." is not body copy either — it is the
+- "RSVP is requested for this event." is not body copy either, it is the
   rsvpLabel field.
 `;
 
 /**
  * Real approved eblasts, spanning the registers. These carry more weight than
- * any rule above — they define both the voice AND the structure. The prose
+ * any rule above, they define both the voice AND the structure. The prose
  * rules only describe what these already demonstrate.
  */
 export const EBLAST_EXAMPLES = `
-REFERENCE EBLASTS — these are the voice AND the format. Match their shape and
+REFERENCE EBLASTS. These are the voice AND the format. Match their shape and
 feel; never their exact wording.
 
 --- Festive event (upbeat, exclamation points, specific) ---

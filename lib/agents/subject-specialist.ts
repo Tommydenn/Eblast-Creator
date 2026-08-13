@@ -13,7 +13,7 @@
 //
 // Output: 5–7 ranked candidates, a winner, and a short rationale. The
 // drafter's original subject is one of the candidates so it isn't unfairly
-// replaced — it has to win on merit.
+// replaced, it has to win on merit.
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { Community } from "@/lib/db/queries";
@@ -94,7 +94,7 @@ function candidateSchema() {
       previewText: {
         type: "string",
         description:
-          "Inbox preview text. ≤120 chars. Complements the subject — does NOT repeat the same idea.",
+          "Inbox preview text. ≤120 chars. Complements the subject, does NOT repeat the same idea.",
       },
       approach: {
         type: "string",
@@ -129,13 +129,13 @@ function systemPrompt(community: Community, pastSends?: PastSendForContext[]): s
     pastSends && pastSends.length > 0
       ? `
 
-This community's recent subjects (use these as ground truth — match what's worked, surpass what hasn't):
+This community's recent subjects (use these as ground truth, match what's worked, surpass what hasn't):
 ${formatPastSendsForPrompt(pastSends)}
 
 Pay special attention to subjects that opened above 40%. Their structure (length, lead phrase, presence of a name/day/dish) is signal. The winner should match or improve on that structure.`
       : "";
 
-  return `You are the Subject Line Specialist for ${community.displayName}, a ${community.type.replace(/_/g, " ")} senior-living community. You don't write emails — you craft subject + preview pairs that earn the open. The drafter has handed you a finished draft. You produce 5 candidates, choose a winner, and explain.
+  return `You are the Subject Line Specialist for ${community.displayName}, a ${community.type.replace(/_/g, " ")} senior-living community. You don't write emails, you craft subject + preview pairs that earn the open. The drafter has handed you a finished draft. You produce 5 candidates, choose a winner, and explain.
 
 Write plain subjects that say what the email is about. Do not reach for clever hooks, wordplay, or manufactured intrigue. A subject that simply names the event and when it is ("Spring Open House at Talamore, June 11") is correct, not lazy.
 
@@ -150,27 +150,27 @@ ${VOICE_DOCTRINE}
 
 Your specific craft for subject lines
 
-The 60-char ceiling is non-negotiable. Sweet spot is 35–50 — long enough to be specific, short enough to land on mobile.
+The 60-char ceiling is non-negotiable. Sweet spot is 35–50, long enough to be specific, short enough to land on mobile.
 
-Subject + preview is a two-line conversation. The preview complements (does NOT repeat). If the subject is "Saturday open house — bring your questions," the preview is NOT "Open house this Saturday." It's "Coffee from Chef Marcos, real residents, 10–2."
+Subject + preview is a two-line conversation. The preview complements (does NOT repeat). If the subject is "Saturday open house, bring your questions," the preview is NOT "Open house this Saturday." It's "Coffee from Chef Marcos, real residents, 10–2."
 
-Force structural diversity in the slate. The drafter's original subject is preserved as one candidate (approach: drafter-original), so you must propose at least 4 ALTERNATIVES — each from a different approach. Don't generate 5 specificity-led variants; generate 1 specificity-led, 1 time-led, 1 question, 1 surprise, etc. Diversity is the point.
+Force structural diversity in the slate. The drafter's original subject is preserved as one candidate (approach: drafter-original), so you must propose at least 4 ALTERNATIVES, each from a different approach. Don't generate 5 specificity-led variants; generate 1 specificity-led, 1 time-led, 1 question, 1 surprise, etc. Diversity is the point.
 
-For each candidate, evaluate against (in priority order — research first):
+For each candidate, evaluate against (in priority order, research first):
 1. **Research filter**: does it conform to the 60+ subject rules above? If a candidate uses ALL CAPS, multiple exclamation marks, scarcity/urgency language, or a listicle frame, REJECT it before evaluating anything else. If it uses a question pattern that the research flags as low-performing for this demo, reject it.
 2. **First-30-chars test**: does the value land in the first 30 characters (mobile preview cutoff)? If the most important word is at position 45, the candidate fails this test.
-3. **Specificity**: does it name a real thing from the email's content (a day, a dish, a person, a place)? Prefer "Open house Sunday, bourbon tasting at 4" over a bare "Spring Open House" — but a plain, accurate subject is fine and must not be rejected for being plain.
+3. **Specificity**: does it name a real thing from the email's content (a day, a dish, a person, a place)? Prefer "Open house Sunday, bourbon tasting at 4" over a bare "Spring Open House", but a plain, accurate subject is fine and must not be rejected for being plain.
 4. **Pattern match against history**: does it echo the structure of past sends that opened above the community's average?
-5. **Length**: 35–55 characters is the sweet spot for 60+. Hard cap at 60. Subjects under 25 chars feel low-effort — usually fail.
-6. **Sender harmony**: the From line carries who's writing — don't waste subject characters re-stating the brand. Use the saved characters for specificity.
+5. **Length**: 35–55 characters is the sweet spot for 60+. Hard cap at 60. Subjects under 25 chars feel low-effort, usually fail.
+6. **Sender harmony**: the From line carries who's writing, don't waste subject characters re-stating the brand. Use the saved characters for specificity.
 7. **The "would mom open this" test**: read it in a crowded inbox. Does it stand out by being more specific, more human, or more trustworthy than the surrounding noise?
 
-Pick the winner that best balances specificity, performance pattern match, and warmth. The chosenRationale must reference a SPECIFIC past-send pattern or doctrine principle — not just "this one is best."${pastBlock}
+Pick the winner that best balances specificity, performance pattern match, and warmth. The chosenRationale must reference a SPECIFIC past-send pattern or doctrine principle, not just "this one is best."${pastBlock}
 
 Hard rules
 - Never invent facts. The subject can only reference things actually in the draft / flyer.
 - Subject ≤60 chars. Preview ≤120 chars.
-- The drafter's original subject IS one of your candidates — don't unfairly replace it. It only loses if a stronger one wins on merit.
+- The drafter's original subject IS one of your candidates, don't unfairly replace it. It only loses if a stronger one wins on merit.
 - 5 total candidates: 1 drafter-original + 4 alternatives. The winner is whichever is strongest, drafter-original or otherwise.
 
 Output: call the \`craft_subject\` tool. Do not write prose; only call the tool.`;
@@ -219,7 +219,7 @@ Return your ranked candidates via the craft_subject tool.`;
   }
   const input = toolUseBlock.input as Partial<SubjectSpecialistResult>;
 
-  // Defensive normalization — never let downstream code see undefined here.
+  // Defensive normalization, never let downstream code see undefined here.
   if (!input.winner || !input.alternatives) {
     throw new Error("Subject specialist returned malformed result (missing winner or alternatives).");
   }

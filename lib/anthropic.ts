@@ -16,7 +16,7 @@ function client(): Anthropic {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 3 });
 }
 
-// JSON Schema for the ExtractedFlyer — used as a tool input schema so Claude
+// JSON Schema for the ExtractedFlyer, used as a tool input schema so Claude
 // returns guaranteed-shape output instead of free-form prose we have to parse.
 const extractFlyerToolSchema = {
   type: "object",
@@ -28,34 +28,34 @@ const extractFlyerToolSchema = {
     "audienceHints",
   ],
   properties: {
-    // Field descriptions carry FORMAT only — length, structure, what belongs
+    // Field descriptions carry FORMAT only, length, structure, what belongs
     // where. Tone lives in the voice doctrine (lib/voice.ts) so the two can't
     // contradict each other, which is what made this untunable before.
-    subject: { type: "string", description: "Email subject line. <=60 chars. Specific about what this is. Tone follows the voice doctrine — match the register of the event." },
+    subject: { type: "string", description: "Email subject line. <=60 chars. Specific about what this is. Tone follows the voice doctrine, match the register of the event." },
     previewText: { type: "string", description: "Inbox preview text. <=120 chars. Reinforces subject without repeating it." },
 
-    eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline — it is a tag, not a teaser." },
-    headline: { type: "string", description: "The opening hook from the voice doctrine's structure — a single line naming the community and the occasion, carrying the register of the piece ('Summer is kicking off at Talamore Senior Living Sun Prairie!'). Sentence case, written as a real sentence rather than a 2–5 word label. HARD LIMIT 60 characters, and aim for 6-9 words. It renders large in the hero, so a long line wraps and overpowers the layout. One clause only — never append a second clause with 'and' ('Summer is kicking off at Talamore Sun Prairie!' NOT '...Sun Prairie, and we're bringing the farm!'); that detail belongs in the body. Name the occasion; don't tease it." },
-    scriptSubheadline: { type: "string", description: "Optional short subtitle in cursive under the headline. Only include if there's a natural one worth showing — don't invent one. Aim under 25 chars, hard limit 35. Examples: 'With Live Entertainment', 'Families Welcome', 'Dinner Included'. Leave empty if nothing fits naturally." },
+    eyebrow: { type: "string", description: "All-caps label above the headline. 1–3 words. Gives the CATEGORY or required action ('RSVP REQUIRED', 'DINING EVENT', 'FREE TOUR'). Must NOT echo or preview the headline, it is a tag, not a teaser." },
+    headline: { type: "string", description: "The opening hook from the voice doctrine's structure, a single line naming the community and the occasion, carrying the register of the piece ('Summer is kicking off at Talamore Senior Living Sun Prairie!'). Sentence case, written as a real sentence rather than a 2–5 word label. HARD LIMIT 60 characters, and aim for 6-9 words. It renders large in the hero, so a long line wraps and overpowers the layout. One clause only, never append a second clause with 'and' ('Summer is kicking off at Talamore Sun Prairie!' NOT '...Sun Prairie, and we're bringing the farm!'); that detail belongs in the body. Name the occasion; don't tease it." },
+    scriptSubheadline: { type: "string", description: "Optional short subtitle in cursive under the headline. Only include if there's a natural one worth showing, don't invent one. Aim under 25 chars, hard limit 35. Examples: 'With Live Entertainment', 'Families Welcome', 'Dinner Included'. Leave empty if nothing fits naturally." },
 
     eventDate: { type: "string", description: "Event date if applicable, e.g. 'Wednesday, May 13'. Empty if no event." },
     eventTime: { type: "string", description: "Event time, e.g. '2:00 PM'." },
     eventLocation: { type: "string" },
 
-    storyEyebrow: { type: "string", description: "2–4 word label naming what the story section covers. NEVER begin with an article — no 'The', 'A', or 'An'. Open with the subject itself or a descriptor: 'Summer Concert Series', 'Friday's Dinner Menu', 'Live Jazz on the Patio', 'Inside Our Kitchen'. Be specific — not 'About the Event'. Must NOT echo the hero headline." },
-    storyScriptTitle: { type: "string", description: "Optional script-styled line below the eyebrow. Its ONLY valid use: adding a specific detail the eyebrow left out, so the two read as one idea. Not an invitation — 'Come join us' belongs in body copy. Never echo the eyebrow or introduce a different topic. Leave empty if the eyebrow stands alone. Good: 'Summer Concert Series' → 'Live Music by the Garden'." },
+    storyEyebrow: { type: "string", description: "2–4 word label naming what the story section covers. NEVER begin with an article, no 'The', 'A', or 'An'. Open with the subject itself or a descriptor: 'Summer Concert Series', 'Friday's Dinner Menu', 'Live Jazz on the Patio', 'Inside Our Kitchen'. Be specific, not 'About the Event'. Must NOT echo the hero headline." },
+    storyScriptTitle: { type: "string", description: "Optional script-styled line below the eyebrow. Its ONLY valid use: adding a specific detail the eyebrow left out, so the two read as one idea. Not an invitation, 'Come join us' belongs in body copy. Never echo the eyebrow or introduce a different topic. Leave empty if the eyebrow stands alone. Good: 'Summer Concert Series' → 'Live Music by the Garden'." },
     bodyParagraphs: {
       type: "array",
       items: { type: "string" },
-      description: "The body, built to the voice doctrine's structure: one or two substantive paragraphs carrying the actual detail, then a short closing line that looks forward and invites. 2–3 entries total. The opening hook is NOT here — it's the headline. Original prose; every fact from the source, the wording yours. Keep it tight, and say each thing once. Do NOT include date, time, location, phone or RSVP — the template renders those separately and the reader would see them twice.",
+      description: "The body, built to the voice doctrine's structure: one or two substantive paragraphs carrying the actual detail, then a short closing line that looks forward and invites. 2–3 entries total. The opening hook is NOT here, it's the headline. Original prose; every fact from the source, the wording yours. Keep it tight, and say each thing once. Do NOT include date, time, location, phone or RSVP, the template renders those separately and the reader would see them twice.",
     },
 
     rsvpRequired: { type: "boolean", description: "True only if the flyer explicitly requires or requests RSVP (phrases like 'RSVP required', 'RSVP requested', 'please RSVP', 'reservations required'). False if attendance is open/walk-in." },
 
     ctaEyebrow: { type: "string", description: "Action label above the final CTA block. Must NOT repeat the hero eyebrow. Verb-led and specific: 'Reserve Your Seat', 'Save Saturday', 'Join the Table'." },
-    ctaHeadline: { type: "string", description: "CTA headline — state the date+time OR a final reason to act (not the event name again). E.g. 'Saturday, June 28 · 5:30 PM' or 'Seating Is Limited'." },
+    ctaHeadline: { type: "string", description: "CTA headline, state the date+time OR a final reason to act (not the event name again). E.g. 'Saturday, June 28 · 5:30 PM' or 'Seating Is Limited'." },
     ctaSubline: { type: "string", description: "One supporting, factual line that lowers friction or adds a useful detail (cost, who's invited, what to bring). If the source requires or requests RSVP, this line MUST say so explicitly. Never include a person's name. Omit if there's nothing fresh to add." },
-    ctaButtonLabel: { type: "string", description: "Button text that matches the flyer's call to action. Always include the phone number formatted as XXX.XXX.XXXX, followed by a SHORT context-appropriate phrase. Examples: 'Call 920.504.3443 to RSVP', 'Call 920.504.3443 to Schedule a Tour', 'Call 920.504.3443 to Request Info', 'Call 920.504.3443 for Details'. Follow the flyer's intent — do not default to 'to RSVP' if the flyer is not about RSVPing. Keep it as short as possible. Never include a salesperson's name." },
+    ctaButtonLabel: { type: "string", description: "Button text that matches the flyer's call to action. Always include the phone number formatted as XXX.XXX.XXXX, followed by a SHORT context-appropriate phrase. Examples: 'Call 920.504.3443 to RSVP', 'Call 920.504.3443 to Schedule a Tour', 'Call 920.504.3443 to Request Info', 'Call 920.504.3443 for Details'. Follow the flyer's intent, do not default to 'to RSVP' if the flyer is not about RSVPing. Keep it as short as possible. Never include a salesperson's name." },
     ctaButtonHref: { type: "string", description: "Button href: tel:, mailto:, or https:// URL. Pull from the flyer." },
 
     heroImageAlt: { type: "string" },
@@ -71,7 +71,7 @@ const extractFlyerToolSchema = {
     },
     eventCategory: {
       type: "string",
-      description: "1–3 generic words naming the event type — used as the HubSpot email name so the list view is scannable. Choose the broadest accurate category: 'Open House', 'Social Event', 'Presentation', 'Info Session', 'Community Tour', 'Dining Event', 'Health & Wellness', 'Music & Entertainment'. Do NOT use the specific event title — just the category.",
+      description: "1–3 generic words naming the event type, used as the HubSpot email name so the list view is scannable. Choose the broadest accurate category: 'Open House', 'Social Event', 'Presentation', 'Info Session', 'Community Tour', 'Dining Event', 'Health & Wellness', 'Music & Entertainment'. Do NOT use the specific event title, just the category.",
     },
     rsvpLabel: {
       type: "string",
@@ -87,7 +87,7 @@ const extractFlyerToolSchema = {
 
 function systemPrompt(community: Community, pastSends?: PastSendForContext[]): string {
   const trackingPhoneNote = community.trackingPhone
-    ? `\n- For phone CTAs in this email, use ${community.trackingPhone} (the community's tracking number) — do NOT use any other phone number from the flyer, even if the flyer prints a different one.`
+    ? `\n- For phone CTAs in this email, use ${community.trackingPhone} (the community's tracking number), do NOT use any other phone number from the flyer, even if the flyer prints a different one.`
     : "";
 
   const pastSendsBlock =
@@ -99,7 +99,7 @@ ${formatPastSendsForPrompt(pastSends)}
 
 These tell you what this list has already seen, which is useful for avoiding a
 repeat angle or a recycled opening. They are NOT the quality bar and NOT the
-voice reference — the voice section above is. Do not imitate a past send, and
+voice reference, the voice section above is. Do not imitate a past send, and
 do not treat sounding different from them as a problem.`
       : "";
 
@@ -111,7 +111,7 @@ Your job: take a printed flyer (provided as a PDF) and translate it into the str
 
 ${VOICE_DOCTRINE}
 
-Facts and accuracy — these are absolute, and they are not style rules
+Facts and accuracy, these are absolute, and they are not style rules
 - Every name, date, phone number, time, location and price in your output must come from the source. If a detail isn't there, leave that field empty rather than inventing it.
 - Name the community as ${community.displayName} at least once so the reader knows who is writing. "Our community" is fine after that.${trackingPhoneNote}
 - The CTA href is the tracking number above (or a real mailto:/https:// from the source). The CTA label is human-formatted ("Call 920.504.3028", not "Click here").
@@ -120,8 +120,8 @@ Facts and accuracy — these are absolute, and they are not style rules
 ${
     hasIntelligenceContext
       ? `Self-narration
-- After completing all other fields, populate \`drafterRationale\` with 1–2 sentences (max ~280 chars) explaining which past-send patterns AND/OR brand-voice rules you applied. Be specific — name a past subject or an open-rate range when it shaped your decision. The user reads this to see HOW your memory shaped the draft.`
-      : "If no past sends or voice rules were in context, leave drafterRationale empty — don't pretend memory you don't have."
+- After completing all other fields, populate \`drafterRationale\` with 1–2 sentences (max ~280 chars) explaining which past-send patterns AND/OR brand-voice rules you applied. Be specific, name a past subject or an open-rate range when it shaped your decision. The user reads this to see HOW your memory shaped the draft.`
+      : "If no past sends or voice rules were in context, leave drafterRationale empty, don't pretend memory you don't have."
   }
 
 Output format: call the \`extract_flyer\` tool with a fully-populated structured object. Do not write prose; only call the tool.`;
@@ -150,7 +150,7 @@ export function draftSourceBlocks(pdfBase64?: string, notes?: string): any[] {
       type: "text",
       text:
         `Read this flyer and extract its content as a marketing email by calling the extract_flyer tool.\n\n` +
-        `The marketing team also provided these details. Where they conflict with the flyer, THESE WIN — ` +
+        `The marketing team also provided these details. Where they conflict with the flyer, THESE WIN, ` +
         `they are more current than the document:\n\n${trimmedNotes}`,
     });
   } else if (trimmedNotes) {
@@ -158,7 +158,7 @@ export function draftSourceBlocks(pdfBase64?: string, notes?: string): any[] {
       type: "text",
       text:
         `Write a marketing email from the event details below by calling the extract_flyer tool. ` +
-        `There is no flyer for this one — work only from these details, and do not invent specifics ` +
+        `There is no flyer for this one, work only from these details, and do not invent specifics ` +
         `(dates, times, prices, names) that aren't stated here. If a detail isn't given, leave that ` +
         `field empty rather than guessing.\n\n${trimmedNotes}`,
     });
@@ -248,7 +248,7 @@ const refineFlyerToolSchema = {
   ...extractFlyerToolSchema,
   // Require every content field so the model ALWAYS re-emits the full object.
   // This makes "clear this field" (emit "") reliable and makes accidental
-  // key-omission impossible — no field can be silently dropped on refine. In
+  // key-omission impossible, no field can be silently dropped on refine. In
   // refinement there is always an existing value to copy, so requiring a field
   // never forces fabrication (the model emits "" for fields that were empty).
   required: [
@@ -264,7 +264,7 @@ const refineFlyerToolSchema = {
     imageLayout: {
       type: "object",
       description:
-        "ONLY include this if the user explicitly asked to remove, reorder, swap, or change which photos appear. OMIT IT ENTIRELY otherwise — including it changes the photos. Reference photos by the index numbers in the 'Photos in this email' list.",
+        "ONLY include this if the user explicitly asked to remove, reorder, swap, or change which photos appear. OMIT IT ENTIRELY otherwise, including it changes the photos. Reference photos by the index numbers in the 'Photos in this email' list.",
       required: ["hero", "secondary", "gallery"],
       properties: {
         hero: { type: "integer", description: "Index of the photo to show as the hero image, or -1 for no hero photo." },
@@ -272,7 +272,7 @@ const refineFlyerToolSchema = {
         gallery: {
           type: "array",
           items: { type: "integer" },
-          description: "Indices of the photos to show in the gallery grid, in order. Leave an index out to remove that photo — a removal request should result in FEWER indices than before, never the same count or more, unless the user also explicitly asked to add or swap in a specific replacement photo.",
+          description: "Indices of the photos to show in the gallery grid, in order. Leave an index out to remove that photo, a removal request should result in FEWER indices than before, never the same count or more, unless the user also explicitly asked to add or swap in a specific replacement photo.",
         },
       },
     },
@@ -283,7 +283,7 @@ const refineFlyerToolSchema = {
     },
     imageCropInstructions: {
       type: "array",
-      description: "ONLY include if the user explicitly asks to crop, reframe, or reposition a photo. Reference an 'Original image' entry (full-resolution, labeled '— full-resolution original') — NOT a placed/cropped entry. The imageIndex is the pool index of the original. First use imageLayout to assign the original to the desired slot, then add a crop instruction so the server crops it fresh with the specified focus.",
+      description: "ONLY include if the user explicitly asks to crop, reframe, or reposition a photo. Reference an 'Original image' entry (full-resolution, labeled 'full-resolution original'), NOT a placed/cropped entry. The imageIndex is the pool index of the original. First use imageLayout to assign the original to the desired slot, then add a crop instruction so the server crops it fresh with the specified focus.",
       items: {
         type: "object",
         required: ["imageIndex", "focus"],
@@ -296,7 +296,7 @@ const refineFlyerToolSchema = {
     isOutOfScope: {
       type: "boolean",
       description:
-        "Set to true ONLY when the salesperson's request CANNOT be fulfilled at all through text/copy editing alone — for example: requests to use a different photo that isn't already in the email, add a brand-new image, change the layout or design, update branding, or any task that requires sourcing new assets or human design work. When true, return ALL content fields with their current values completely unchanged — do NOT make any content edits. Leave this field undefined (do not include it) for requests that can be handled through text changes, even partially.",
+        "Set to true ONLY when the salesperson's request CANNOT be fulfilled at all through text/copy editing alone, for example: requests to use a different photo that isn't already in the email, add a brand-new image, change the layout or design, update branding, or any task that requires sourcing new assets or human design work. When true, return ALL content fields with their current values completely unchanged, do NOT make any content edits. Leave this field undefined (do not include it) for requests that can be handled through text changes, even partially.",
     },
   },
 };
@@ -304,7 +304,7 @@ const refineFlyerToolSchema = {
 /**
  * Refine an existing extracted draft based on a user instruction.
  * E.g. "make the headline shorter", "change the tone to more casual", or —
- * when an image manifest is supplied — "remove the second photo".
+ * when an image manifest is supplied, "remove the second photo".
  */
 export async function refineFlyerContent(opts: {
   current: ExtractedFlyer;
@@ -324,10 +324,10 @@ Photos in this email
 Each photo has a NAME (in quotes) that the user sees when hovering it in the preview, and an index. The user will refer to photos by these names (e.g. "swap Gallery image 1 and Gallery image 2", "remove the Secondary image"). Map the named photos the user mentions to their indices below:
 ${opts.imageManifestText}
 - ONLY change photos if the user explicitly asks to remove, reorder, swap, or change which photo appears. Match the photo NAME(s) in their instruction to the indices above, then return \`imageLayout\` with the desired final arrangement: \`hero\` = the index to show as the hero (or -1 for none), \`secondary\` = the index for the inline image (or -1 for none), \`gallery\` = the list of indices for the gallery grid, in order (leave an index out to remove that photo).
-- REMOVAL MEANS FEWER PHOTOS, PERIOD. If the user asks to remove a photo, \`imageLayout\` must show one fewer photo placed than before. Do NOT promote an "Original image" (an unused full-resolution photo, listed but not currently placed) into the gap left behind — that is adding a photo the user never asked for, which is just as wrong as ignoring the removal request. Only bring an "Original image" into hero/secondary/gallery when the user's instruction explicitly names or clearly points at that specific unused photo (e.g. "use the barbecue photo instead", "swap in the third original photo").
-- If the user does NOT mention photos/images, OMIT \`imageLayout\` entirely — the photos must stay exactly as they are.
+- REMOVAL MEANS FEWER PHOTOS, PERIOD. If the user asks to remove a photo, \`imageLayout\` must show one fewer photo placed than before. Do NOT promote an "Original image" (an unused full-resolution photo, listed but not currently placed) into the gap left behind, that is adding a photo the user never asked for, which is just as wrong as ignoring the removal request. Only bring an "Original image" into hero/secondary/gallery when the user's instruction explicitly names or clearly points at that specific unused photo (e.g. "use the barbecue photo instead", "swap in the third original photo").
+- If the user does NOT mention photos/images, OMIT \`imageLayout\` entirely, the photos must stay exactly as they are.
 - You can only rearrange, remove, or (when explicitly requested) bring in an already-listed "Original image." You cannot add a photo that isn't in this manifest, recolor a photo, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.
-- If the user asks to crop, reframe, or shift a photo (e.g. "show more of the top", "crop lower"), use BOTH: (1) \`imageLayout\` to place the corresponding "Original image" in the desired slot, AND (2) \`imageCropInstructions\` with that Original image's index and the focus direction. Only reference "Original image" indices (labeled "full-resolution original" above) in \`imageCropInstructions\` — never already-placed indices.`
+- If the user asks to crop, reframe, or shift a photo (e.g. "show more of the top", "crop lower"), use BOTH: (1) \`imageLayout\` to place the corresponding "Original image" in the desired slot, AND (2) \`imageCropInstructions\` with that Original image's index and the focus direction. Only reference "Original image" indices (labeled "full-resolution original" above) in \`imageCropInstructions\`, never already-placed indices.`
     : "";
 
   const response = await c.messages.create({
@@ -338,8 +338,8 @@ ${opts.imageManifestText}
 You are now in REFINEMENT mode. The user has an existing extracted draft and wants targeted changes.
 - Apply the user's specific instruction. Touch only what they ask about.
 - Leave every other field exactly as the user has it. Do not "improve" things you weren't asked to improve.
-- To REMOVE the text in a field (e.g. "remove the pull quote"), set that field to an empty string "" — do not invent a replacement.
-- A field's current value may already contain inline HTML formatting markup (e.g. \`<span style="font-weight:700">\`, \`<b>\`, \`<i>\`, \`<u>\`, color/font spans) applied by the user in the editor. PRESERVE that markup exactly around any text you don't change. If your edit falls inside a formatted span, keep the same wrapping tag(s) around the new words instead of dropping them — never flatten formatted HTML down to plain text, and never add formatting that wasn't already there.
+- To REMOVE the text in a field (e.g. "remove the pull quote"), set that field to an empty string "", do not invent a replacement.
+- A field's current value may already contain inline HTML formatting markup (e.g. \`<span style="font-weight:700">\`, \`<b>\`, \`<i>\`, \`<u>\`, color/font spans) applied by the user in the editor. PRESERVE that markup exactly around any text you don't change. If your edit falls inside a formatted span, keep the same wrapping tag(s) around the new words instead of dropping them, never flatten formatted HTML down to plain text, and never add formatting that wasn't already there.
 - If the user's instruction implies a small cascading change (e.g. shortening a headline that a script subhead quotes), make the minimum cascading change and explain nothing.
 - Always return the FULL updated object via the extract_flyer tool (every text field), so nothing is accidentally dropped.
 - Set \`refineNote\` to one short sentence describing what you changed (or an "I couldn't ..." explanation if part of the request is out of scope).
@@ -376,7 +376,7 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
 
 // ── Salesperson edit-request triage ─────────────────────────────────────────
 // When a salesperson requests edits through the approval email, only requests
-// that are purely about the wording/copy get auto-applied by the AI — every
+// that are purely about the wording/copy get auto-applied by the AI, every
 // other kind of change (formatting, color, font, size, images, section colors,
 // spacing, layout, or an explicit "have marketing do this") routes to a human
 // instead. This is a separate, narrower gate from refineFlyerContent's own
@@ -385,7 +385,7 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
 
 export interface EditRequestClassification {
   scope: "text_content" | "other";
-  /** One short sentence explaining the classification — surfaced to marketing
+  /** One short sentence explaining the classification, surfaced to marketing
    *  in the fallback notification email so they know why it landed with them. */
   reason: string;
 }
@@ -397,11 +397,11 @@ export async function classifyEditRequestScope(instruction: string): Promise<Edi
     const response = await c.messages.create({
       model: MODEL,
       max_tokens: 300,
-      system: `You triage change requests submitted against a marketing email draft. Classify by INTENT, not literal keywords — phrasing varies a lot.
+      system: `You triage change requests submitted against a marketing email draft. Classify by INTENT, not literal keywords, phrasing varies a lot.
 
 Classify as "text_content" ONLY when the request is entirely about changing the actual words/copy: rewording, shortening, lengthening, correcting a fact, changing tone, updating a date/time/name/detail that appears in the copy, adding or removing a sentence, etc. Examples of text_content: "make this shorter", "tighten up the second paragraph", "the RSVP note should say 9am not 10am", "soften the tone", "the event is now in the ballroom, not the patio".
 
-Classify as "other" when the request involves ANY of: bold/italic/underline/color/font/size or any other visual formatting, photos/images (adding, removing, replacing, reordering, cropping), section or background colors, spacing, layout, or when the salesperson explicitly asks for marketing/a human/someone to make the change manually. Also classify as "other" if the request is mixed (part text, part something else) or genuinely ambiguous about what's being asked — when in doubt, choose "other" rather than guessing.`,
+Classify as "other" when the request involves ANY of: bold/italic/underline/color/font/size or any other visual formatting, photos/images (adding, removing, replacing, reordering, cropping), section or background colors, spacing, layout, or when the salesperson explicitly asks for marketing/a human/someone to make the change manually. Also classify as "other" if the request is mixed (part text, part something else) or genuinely ambiguous about what's being asked, when in doubt, choose "other" rather than guessing.`,
       tools: [
         {
           name: "classify_request",

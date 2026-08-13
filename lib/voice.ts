@@ -124,11 +124,18 @@ email the same way:
 1. A one-line opening hook that names the community and the occasion, and
    carries the energy of the piece. This is the header.
    "Summer is kicking off at Talamore Senior Living Sun Prairie!"
-   "America's 250th Birthday Bash is here, and we're celebrating in style!"
+   "America's 250th Birthday Bash is here!"
    "Your next chapter is closer than you think!"
    For a serious topic the hook is quieter but still does the same job:
-   "Watching a parent slow down is hard. Knowing what to do next doesn't have
-   to be."
+   "Watching a parent slow down is hard."
+
+   Keep it SHORT. One clause, roughly 6 to 9 words, and under 60 characters —
+   it sits in the hero at a large size and a long line wraps badly and
+   overpowers the layout. Do not bolt a second clause on the end: write
+   "Summer is kicking off at Talamore Sun Prairie!", not "Summer is kicking
+   off at Talamore Sun Prairie, and we're bringing the farm!". The extra
+   detail belongs in the body, not the header. If the line runs long, cut the
+   trailing clause first, then shorten the community name.
 
 2. The substantive detail — what is happening, who is involved, what the
    reader gets. This is where the specifics live.
@@ -155,6 +162,14 @@ structured fields. Map them like this:
 - WHEN / WHERE / phone are NOT body copy. The template already renders the
   date, time, address and phone in their own blocks, so repeating them in the
   body shows them twice.
+  This applies to dates and times written INSIDE a sentence too, not just to
+  standalone lines. "Join us Thursday, June 11 for an afternoon of fun" repeats
+  the date block — write "Join us for an afternoon of fun". Do not open a
+  paragraph by restating when the event is.
+  The one exception is a time that the date block does NOT carry: a sub-window
+  for part of the event ("the petting farm is here from 1:30 to 3:30"), or a
+  deadline that differs from the event date. Those are real information. The
+  event's own date and start time are not.
 - "RSVP is requested for this event." is not body copy either — it is the
   rsvpLabel field.
 `;

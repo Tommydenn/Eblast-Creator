@@ -138,6 +138,20 @@ const BROADWELL_BRAND = {
   fontsSource: "brand-guide-extracted" as const,
 };
 
+// Placeholder palette sampled from the logo artwork (#4d646e slate wordmark,
+// #98afb7 sage branch) so previews look right until the real brand colors are
+// set on the Communities page. Fonts are generic pending a brand guide, which
+// is why both sources are "default" rather than "brand-guide-extracted".
+const PRESERVE_BRAND = {
+  primary: "#4D646E",   // slate blue, the wordmark
+  accent: "#98AFB7",    // sage blue-gray, the branch and leaves
+  background: "#F2F4F4",
+  fontHeadline: "Georgia, 'Times New Roman', serif",
+  fontBody: "'Helvetica Neue', Arial, sans-serif",
+  paletteSource: "default" as const,
+  fontsSource: "default" as const,
+};
+
 export const seedCommunities: SeedCommunity[] = [
   // ---------------- Caretta brand ----------------
   {
@@ -695,6 +709,22 @@ export const seedCommunities: SeedCommunity[] = [
     },
     senders: [{ name: "Matthew Gregar", email: "mgregar@greatlakesmc.com", isPrimary: true }],
   },
+  {
+    community: {
+      slug: "the-preserve-of-roseville",
+      displayName: "The Preserve of Roseville",
+      shortName: "The Preserve",
+      brandFamily: "The Preserve",
+      type: "mixed",
+      address: { street: "2600 Dale Street North", city: "Roseville", state: "MN", zip: "55113" },
+      websiteUrl: "https://preserveofroseville.com",
+      hubspot: {},
+      brand: PRESERVE_BRAND,
+      logos: twoLogos("the-preserve-of-roseville"),
+      socials: {},
+    },
+    senders: [{ name: "Sharie Eaddy", email: "seaddy@preserveofroseville.com", isPrimary: true }],
+  },
 ];
 
 // HubSpot acronym per community slug. Used to label emails in HubSpot
@@ -728,6 +758,7 @@ const ACRONYM_BY_SLUG: Record<string, string> = {
   "seven-hills": "SH",
   "orchards-of-minnetonka": "OM",
   "broadwell": "BWP",
+  "the-preserve-of-roseville": "TPR",
   "the-pillars-of-grand-rapids": "PGR",
 };
 

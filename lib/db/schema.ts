@@ -155,7 +155,6 @@ export const communities = pgTable("communities", {
   brandFamily: varchar("brand_family", { length: 64 }),
 
   type: communityTypeEnum("type").notNull(),
-  careTypes: text("care_types").array(),
 
   /** Physical address (CAN-SPAM, footers). JSONB to preserve existing nested access. */
   address: jsonb("address").$type<Address>().notNull().default({}),

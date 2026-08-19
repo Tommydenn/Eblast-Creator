@@ -179,9 +179,6 @@ export default async function CommunitiesPage() {
                                       {c.address.city
                                         ? `${c.address.city}, ${c.address.state ?? ""}`
                                         : "—"}
-                                      {c.careTypes && c.careTypes.length > 0 && (
-                                        <span className="ml-1.5">· {c.careTypes.join(" · ")}</span>
-                                      )}
                                     </div>
                                   </div>
                                 </div>

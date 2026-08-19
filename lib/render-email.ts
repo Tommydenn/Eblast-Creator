@@ -218,7 +218,7 @@ export function buildEblastHtml(
   // gallery images (measured: a 38-char line rendered ~540px against a 528px
   // budget). Shrink with a small safety margin below that measured failure
   // point — short lines (the normal case) keep the original 28px unchanged.
-  const ctaDateFontSize = stripHtml(ctaDateLine).length >= 36 ? 22 : 28;
+  const ctaDateFontSize = stripHtml(ctaDateLine).length >= 36 ? 26 : 32;
 
   // Header color rule: the header must ALWAYS be a light, non-gray surface —
   // white (matching the story section's white body), or the community's own
@@ -262,7 +262,7 @@ export function buildEblastHtml(
 
   // Text fallback when no logo asset is available.
   const locationSuffix = community.displayName.replace(community.shortName, "").trim();
-  const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 24px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; color: ${isDarkHeader ? "#cccccc" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
+  const textFallback = `<span style="font-family: ${brand.fontHeadline}; font-size: 28px; color: ${isDarkHeader ? "#ffffff" : brand.primary}; letter-spacing: 1px; display:block;">${escapeHtml(community.shortName)}</span>${locationSuffix ? `<span style="font-family: ${brand.fontBody}; font-size: 15px; letter-spacing: 3px; color: ${isDarkHeader ? "#cccccc" : brand.accent}; text-transform: uppercase; display:block; margin-top:5px;">${escapeHtml(locationSuffix)}</span>` : ""}`;
 
   // Keep logo URLs as-is. Relative paths (e.g. /logos/slug/primary.png) are
   // intentionally left relative so callers can embed them as base64 data URIs
@@ -309,8 +309,8 @@ export function buildEblastHtml(
     const displayText = stripHtml(reconciledLabelHtml);
     const displayHtml = renderInlineField(reconciledLabelHtml);
     // Two font sizes only. Long labels wrap to a second line rather than shrinking.
-    const fontSize = displayText.length <= 32 ? 14 : 13;
-    const letterSpacing = fontSize >= 14 ? "2.5px" : "2px";
+    const fontSize = displayText.length <= 32 ? 18 : 17;
+    const letterSpacing = fontSize >= 18 ? "2.5px" : "2px";
     // Explicit pixel width for CTA button tables. Outlook/Word auto-sizes tables
     // with no width attribute, and white-space:nowrap causes the cell to grow
     // wider on each forward/reply cycle. A fixed width prevents this accumulation.
@@ -362,19 +362,19 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
-            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 14px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
-            <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 36px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
+            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
             ${flyer.scriptSubheadline ? (() => {
               const plainLen = stripHtml(flyer.scriptSubheadline).length;
-              const fontSize = plainLen <= 18 ? 44 : plainLen <= 28 ? 36 : plainLen <= 38 ? 28 : 22;
+              const fontSize = plainLen <= 18 ? 48 : plainLen <= 28 ? 40 : plainLen <= 38 ? 32 : 26;
               return `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${fontSize}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>`;
             })() : ""}
             ${eventDateLine ? `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto;">
               <tr>
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
-                  <p style="font-family: ${brand.fontHeadline}; font-size: 22px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
-                  ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 13px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
+                  <p style="font-family: ${brand.fontHeadline}; font-size: 26px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
+                  ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -396,13 +396,13 @@ export function buildEblastHtml(
   ${flyer.storySectionHidden ? "" : `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 44px 36px 12px 36px;">
-      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(flyer.storyEyebrow)}</p>
-      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 38px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(flyer.storyScriptTitle)}</p>` : ""}
+      <p data-field="storyEyebrow" style="font-family: ${brand.fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(flyer.storyEyebrow)}</p>
+      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 0 36px 28px 36px;">
-      <p data-field="bodyParagraphs" style="font-family: ${brand.fontBody}; font-size: 15px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => renderBodyParagraph(p)).join("<br><br>")}</p>
+      <p data-field="bodyParagraphs" style="font-family: ${brand.fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => renderBodyParagraph(p)).join("<br><br>")}</p>
     </td>
   </tr>`}
   ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
@@ -437,7 +437,7 @@ export function buildEblastHtml(
     return `
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
     <td style="padding: 44px 36px 12px 36px;" align="center">
-      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${flyer.galleryLabel ? renderInlineField(flyer.galleryLabel) : escapeHtml(`A Look Around ${community.shortName}`)}</p>
+      <p data-field="galleryLabel" style="font-family: ${brand.fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${flyer.galleryLabel ? renderInlineField(flyer.galleryLabel) : escapeHtml(`A Look Around ${community.shortName}`)}</p>
     </td>
   </tr>
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
@@ -469,7 +469,7 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: ${HERO_ADDRESS_COLOR}; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
+            ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: ${HERO_ADDRESS_COLOR}; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
             ${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
@@ -506,17 +506,17 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
           <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg};" data-bgfield="footerButtonBgColor" data-deletefield="footerButtonHidden">
-            <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${brand.fontBody}; font-size:13px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Website"}</a>
+            <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${brand.fontBody}; font-size:17px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Website"}</a>
           </td>
         </tr>
       </table>` : ""}
-      <p data-field="thankYouText" style="font-family: ${brand.fontHeadline}; font-size: 26px; color: ${brand.primary}; margin: 0 0 10px 0;">${flyer.thankYouText ? renderInlineField(flyer.thankYouText) : "Thank You!"}</p>
-      ${primarySender?.name ? `<p style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 2px 0;">${escapeHtml(primarySender.name)}</p>` : ""}
-      <p data-field="footerName" style="font-family: ${brand.fontBody}; font-size: 14px; color: #3A3A3A; margin: 0 0 4px 0;">${renderInlineField(flyer.footerName ?? community.displayName)}</p>
-      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" data-field="footerSenderEmail" style="font-family: ${brand.fontBody}; font-size: 14px; color: ${senderEmailColor}; text-decoration: none;">${flyer.footerSenderEmail ? renderInlineField(flyer.footerSenderEmail) : escapeHtml(primarySender.email)}</a>` : ""}
+      <p data-field="thankYouText" style="font-family: ${brand.fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${flyer.thankYouText ? renderInlineField(flyer.thankYouText) : "Thank You!"}</p>
+      ${primarySender?.name ? `<p data-field="footerSenderName" style="font-family: ${brand.fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${flyer.footerSenderName ? renderInlineField(flyer.footerSenderName) : escapeHtml(primarySender.name)}</p>` : ""}
+      <p data-field="footerName" style="font-family: ${brand.fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${renderInlineField(flyer.footerName ?? community.displayName)}</p>
+      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" data-field="footerSenderEmail" style="font-family: ${brand.fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${flyer.footerSenderEmail ? renderInlineField(flyer.footerSenderEmail) : escapeHtml(primarySender.email)}</a>` : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
-        .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${brand.fontBody}; font-size: 14px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)
+        .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${brand.fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)
         .join("")}
     </td>
   </tr>`;

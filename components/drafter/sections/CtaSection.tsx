@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
-import { RichInput, CallButtonField, EmailButtonField } from "@/components/drafter/RichEditor";
+import { RichInput, CallButtonField, EmailButtonField, SenderNameField } from "@/components/drafter/RichEditor";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -147,6 +147,18 @@ export default function CtaSection() {
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
           fieldName="footerName"
+        />
+      </Field>
+
+      <Field label="Salesperson Name" hint="The community's primary sender, set on the Community page. Select text to format it — the name itself can't be changed here.">
+        <SenderNameField
+          value={fields.footerSenderName ?? ""}
+          onValueChange={(html) => setField("footerSenderName", html || undefined)}
+          fieldName="footerSenderName"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
         />
       </Field>
 

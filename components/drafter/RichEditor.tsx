@@ -466,31 +466,97 @@ export function EmailButtonField({
   );
 }
 
+/**
+ * The salesperson NAME line in the footer, directly above their email. Same
+ * locking pattern as EmailButtonField: the text always tracks the community's
+ * current primary sender, and only formatting is editable here, because the
+ * name is owned by the Community page's sender records.
+ */
+export function SenderNameField({
+  value: rawValue,
+  onValueChange,
+  fieldName,
+  className,
+  activeEditorRef,
+  activeEditorCallback,
+  activeFieldNameRef,
+}: {
+  value: string;
+  onValueChange: (html: string) => void;
+  fieldName: string;
+  className?: string;
+} & Omit<ActiveEditorProps, "fieldName">) {
+  const { community } = useDraft();
+  const primary = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
+  const name = primary?.name ?? null;
+
+  const stored = rawValue ?? "";
+
+  // Show the current primary sender's name, reconciling a stale value (an old
+  // sender, or a legacy draft with none) without writing until the user
+  // actually applies formatting.
+  const value = (() => {
+    if (!name) return stored;
+    const plain = stored.replace(/<[^>]+>/g, "").trim();
+    if (stored && plain === name) return stored;
+    return name;
+  })();
+
+  const guardPlain = name ? (t: string) => t.trim() === name : undefined;
+
+  return (
+    <div>
+      <RichInput
+        value={value}
+        onValueChange={onValueChange}
+        guardPlain={guardPlain}
+        placeholder="Salesperson name"
+        className={className}
+        activeEditorRef={activeEditorRef}
+        activeEditorCallback={activeEditorCallback}
+        activeFieldNameRef={activeFieldNameRef}
+        fieldName={fieldName}
+      />
+      {name ? (
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#7a8c85]">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+          </svg>
+          <span><span className="font-semibold text-[#5a6b63]">{name}</span> is locked &mdash; you can format it, but the name can&rsquo;t be changed.</span>
+        </div>
+      ) : (
+        <p className="mt-1.5 text-xs text-amber-600">No primary sender is set for this community yet — add one on the Community page.</p>
+      )}
+    </div>
+  );
+}
+
 // ── Toolbar ─────────────────────────────────────────────────────────────────────
 
 // Default font sizes as rendered in the email template, keyed by field name.
 // Every editable field must appear here so the toolbar's px box shows the
 // default size as a reference when the selection has no explicit size.
 const FIELD_FONT_SIZES: Record<string, number> = {
-  headline: 36,
-  scriptSubheadline: 36,
-  eventDate: 22,
-  eventTime: 22,
-  rsvpLabel: 14,
-  storyEyebrow: 11,
-  storyScriptTitle: 38,
-  bodyParagraphs: 15,
-  ctaEventDate: 28,
-  ctaEventTime: 28,
-  ctaRsvpLabel: 14,
-  footerName: 14,
-  thankYouText: 26,
-  heroAddress: 13,
-  galleryLabel: 11,
-  ctaButtonLabel: 14,
-  finalCtaButtonLabel: 14,
-  footerButtonLabel: 13,
-  footerSenderEmail: 14,
+  headline: 40,
+  scriptSubheadline: 40,
+  eventDate: 26,
+  eventTime: 26,
+  rsvpLabel: 18,
+  storyEyebrow: 15,
+  storyScriptTitle: 42,
+  bodyParagraphs: 19,
+  ctaEventDate: 32,
+  ctaEventTime: 32,
+  ctaRsvpLabel: 18,
+  footerSenderName: 18,
+  footerName: 18,
+  thankYouText: 30,
+  heroAddress: 17,
+  galleryLabel: 15,
+  ctaButtonLabel: 18,
+  finalCtaButtonLabel: 18,
+  footerButtonLabel: 17,
+  footerSenderEmail: 18,
 };
 
 // Formatting the email template forces on a field's container. The toolbar uses

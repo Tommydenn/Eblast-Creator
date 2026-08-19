@@ -157,6 +157,15 @@ export interface ExtractedFlyer {
   footerSenderEmail?: string;
 
   /**
+   * Formatting-only override for the footer's primary salesperson NAME, the
+   * line directly above the email. Same locking pattern as footerSenderEmail:
+   * the plain text is always the community's current primary sender name, and
+   * only bold/italic/color/font/size can be changed here. The name itself is
+   * owned by the Community page's sender records.
+   */
+  footerSenderName?: string;
+
+  /**
    * Additional email addresses shown under the primary one in the footer.
    * Unlike footerSenderEmail, these are fully free-text/editable — added and
    * removed directly in the editor, not sourced from the community record.

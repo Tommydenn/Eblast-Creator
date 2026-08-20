@@ -176,6 +176,59 @@ function linkedImage(
   return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="display:block; text-decoration:none; border:0;">${tagged}</a>`;
 }
 
+/**
+ * The "date · time" line, as two fixed half-width columns rather than two
+ * inline spans in one paragraph.
+ *
+ * As inline spans they shared a single line box, so enlarging either one left
+ * the other nowhere to go: it pushed past the column, widened the frame, and
+ * once the frame was pinned it ran off the edge. Giving each exactly half the
+ * available width means neither can ever displace the other. A long date wraps
+ * within its own half and the time stays put.
+ *
+ * Date is right-aligned and time left-aligned so that short values still meet
+ * in the middle and read as one centred line, which is how it looked before.
+ * table-layout:fixed makes the 50/50 split binding rather than a suggestion.
+ */
+function dateTimeRow(opts: {
+  dateHtml: string;
+  dateField: string;
+  timeHtml: string;
+  timeField: string;
+  timeStartsWithSeparator: boolean;
+  fontFamily: string;
+  fontSize: number;
+  extraStyle: string;
+  totalWidth: number;
+  marginBottom: number;
+}): string {
+  const {
+    dateHtml, dateField, timeHtml, timeField, timeStartsWithSeparator,
+    fontFamily, fontSize, extraStyle, totalWidth, marginBottom,
+  } = opts;
+
+  const cell = `font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0;`;
+  const half = Math.floor(totalWidth / 2);
+
+  // With no time there is nothing to collide with, so the date gets the full
+  // width and stays centred.
+  if (!timeHtml) {
+    return `<p style="${cell} margin-bottom: ${marginBottom}px;"><span data-field="${dateField}">${dateHtml}</span></p>`;
+  }
+
+  const separator = timeStartsWithSeparator ? "" : "·&nbsp;";
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: ${totalWidth}px; max-width: 100%; table-layout: fixed; margin: 0 auto ${marginBottom}px auto;">
+                    <tr>
+                      <!-- No cell padding: with content-box sizing it is ADDED
+                           to the declared width, so 4px per cell pushed the row
+                           8px past the frame. The separator's nbsp does the
+                           spacing instead. -->
+                      <td width="${half}" align="right" valign="top" style="width: ${half}px; padding: 0;"><p style="${cell}"><span data-field="${dateField}">${dateHtml}</span>&nbsp;</p></td>
+                      <td width="${totalWidth - half}" align="left" valign="top" style="width: ${totalWidth - half}px; padding: 0;"><p style="${cell}">${separator}<span data-field="${timeField}">${timeHtml}</span></p></td>
+                    </tr>
+                  </table>`;
+}
+
 export interface RenderOptions {
   /** Hero image URL or data URI. If omitted, the hero block has no photo — just brand color. */
   heroImageUrl?: string;
@@ -400,7 +453,18 @@ export function buildEblastHtml(
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto; max-width: ${HERO_CONTENT_WIDTH}px; table-layout: fixed;">
               <tr>
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px; max-width: ${HERO_CONTENT_WIDTH}px;" align="center">
-                  <p style="font-family: ${brand.fontHeadline}; font-size: 26px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: normal;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
+                  ${dateTimeRow({
+                    dateHtml: renderInlineField(flyer.eventDate ?? ""),
+                    dateField: "eventDate",
+                    timeHtml: flyer.eventTime ? renderInlineField(flyer.eventTime) : "",
+                    timeField: "eventTime",
+                    timeStartsWithSeparator: stripHtml(flyer.eventTime ?? "").trim().startsWith("·"),
+                    fontFamily: brand.fontHeadline,
+                    fontSize: 26,
+                    extraStyle: "letter-spacing: 1px;",
+                    totalWidth: HERO_CONTENT_WIDTH,
+                    marginBottom: 8,
+                  })}
                   ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
                 </td>
               </tr>
@@ -497,7 +561,18 @@ export function buildEblastHtml(
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: ${HERO_ADDRESS_COLOR}; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
-            ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: normal;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
+            ${ctaDateLine ? dateTimeRow({
+              dateHtml: renderInlineField(ctaDate ?? ""),
+              dateField: "ctaEventDate",
+              timeHtml: ctaTime ? renderInlineField(ctaTime) : "",
+              timeField: "ctaEventTime",
+              timeStartsWithSeparator: stripHtml(ctaTime ?? "").trim().startsWith("·"),
+              fontFamily: brand.fontHeadline,
+              fontSize: ctaDateFontSize,
+              extraStyle: "line-height: 1.2;",
+              totalWidth: CONTENT_WIDTH,
+              marginBottom: 22,
+            }) : ""}
             ${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>

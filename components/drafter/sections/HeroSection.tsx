@@ -4,6 +4,7 @@ import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
+import { DateTimeField } from "@/components/drafter/DateTimeField";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -18,7 +19,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
 export default function HeroSection() {
-  const { fields, setField, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
+  const { fields, setField, setFields, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   if (!fields) return null;
 
   // Default address line shown in the box when the field hasn't been overridden
@@ -64,32 +65,18 @@ export default function HeroSection() {
         />
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Event Date">
-          <RichInput
-            value={fields.eventDate ?? ""}
-            onValueChange={(html) => setField("eventDate", html || undefined)}
-            placeholder="e.g. Wednesday, May 13"
-            className={baseInput}
-            activeEditorRef={activeEditorRef}
-            activeEditorCallback={activeEditorCallback}
-            activeFieldNameRef={activeFieldNameRef}
-            fieldName="eventDate"
-          />
-        </Field>
-        <Field label="Event Time">
-          <RichInput
-            value={fields.eventTime ?? ""}
-            onValueChange={(html) => setField("eventTime", html || undefined)}
-            placeholder="e.g. 2:00 PM"
-            className={baseInput}
-            activeEditorRef={activeEditorRef}
-            activeEditorCallback={activeEditorCallback}
-            activeFieldNameRef={activeFieldNameRef}
-            fieldName="eventTime"
-          />
-        </Field>
-      </div>
+      {/* One box, two underlying fields — see DateTimeField. */}
+      <DateTimeField
+        label="Event Date & Time"
+        date={fields.eventDate}
+        time={fields.eventTime}
+        onChange={({ date, time }) => setFields({ eventDate: date, eventTime: time })}
+        className={baseInput}
+        fieldName="eventDate"
+        activeEditorRef={activeEditorRef}
+        activeEditorCallback={activeEditorCallback}
+        activeFieldNameRef={activeFieldNameRef}
+      />
 
       <Field label="RSVP Label" hint="Shown at the top of the hero and CTA sections. Leave blank if no RSVP required.">
         <RichInput

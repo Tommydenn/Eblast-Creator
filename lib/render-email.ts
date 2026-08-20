@@ -282,7 +282,9 @@ export function buildEblastHtml(
   /** 600px shell minus a section's 36px side padding. */
   const CONTENT_WIDTH = 600 - 36 * 2;
   /** Inside the hero's date box, which adds 26px of its own padding each side. */
-  const HERO_CONTENT_WIDTH = CONTENT_WIDTH - 26 * 2;
+  // The date box no longer adds side padding of its own, so its content spans
+  // the same column as every other section and lines up with the header.
+  const HERO_CONTENT_WIDTH = CONTENT_WIDTH;
   const fitsUnwrapped = (text: string, px: number) => text.length * px * 0.53 <= CONTENT_WIDTH;
   const ctaDatePlain = stripHtml(ctaDateLine);
   const ctaDateFontSize = [32, 26, 22].find((px) => fitsUnwrapped(ctaDatePlain, px)) ?? 22;
@@ -444,7 +446,10 @@ export function buildEblastHtml(
                  to the hero's content width so the text wraps inside it. -->
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto; max-width: ${HERO_CONTENT_WIDTH}px; table-layout: fixed;">
               <tr>
-                <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px; max-width: ${HERO_CONTENT_WIDTH}px;" align="center">
+                <!-- Vertical padding matches the header's 22px, and there is no
+                     side padding so the date, time and address line up with the
+                     header rather than sitting 26px further in. -->
+                <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 22px 0; max-width: ${HERO_CONTENT_WIDTH}px;" align="center">
                   ${dateTimeRow({
                     dateHtml: renderInlineField(flyer.eventDate ?? ""),
                     dateField: "eventDate",

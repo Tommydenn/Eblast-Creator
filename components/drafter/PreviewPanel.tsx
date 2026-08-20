@@ -265,11 +265,32 @@ function injectScript(doc: Document) {
   doc.body.appendChild(s);
 }
 
+/** The email's fixed design width, matching the 600px shell in render-email.ts. */
+const EMAIL_WIDTH = 600;
+
+/**
+ * Size the iframe to its content, then scale the whole thing down if the
+ * column is narrower than the email.
+ *
+ * Done imperatively rather than through React state because it has to run in
+ * the same frame as the height measurement; going through state left the
+ * transform a render behind and it never applied.
+ */
 function resizeIframe(iframe: HTMLIFrameElement) {
   const doc = iframe.contentDocument;
   if (!doc?.body) return;
   const h = doc.documentElement.scrollHeight || doc.body.scrollHeight;
   if (h > 0) iframe.style.height = h + "px";
+
+  const container = iframe.parentElement;
+  if (!container) return;
+  const available = container.clientWidth;
+  if (!available) return;
+  const scale = Math.min(1, available / EMAIL_WIDTH);
+  iframe.style.transform = scale < 1 ? `scale(${scale})` : "";
+  // The iframe is EMAIL_WIDTH wide and scaled visually, so the container has
+  // to be told the post-scale height or it reserves the unscaled space.
+  container.style.height = h > 0 ? `${Math.ceil(h * scale)}px` : "";
 }
 
 export default function PreviewPanel() {
@@ -279,6 +300,8 @@ export default function PreviewPanel() {
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const [bgPopover, setBgPopover] = useState<{ field: BgFieldKey; left: number; top: number } | null>(null);
   const [deletePopover, setDeletePopover] = useState<{ field: DeleteFieldKey; left: number; top: number } | null>(null);
+  // Scale the fixed-width email down when the column is narrower than it,
+  // instead of letting the container clip it.
   const [linkPopover, setLinkPopover] = useState<
     { field: LinkFieldKey; index: number | null; label: string; left: number; top: number } | null
   >(null);
@@ -413,6 +436,32 @@ export default function PreviewPanel() {
 
   useEffect(() => () => resizeObserverRef.current?.disconnect(), []);
 
+  // Re-scale when the column width changes (window resize, sidebar toggling).
+  // Content-height changes are already covered by the ResizeObserver on
+  // doc.body in handleLoad, which calls the same resizeIframe.
+  // Depends on initSrc: before the first draft loads this component renders a
+  // placeholder and containerRef is null, so an effect with an empty dep array
+  // would attach nothing and never re-run, leaving the scale stale on resize.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const rescale = () => {
+      const iframe = iframeRef.current;
+      if (iframe) resizeIframe(iframe);
+    };
+    const ro = new ResizeObserver(rescale);
+    ro.observe(container);
+    // A ResizeObserver on the container alone proved unreliable for viewport
+    // changes, so listen for window resize too. Both call the same function and
+    // it's idempotent, so firing twice is harmless.
+    window.addEventListener("resize", rescale);
+    rescale();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", rescale);
+    };
+  }, [initSrc]);
+
   if (!initSrc) {
     return (
       <div className="flex items-center justify-center py-20 text-sm text-[#9aaba4]">
@@ -427,12 +476,31 @@ export default function PreviewPanel() {
 
   return (
     <div ref={containerRef} className="relative">
+      {/*
+        The email is a fixed EMAIL_WIDTH design. The iframe is that width
+        exactly and is scaled down when the surrounding column is narrower,
+        rather than being given a percentage width.
+
+        Before, the iframe was w-full inside a container with overflow-hidden
+        and scrolling="no": whenever the column was narrower than the email,
+        the right-hand side was silently cut off with no scrollbar and no
+        indication. Larger fonts pushed more text into the cut-off zone, which
+        made it look like the text was overflowing when the preview was
+        clipping it. Scaling keeps the whole email visible at any width.
+      */}
       <iframe
         ref={iframeRef}
         srcDoc={initSrc}
         title="Email preview"
-        className="w-full bg-white"
-        style={{ minHeight: 600, height: "1200px", display: "block" }}
+        className="bg-white"
+        style={{
+          width: EMAIL_WIDTH,
+          minHeight: 600,
+          height: "1200px",
+          display: "block",
+          // transform is set imperatively by resizeIframe.
+          transformOrigin: "top left",
+        }}
         sandbox="allow-same-origin allow-scripts"
         onLoad={handleLoad}
         scrolling="no"

@@ -30,21 +30,79 @@ export function combineDateTime(date: string | undefined, time: string | undefin
 }
 
 /**
- * Split the combined value back into date and time on the FIRST separator.
+ * Split the combined value back into date and time at the FIRST separator.
+ *
+ * This splits the DOM, not the string. A plain string split severs the markup:
+ * formatting the whole box produces something like
+ * `<span style="font-size:60px">Friday, Aug 28 · 2:00 PM</span>`, and cutting
+ * that at the "·" leaves the opening span attached to the date and an orphan
+ * `</span>` on the time, so the formatting only ever applied to the date half.
+ *
+ * Range.cloneContents() is what makes this correct: it reproduces the enclosing
+ * elements around each side, so a span wrapping the whole value ends up
+ * wrapping both halves and the formatting survives on each.
+ *
  * With no separator the whole value is the date and the time is cleared, which
- * is what someone typing just a date would expect.
+ * is what someone typing only a date would expect.
  */
 export function splitDateTime(combined: string): { date?: string; time?: string } {
-  const idx = combined.indexOf(SEPARATOR);
-  if (idx === -1) {
-    const date = combined.trim();
+  if (typeof document === "undefined") {
+    // SSR fallback: no DOM to split with. Plain-text values are unaffected.
+    const idx = combined.indexOf(SEPARATOR);
+    if (idx === -1) return { date: combined.trim() || undefined, time: undefined };
+    const rest = combined.slice(idx + SEPARATOR.length).trim();
+    return {
+      date: combined.slice(0, idx).trim() || undefined,
+      time: rest ? `${SEPARATOR} ${rest}` : undefined,
+    };
+  }
+
+  const root = document.createElement("div");
+  root.innerHTML = combined;
+
+  // Find the first text node containing the separator, at any depth.
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let hit: { node: Text; offset: number } | null = null;
+  let node = walker.nextNode() as Text | null;
+  while (node) {
+    const offset = node.data.indexOf(SEPARATOR);
+    if (offset !== -1) { hit = { node, offset }; break; }
+    node = walker.nextNode() as Text | null;
+  }
+
+  const serialize = (fragment: DocumentFragment): string => {
+    const holder = document.createElement("div");
+    holder.appendChild(fragment);
+    return holder.innerHTML.trim();
+  };
+
+  if (!hit) {
+    const date = serialize(document.createRange().createContextualFragment(root.innerHTML));
     return { date: date || undefined, time: undefined };
   }
-  const date = combined.slice(0, idx).trim();
-  const rest = combined.slice(idx + SEPARATOR.length).trim();
+
+  const before = document.createRange();
+  before.setStart(root, 0);
+  before.setEnd(hit.node, hit.offset);
+
+  const after = document.createRange();
+  // Start after the separator, skipping the space that followed it. Without
+  // this the stored time keeps that space and, since the separator is re-added
+  // with its own, renders as "·  2:00 PM" with a double gap.
+  let timeStart = hit.offset + SEPARATOR.length;
+  while (timeStart < hit.node.data.length && /\s/.test(hit.node.data[timeStart])) timeStart++;
+  after.setStart(hit.node, timeStart);
+  after.setEnd(root, root.childNodes.length);
+
+  const dateHtml = serialize(before.cloneContents());
+  const timeHtml = serialize(after.cloneContents());
+  const timeText = timeHtml.replace(/<[^>]+>/g, "").trim();
+
   return {
-    date: date || undefined,
-    time: rest ? `${SEPARATOR} ${rest}` : undefined,
+    date: dateHtml || undefined,
+    // Keep the leading separator on the stored time, matching the convention
+    // the generate step and the email template both already rely on.
+    time: timeText ? `${SEPARATOR} ${timeHtml}` : undefined,
   };
 }
 

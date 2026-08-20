@@ -234,7 +234,10 @@ export function buildEblastHtml(
    * font size for these headline faces (33 chars at 32px measured 555px, which
    * is 0.526), with a little headroom.
    */
+  /** 600px shell minus a section's 36px side padding. */
   const CONTENT_WIDTH = 600 - 36 * 2;
+  /** Inside the hero's date box, which adds 26px of its own padding each side. */
+  const HERO_CONTENT_WIDTH = CONTENT_WIDTH - 26 * 2;
   const fitsUnwrapped = (text: string, px: number) => text.length * px * 0.53 <= CONTENT_WIDTH;
   const ctaDatePlain = stripHtml(ctaDateLine);
   const ctaDateFontSize = [32, 26, 22].find((px) => fitsUnwrapped(ctaDatePlain, px)) ?? 22;
@@ -389,9 +392,14 @@ export function buildEblastHtml(
               return `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${fontSize}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>`;
             })() : ""}
             ${eventDateLine ? `
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto;">
+            <!-- This table had no width at all, so it auto-sized to its text.
+                 A date line longer than the column made it wider than the
+                 600px frame, which is what stretched the email (and, once the
+                 frame was pinned, spilled off the edge instead). Constrained
+                 to the hero's content width so the text wraps inside it. -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto; max-width: ${HERO_CONTENT_WIDTH}px; table-layout: fixed;">
               <tr>
-                <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
+                <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px; max-width: ${HERO_CONTENT_WIDTH}px;" align="center">
                   <p style="font-family: ${brand.fontHeadline}; font-size: 26px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: normal;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
                   ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
                 </td>
@@ -549,6 +557,19 @@ export function buildEblastHtml(
 <meta name="supported-color-schemes" content="light only">
 <title>${escapeHtml(flyer.subject)}</title>
 <style>
+  /*
+    Nothing may ever leave the 600px frame. Long words, pasted URLs and
+    date/time lines that don't fit the column wrap instead of running off the
+    edge or stretching the email. break-word only kicks in when a single token
+    genuinely cannot fit, so normal copy still breaks at spaces.
+  */
+  td, p, a, span, div, h1, h2, h3 {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+  }
+  img { max-width: 100%; }
+
   /*
     Outlook (new Outlook / Outlook.com) applies its own automatic dark-mode
     repaint that treats near-white surfaces as "unstyled chrome" and force-

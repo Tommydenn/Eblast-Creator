@@ -218,7 +218,26 @@ export function buildEblastHtml(
   // gallery images (measured: a 38-char line rendered ~540px against a 528px
   // budget). Shrink with a small safety margin below that measured failure
   // point — short lines (the normal case) keep the original 28px unchanged.
-  const ctaDateFontSize = stripHtml(ctaDateLine).length >= 36 ? 26 : 32;
+  /**
+   * Pick the largest size at which a single unwrapped line still fits the
+   * content column, instead of guessing from character count.
+   *
+   * The old character-count thresholds were calibrated for the pre-bump sizes
+   * and silently broke the layout afterwards: "Thursday, August 6 · 1:30-3:30
+   * PM" is 33 characters, so it took the LARGE size, which at 32px measured
+   * 555px. Add the section's 36px side padding and the row needed 627px inside
+   * a 600px frame, so the whole email was forced 27px wider than the images in
+   * it and every photo ended up with an uneven sliver of background beside it.
+   *
+   * CONTENT_WIDTH is the real budget: the 600px shell minus 36px of padding on
+   * each side. The 0.53 factor is the measured average glyph width relative to
+   * font size for these headline faces (33 chars at 32px measured 555px, which
+   * is 0.526), with a little headroom.
+   */
+  const CONTENT_WIDTH = 600 - 36 * 2;
+  const fitsUnwrapped = (text: string, px: number) => text.length * px * 0.53 <= CONTENT_WIDTH;
+  const ctaDatePlain = stripHtml(ctaDateLine);
+  const ctaDateFontSize = [32, 26, 22].find((px) => fitsUnwrapped(ctaDatePlain, px)) ?? 22;
 
   // Header color rule: the header must ALWAYS be a light, non-gray surface —
   // white (matching the story section's white body), or the community's own
@@ -373,7 +392,7 @@ export function buildEblastHtml(
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto;">
               <tr>
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 14px 26px;" align="center">
-                  <p style="font-family: ${brand.fontHeadline}; font-size: 26px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: nowrap;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
+                  <p style="font-family: ${brand.fontHeadline}; font-size: 26px; color: #FFFFFF; letter-spacing: 1px; margin: 0 0 8px 0; white-space: normal;"><span data-field="eventDate">${renderInlineField(flyer.eventDate ?? "")}</span>${flyer.eventTime ? `${stripHtml(flyer.eventTime).trim().startsWith("·") ? " " : " · "}<span data-field="eventTime">${renderInlineField(flyer.eventTime)}</span>` : ""}</p>
                   ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
                 </td>
               </tr>
@@ -470,7 +489,7 @@ export function buildEblastHtml(
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${ctaRsvpLabel ? `<p style="font-family: ${brand.fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: ${HERO_ADDRESS_COLOR}; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
-            ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: nowrap;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
+            ${ctaDateLine ? `<p style="font-family: ${brand.fontHeadline}; font-size: ${ctaDateFontSize}px; color: #FFFFFF; line-height: 1.2; margin: 0 0 22px 0; white-space: normal;"><span data-field="ctaEventDate">${renderInlineField(ctaDate ?? "")}</span>${ctaTime ? `${stripHtml(ctaTime).trim().startsWith("·") ? " " : " · "}<span data-field="ctaEventTime">${renderInlineField(ctaTime)}</span>` : ""}</p>` : ""}
             ${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>
@@ -556,7 +575,12 @@ export function buildEblastHtml(
 <span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(flyer.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-outer" bgcolor="#f5f5f5" style="background:#f5f5f5;">
   <tr><td align="center" style="padding:32px 0;">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="glm-bg-white" bgcolor="#ffffff" style="width:600px; max-width:100%; margin:0 auto; background:#ffffff;">
+    <!-- table-layout:fixed makes width:600px binding. Without it the table is
+         auto-layout, so any single wide row (a long unwrapped date line, a
+         fixed-width button) stretches the whole email past 600px while the
+         images stay at their declared widths, leaving uneven background beside
+         them. The email must never be wider than its images. -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="glm-bg-white" bgcolor="#ffffff" style="width:600px; max-width:100%; table-layout:fixed; margin:0 auto; background:#ffffff;">
       ${header}
       ${hero}
       ${story}

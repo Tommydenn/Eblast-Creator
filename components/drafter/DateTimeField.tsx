@@ -86,23 +86,23 @@ export function splitDateTime(combined: string): { date?: string; time?: string 
   before.setEnd(hit.node, hit.offset);
 
   const after = document.createRange();
-  // Start after the separator, skipping the space that followed it. Without
-  // this the stored time keeps that space and, since the separator is re-added
-  // with its own, renders as "·  2:00 PM" with a double gap.
-  let timeStart = hit.offset + SEPARATOR.length;
-  while (timeStart < hit.node.data.length && /\s/.test(hit.node.data[timeStart])) timeStart++;
-  after.setStart(hit.node, timeStart);
+  // Start AT the separator, not after it, so the "·" is captured inside the
+  // cloned formatting rather than re-added as bare text alongside it. That's
+  // what makes the separator scale and restyle with the rest of the line:
+  // prefixing it manually left it outside every span, so it kept the field's
+  // base size while the date and time changed around it.
+  after.setStart(hit.node, hit.offset);
   after.setEnd(root, root.childNodes.length);
 
   const dateHtml = serialize(before.cloneContents());
+  // Already begins with the separator, matching the stored-time convention the
+  // generate step and the email template both rely on.
   const timeHtml = serialize(after.cloneContents());
-  const timeText = timeHtml.replace(/<[^>]+>/g, "").trim();
+  const timeText = timeHtml.replace(/<[^>]+>/g, "").replace(SEPARATOR, "").trim();
 
   return {
     date: dateHtml || undefined,
-    // Keep the leading separator on the stored time, matching the convention
-    // the generate step and the email template both already rely on.
-    time: timeText ? `${SEPARATOR} ${timeHtml}` : undefined,
+    time: timeText ? timeHtml : undefined,
   };
 }
 

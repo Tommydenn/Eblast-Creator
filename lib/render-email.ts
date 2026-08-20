@@ -108,6 +108,9 @@ function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
  */
 const HERO_ADDRESS_COLOR = "#E8DDC4";
 
+/** Character between the event date and time. Must match DateTimeField's. */
+const SEPARATOR = "·";
+
 /**
  * Darkest color in a community's brand palette — used for the footer
  * salesperson emails so they read as text rather than as a bright accent link.
@@ -208,8 +211,12 @@ function dateTimeRow(opts: {
   } = opts;
 
   const style = `font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0 0 ${marginBottom}px 0;`;
-  const separator = timeHtml ? (timeStartsWithSeparator ? " " : " · ") : "";
-  const timePart = timeHtml ? `${separator}<span data-field="${timeField}">${timeHtml}</span>` : "";
+  // The separator lives INSIDE the time field, never between the two spans as
+  // bare text. Outside, it inherits nothing and keeps the base size while the
+  // date and time restyle around it. The stored time normally already starts
+  // with it; this only adds one for older values that don't.
+  const timeContent = timeStartsWithSeparator ? timeHtml : `${SEPARATOR} ${timeHtml}`;
+  const timePart = timeHtml ? ` <span data-field="${timeField}">${timeContent}</span>` : "";
 
   return `<p style="${style}"><span data-field="${dateField}">${dateHtml}</span>${timePart}</p>`;
 }

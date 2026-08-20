@@ -177,18 +177,19 @@ function linkedImage(
 }
 
 /**
- * The "date · time" line, as two fixed half-width columns rather than two
- * inline spans in one paragraph.
+ * The "date · time" line: one visual text block, two separate fields.
  *
- * As inline spans they shared a single line box, so enlarging either one left
- * the other nowhere to go: it pushed past the column, widened the frame, and
- * once the frame was pinned it ran off the edge. Giving each exactly half the
- * available width means neither can ever displace the other. A long date wraps
- * within its own half and the time stays put.
+ * Date and time stay distinct data-field spans, so the drafter still extracts
+ * them separately, the sidebar keeps its own Event Date and Event Time inputs,
+ * and each can be formatted on its own. Combining them is purely visual.
  *
- * Date is right-aligned and time left-aligned so that short values still meet
- * in the middle and read as one centred line, which is how it looked before.
- * table-layout:fixed makes the 50/50 split binding rather than a suggestion.
+ * They were briefly split into two fixed half-width columns to stop one from
+ * shoving the other off the page. That turned out to be treating a symptom:
+ * the real cause was the preview clipping a 600px email in a narrower column
+ * (see PreviewPanel), plus an auto-layout shell that any wide row could
+ * stretch. With the shell pinned to 600px and wrapping enabled, a single
+ * centred line wraps safely on its own and reads better than a rigid 50/50
+ * split, which broke awkwardly whenever one side was much longer.
  */
 function dateTimeRow(opts: {
   dateHtml: string;
@@ -199,34 +200,18 @@ function dateTimeRow(opts: {
   fontFamily: string;
   fontSize: number;
   extraStyle: string;
-  totalWidth: number;
   marginBottom: number;
 }): string {
   const {
     dateHtml, dateField, timeHtml, timeField, timeStartsWithSeparator,
-    fontFamily, fontSize, extraStyle, totalWidth, marginBottom,
+    fontFamily, fontSize, extraStyle, marginBottom,
   } = opts;
 
-  const cell = `font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0;`;
-  const half = Math.floor(totalWidth / 2);
+  const style = `font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0 0 ${marginBottom}px 0;`;
+  const separator = timeHtml ? (timeStartsWithSeparator ? " " : " · ") : "";
+  const timePart = timeHtml ? `${separator}<span data-field="${timeField}">${timeHtml}</span>` : "";
 
-  // With no time there is nothing to collide with, so the date gets the full
-  // width and stays centred.
-  if (!timeHtml) {
-    return `<p style="${cell} margin-bottom: ${marginBottom}px;"><span data-field="${dateField}">${dateHtml}</span></p>`;
-  }
-
-  const separator = timeStartsWithSeparator ? "" : "·&nbsp;";
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: ${totalWidth}px; max-width: 100%; table-layout: fixed; margin: 0 auto ${marginBottom}px auto;">
-                    <tr>
-                      <!-- No cell padding: with content-box sizing it is ADDED
-                           to the declared width, so 4px per cell pushed the row
-                           8px past the frame. The separator's nbsp does the
-                           spacing instead. -->
-                      <td width="${half}" align="right" valign="top" style="width: ${half}px; padding: 0;"><p style="${cell}"><span data-field="${dateField}">${dateHtml}</span>&nbsp;</p></td>
-                      <td width="${totalWidth - half}" align="left" valign="top" style="width: ${totalWidth - half}px; padding: 0;"><p style="${cell}">${separator}<span data-field="${timeField}">${timeHtml}</span></p></td>
-                    </tr>
-                  </table>`;
+  return `<p style="${style}"><span data-field="${dateField}">${dateHtml}</span>${timePart}</p>`;
 }
 
 export interface RenderOptions {
@@ -462,7 +447,6 @@ export function buildEblastHtml(
                     fontFamily: brand.fontHeadline,
                     fontSize: 26,
                     extraStyle: "letter-spacing: 1px;",
-                    totalWidth: HERO_CONTENT_WIDTH,
                     marginBottom: 8,
                   })}
                   ${addressLine ? `<p data-field="heroAddress" style="font-family: ${brand.fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</p>` : ""}
@@ -570,7 +554,6 @@ export function buildEblastHtml(
               fontFamily: brand.fontHeadline,
               fontSize: ctaDateFontSize,
               extraStyle: "line-height: 1.2;",
-              totalWidth: CONTENT_WIDTH,
               marginBottom: 22,
             }) : ""}
             ${flyer.finalCtaButtonHidden ? "" : `

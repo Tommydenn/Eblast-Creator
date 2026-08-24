@@ -32,7 +32,10 @@ function renderInlineField(s: string): string {
   if (!s) return "";
   return s
     .replace(/^<div>([\s\S]*)<\/div>$/i, "$1")
-    .replace(/<br\s*\/?>$/i, "")
+    // Trailing breaks are an editing artifact, not content: a break typed at
+    // the very end of a field leaves a spare <br> behind so the caret has a
+    // visible line to sit on. Drop the whole run so the email has no stray gap.
+    .replace(/(?:<br\s*\/?>|\s)+$/i, "")
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")

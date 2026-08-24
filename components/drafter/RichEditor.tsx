@@ -48,10 +48,38 @@ function insertPlainText(text: string, singleLine: boolean) {
 
 // Shared native-event wiring for a contentEditable region: pending-mark aware
 // typing, plain-text paste, and pending cleanup on caret navigation.
+/**
+ * Insert a line break at the caret and put the cursor on the new line.
+ *
+ * A lone trailing <br> is invisible in contentEditable, so when the break lands
+ * at the very end a second one is added to give the caret a line to sit on.
+ * Only the first is meaningful; renderInlineField strips a trailing break.
+ */
+function insertLineBreak(el: HTMLElement) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const range = sel.getRangeAt(0);
+  if (!el.contains(range.commonAncestorContainer)) return;
+
+  range.deleteContents();
+  const br = document.createElement("br");
+  range.insertNode(br);
+
+  if (!br.nextSibling) {
+    br.parentNode?.insertBefore(document.createElement("br"), br.nextSibling);
+  }
+
+  range.setStartAfter(br);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
 function useEditorEvents(
   ref: React.RefObject<HTMLDivElement>,
   singleLine: boolean,
   serialize: () => void,
+  blockEnter = false,
 ) {
   useEffect(() => {
     const el = ref.current;
@@ -75,6 +103,12 @@ function useEditorEvents(
     const onKeyDown = (e: KeyboardEvent) => {
       if (singleLine && e.key === "Enter") {
         e.preventDefault();
+        // Locked fields (the salesperson name and email) revert any edit that
+        // changes their plain text, so a break there would appear and then
+        // undo itself. Everywhere else, Enter starts a new line at the caret.
+        if (blockEnter) return;
+        insertLineBreak(el);
+        serialize();
         return;
       }
       // Caret navigation abandons any queued pending marks.
@@ -94,7 +128,7 @@ function useEditorEvents(
       el.removeEventListener("paste", onPaste as EventListener);
       el.removeEventListener("keydown", onKeyDown as EventListener);
     };
-  }, [ref, singleLine, serialize]);
+  }, [ref, singleLine, serialize, blockEnter]);
 }
 
 // Plain text of an HTML string (tags stripped, nbsp normalized).
@@ -124,6 +158,12 @@ interface RichInputProps extends ActiveEditorProps {
    * change the text). Used to lock the tracking number into the call button.
    */
   guardPlain?: (plainText: string) => boolean;
+  /**
+   * Suppress Enter entirely. Only for fields whose guardPlain is an exact match
+   * on the community's own value (salesperson name and email): a break there
+   * changes the plain text, so it would be reverted the instant it was typed.
+   */
+  blockEnter?: boolean;
 }
 
 export function RichInput({
@@ -136,6 +176,7 @@ export function RichInput({
   activeFieldNameRef,
   fieldName,
   guardPlain,
+  blockEnter,
 }: RichInputProps) {
   const ref = useRef<HTMLDivElement>(null);
   const isFocused = useRef(false);
@@ -202,7 +243,7 @@ export function RichInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
-  useEditorEvents(ref, true, serialize);
+  useEditorEvents(ref, true, serialize, blockEnter);
 
   return (
     <div
@@ -445,6 +486,7 @@ export function EmailButtonField({
         value={value}
         onValueChange={onValueChange}
         guardPlain={guardPlain}
+        blockEnter
         placeholder="Salesperson email"
         className={className}
         activeEditorRef={activeEditorRef}
@@ -510,6 +552,7 @@ export function SenderNameField({
         value={value}
         onValueChange={onValueChange}
         guardPlain={guardPlain}
+        blockEnter
         placeholder="Salesperson name"
         className={className}
         activeEditorRef={activeEditorRef}

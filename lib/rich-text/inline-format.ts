@@ -177,10 +177,24 @@ function effectiveFormat(node: Node, stopAt: Element): StyleObj {
 // merge adjacent runs that share a style. Non-breaking spaces become regular
 // spaces so typing a space in an empty field never stores a literal &nbsp;.
 function collectRuns(container: Element, stopAt: Element): Run[] {
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+  // SHOW_ELEMENT as well as SHOW_TEXT so <br> is seen. Walking text nodes alone
+  // dropped every line break on serialize, which would make Enter appear to
+  // work and then vanish on save. A break travels as a "\n" run and is turned
+  // back into <br> by runsToHtml.
+  const walker = document.createTreeWalker(
+    container,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+    null,
+  );
   const runs: Run[] = [];
   let n: Node | null;
   while ((n = walker.nextNode())) {
+    if (n.nodeType === Node.ELEMENT_NODE) {
+      // Other elements are containers; their text children get visited anyway.
+      if ((n as Element).tagName !== "BR") continue;
+      runs.push({ text: "\n", style: effectiveFormat(n, stopAt) });
+      continue;
+    }
     const text = (n.nodeValue || "").replace(/ /g, " ");
     if (text === "") continue;
     runs.push({ text, style: effectiveFormat(n, stopAt) });
@@ -199,7 +213,12 @@ function runsToHtml(runs: Run[]): string {
     .filter((r) => r.text !== "")
     .map((r) => {
       const style = styleToString(r.style);
-      return style ? `<span style="${escAttr(style)}">${esc(r.text)}</span>` : esc(r.text);
+      // "\n" runs are line breaks. Escaping each segment separately keeps the
+      // <br> as real markup while the surrounding text stays escaped, and
+      // leaving it inside the span means the break inherits the run's
+      // formatting rather than resetting it.
+      const html = r.text.split("\n").map(esc).join("<br>");
+      return style ? `<span style="${escAttr(style)}">${html}</span>` : html;
     })
     .join("");
 }

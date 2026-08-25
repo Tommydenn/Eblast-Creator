@@ -228,16 +228,34 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // What the daily job would actually act on, measured rather than assumed:
-  // first word "Eblast", and an attachment present. A task with no flyer is
-  // skipped rather than drafted thin — and skipped without being marked seen,
-  // so it gets picked up if the flyer is added later.
+  // What the daily job would actually act on, measured rather than assumed.
+  //
+  // Only NOT STARTED tasks are ever considered. Status is what retires a task
+  // from the app's view: drafting one marks it In progress, and a human
+  // handling one themselves marks it In progress or Complete. Either way the
+  // job stops looking at it, so it can't draft the same task twice and can't
+  // tread on work someone has already picked up. Setting a task back to Not
+  // started is the way to ask for it again.
+  //
+  // That is also why a missing flyer needs no special bookkeeping: the task
+  // simply stays Not started and gets re-checked each day, so if the flyer is
+  // attached later it is picked up, and if a person deals with it instead
+  // their status change ends it.
   const decided = (userTasks && typeof userTasks === "object" ? userTasks.sample : tasksSample) ?? [];
+  const isEblastTitle = (t: any) => /^\s*eblast\b/i.test(t.title ?? "");
+  const notStarted = (t: any) => (t.percentComplete ?? 0) === 0;
   const triage = Array.isArray(decided)
     ? {
-        wouldDraft: decided.filter((t: any) => /^\s*eblast\b/i.test(t.title ?? "") && (t.attachments ?? 0) > 0).map((t: any) => t.title),
-        eblastButNoFlyer: decided.filter((t: any) => /^\s*eblast\b/i.test(t.title ?? "") && (t.attachments ?? 0) === 0).map((t: any) => t.title),
-        ignored: decided.filter((t: any) => !/^\s*eblast\b/i.test(t.title ?? "")).map((t: any) => t.title),
+        wouldDraft: decided
+          .filter((t: any) => notStarted(t) && isEblastTitle(t) && (t.attachments ?? 0) > 0)
+          .map((t: any) => t.title),
+        eblastButNoFlyer: decided
+          .filter((t: any) => notStarted(t) && isEblastTitle(t) && (t.attachments ?? 0) === 0)
+          .map((t: any) => t.title),
+        skippedAlreadyUnderway: decided
+          .filter((t: any) => !notStarted(t) && isEblastTitle(t))
+          .map((t: any) => `${t.title} (${t.percentComplete}%)`),
+        ignoredNotAnEblast: decided.filter((t: any) => !isEblastTitle(t)).map((t: any) => t.title),
       }
     : null;
 

@@ -83,14 +83,47 @@ export async function GET(req: NextRequest) {
     return a;
   };
 
-  // A plan can be named directly (?planId=…), which is all the real feature
-  // needs. Discovery is only attempted as a fallback, because listing groups
-  // needs Group.Read.All — a much broader grant worth avoiding if the plan is
-  // simply configured.
+  // The real target is a PERSON, not a board. The tasks are created by someone
+  // else and assigned, so they show up in "My Tasks" — which is a view over
+  // every plan, not a plan itself. Graph can ask for the tasks assigned to a
+  // given user directly, which is the same thing, and means handing this to a
+  // different person later is one email address rather than hunting for
+  // whichever board they keep their tasks in.
+  //
+  // The open question this settles: whether addressing /users/{upn} app-only
+  // needs User.Read.All on top of the Tasks permission.
+  const userTarget = req.nextUrl.searchParams.get("user");
+  let userTasks: any = null;
+  let userTaskRows: any[] = [];
+  if (userTarget) {
+    const u = record(await graph(token, `/users/${encodeURIComponent(userTarget)}/planner/tasks`));
+    if (u.ok) {
+      const all: any[] = u.body?.value ?? [];
+      userTaskRows = all;
+      userTasks = {
+        total: all.length,
+        eblastTasks: all.filter((t) => /^\s*eblast\b/i.test(t.title ?? "")).length,
+        sample: all.slice(0, 15).map((t) => ({
+          id: t.id,
+          title: t.title,
+          dueDateTime: t.dueDateTime,
+          percentComplete: t.percentComplete,
+          attachments: t.referenceCount ?? 0,
+          planId: t.planId,
+        })),
+      };
+    } else {
+      userTasks = `FAILED — ${u.detail}`;
+    }
+  }
+
+  // A plan can also be named directly (?planId=…). Discovery is only attempted
+  // as a last resort, because listing groups needs Group.Read.All — a much
+  // broader grant worth avoiding when the target is simply configured.
   const planId = req.nextUrl.searchParams.get("planId");
   const plansFound: Array<{ group: string; plan: string; planId: string }> = [];
 
-  if (!planId) {
+  if (!planId && !userTarget) {
     const groups = record(
       await graph(token, "/groups?$select=id,displayName&$top=25&$filter=groupTypes/any(c:c+eq+'Unified')"),
     );
@@ -106,15 +139,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Prefer whatever the user's own assigned tasks turned up, since that is the
+  // real source; fall back to a plan for completeness.
   const targetPlan = planId ?? plansFound[0]?.planId;
   let tasksSample: any = null;
   let attachmentCheck: any = null;
   let writeCheck: any = null;
 
+  let tasks: any[] = userTaskRows;
+
   if (targetPlan) {
     // 1. READ — the core capability. Needs Tasks.Read.All or ReadWrite.All.
     const t = record(await graph(token, `/planner/plans/${targetPlan}/tasks`));
-    const tasks: any[] = t.ok ? (t.body?.value ?? []) : [];
+    tasks = t.ok ? (t.body?.value ?? []) : [];
     tasksSample = tasks.slice(0, 15).map((x) => ({
       id: x.id,
       title: x.title,
@@ -124,11 +161,18 @@ export async function GET(req: NextRequest) {
       attachments: x.referenceCount ?? 0,
     }));
 
-    // 2. ATTACHMENTS — a Planner attachment is a LINK to a file living in the
-    // team's SharePoint library, not a blob on the task. Reading the task only
-    // yields the URL; fetching the flyer itself needs Files.Read.All. Without
-    // this the generated eblasts would have no photos.
-    const withFile = tasks.find((x) => (x.referenceCount ?? 0) > 0);
+  }
+
+  {
+    // 2. ATTACHMENTS — a Planner attachment is a LINK to a file living in
+    // SharePoint, not a blob on the task. Reading the task yields only the
+    // URL; fetching the flyer needs Files.Read.All. Without it every generated
+    // eblast would have no photos. Prefer a real Eblast task so the probe
+    // exercises the same file the feature would actually open.
+    const isEblast = (x: any) => /^\s*eblast\b/i.test(x.title ?? "");
+    const withFile =
+      tasks.find((x) => isEblast(x) && (x.referenceCount ?? 0) > 0) ??
+      tasks.find((x) => (x.referenceCount ?? 0) > 0);
     if (withFile) {
       const details = record(await graph(token, `/planner/tasks/${withFile.id}/details`));
       const refs = Object.keys(details.body?.references ?? {});
@@ -148,6 +192,9 @@ export async function GET(req: NextRequest) {
       attachmentCheck = "No task in this plan has an attachment, so the flyer path is untested.";
     }
 
+  }
+
+  {
     // 3. WRITE — marking a task in progress. Only runs when explicitly asked
     // with ?write=<taskId>, so a diagnostic never quietly edits real work.
     const writeTaskId = req.nextUrl.searchParams.get("write");
@@ -181,6 +228,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // What the daily job would actually act on, measured rather than assumed:
+  // first word "Eblast", and an attachment present. A task with no flyer is
+  // skipped rather than drafted thin — and skipped without being marked seen,
+  // so it gets picked up if the flyer is added later.
+  const decided = (userTasks && typeof userTasks === "object" ? userTasks.sample : tasksSample) ?? [];
+  const triage = Array.isArray(decided)
+    ? {
+        wouldDraft: decided.filter((t: any) => /^\s*eblast\b/i.test(t.title ?? "") && (t.attachments ?? 0) > 0).map((t: any) => t.title),
+        eblastButNoFlyer: decided.filter((t: any) => /^\s*eblast\b/i.test(t.title ?? "") && (t.attachments ?? 0) === 0).map((t: any) => t.title),
+        ignored: decided.filter((t: any) => !/^\s*eblast\b/i.test(t.title ?? "")).map((t: any) => t.title),
+      }
+    : null;
+
   const canRead = attempts.some((a) => a.call.includes("/planner/") && a.ok);
 
   return NextResponse.json({
@@ -198,6 +258,8 @@ export async function GET(req: NextRequest) {
       markInProgress: writeCheck ?? "untested — pass ?write=<taskId> to try it",
     },
     attempts,
+    userTasks,
+    triage,
     plansFound: plansFound.slice(0, 10),
     tasksSample,
     attachmentCheck,

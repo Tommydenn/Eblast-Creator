@@ -62,12 +62,12 @@ export default function RequestEditsPage() {
             ✓
           </div>
           <h1 style={{ margin: "0 0 12px", fontSize: 22, color: "#2d2926", fontWeight: "normal" }}>
-            {autoRefined ? "Updates applied!" : "Edit request received"}
+            {autoRefined ? "Changes applied" : "Notes received"}
           </h1>
           <p style={{ margin: 0, fontSize: 15, lineHeight: 1.7, color: "#5c4a3a" }}>
             {autoRefined
-              ? "Your notes were applied automatically. Check your email — a fresh draft is on its way for your review."
-              : "Thank you! Your notes have been passed to the marketing team. They’ll send you a new draft to review once the updates are made."}
+              ? "A new version is on its way to your inbox."
+              : "Your notes are with the marketing team. They will send you a new version to review."}
           </p>
         </div>
       </div>
@@ -85,8 +85,7 @@ export default function RequestEditsPage() {
           What changes would you like?
         </h1>
         <p style={{ margin: "0 0 24px", fontSize: 15, lineHeight: 1.6, color: "#5c4a3a" }}>
-          Please describe the changes you&rsquo;d like made to this draft. Be as specific as you&rsquo;d like &mdash;
-          the more detail you provide, the better the revision will be.
+          Describe the changes you&rsquo;d like. The more detail, the better.
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -130,7 +129,7 @@ export default function RequestEditsPage() {
             >
               {status === "submitting" ? "Reviewing your notes…" : "Submit Edit Request"}
             </button>
-            <a href={`/approve/${token}`}
+            <a href={`/api/quick-approve/${token}`}
                style={{ fontSize: 14, color: "#9e9484", fontFamily: "Arial, sans-serif",
                         textDecoration: "none" }}>
               ← Go back

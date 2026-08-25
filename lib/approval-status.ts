@@ -1,4 +1,14 @@
-import { isApprovalExpired } from "@/lib/approval-expiry";
+import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
+
+/** Why an approval link can't be acted on. See approvalBlockedMessage. */
+export type ApprovalBlockedReason =
+  | "decided"
+  | "missing"
+  | "deleted"
+  | "expired"
+  | "approved"
+  | "pushed"
+  | "superseded";
 
 /**
  * Whether a still-"pending" approval row actually means anything.
@@ -41,16 +51,60 @@ export interface ApprovalActionabilityInput {
  * repeatedly on the same draft. It still can't be reused once decided, can't
  * act on a deleted draft, and still expires.
  */
-export function approvalBlockedReason(input: ApprovalActionabilityInput): string | null {
-  if (input.decision !== "pending") return "already decided";
-  if (!input.draft) return "the draft no longer exists";
-  if (input.draft.deletedAt) return "the draft was deleted";
-  if (isApprovalExpired(input.sentAt)) return "the approval link expired";
+export function approvalBlockedReason(input: ApprovalActionabilityInput): ApprovalBlockedReason | null {
+  if (input.decision !== "pending") return "decided";
+  if (!input.draft) return "missing";
+  if (input.draft.deletedAt) return "deleted";
+  if (isApprovalExpired(input.sentAt)) return "expired";
   if (input.isTest) return null;
-  if (input.draft.approvedAt) return "the draft has already been approved";
-  if (input.draft.pushedAt) return "the draft has already been pushed to HubSpot";
-  if (!input.isNewestForDraft) return "a newer version was sent for approval";
+  if (input.draft.approvedAt) return "approved";
+  if (input.draft.pushedAt) return "pushed";
+  if (!input.isNewestForDraft) return "superseded";
   return null;
+}
+
+/**
+ * What each reason means to the person holding the link.
+ *
+ * These are whole sentences on purpose. They used to be fragments dropped into
+ * a fixed sentence that ended "Nothing was sent to HubSpot", which produced
+ * screens reading "the draft has already been pushed to HubSpot. Nothing was
+ * sent to HubSpot." — telling a salesperson both things at once. Each reason
+ * now states one fact and one next step, and nothing is glued onto it.
+ */
+const BLOCKED_MESSAGE: Record<ApprovalBlockedReason, { title: string; body: string }> = {
+  decided: {
+    title: "Already handled",
+    body: "You've already responded to this one. Nothing more to do.",
+  },
+  missing: {
+    title: "Draft not found",
+    body: "This eblast is no longer available. The marketing team can send you a new link.",
+  },
+  deleted: {
+    title: "Draft deleted",
+    body: "This eblast was deleted, so there's nothing left to approve.",
+  },
+  expired: {
+    title: "Link expired",
+    body: `Approval links last ${APPROVAL_LINK_TTL_DAYS} days. Ask the marketing team to send this one again.`,
+  },
+  approved: {
+    title: "Already approved",
+    body: "This eblast is approved and in HubSpot. Nothing more to do.",
+  },
+  pushed: {
+    title: "Already in HubSpot",
+    body: "The marketing team already sent this one to HubSpot. Nothing more to do.",
+  },
+  superseded: {
+    title: "Newer version sent",
+    body: "A newer version of this eblast went out for review. Please use the most recent email.",
+  },
+};
+
+export function approvalBlockedMessage(reason: ApprovalBlockedReason): { title: string; body: string } {
+  return BLOCKED_MESSAGE[reason];
 }
 
 /**

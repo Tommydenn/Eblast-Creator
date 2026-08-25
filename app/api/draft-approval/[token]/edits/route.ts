@@ -13,7 +13,7 @@ import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { randomBytes } from "node:crypto";
 import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
-import { approvalBlockedReason, newestApprovalTokenByDraft } from "@/lib/approval-status";
+import { approvalBlockedReason, approvalBlockedMessage, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
 export const runtime = "nodejs";
 // Auto-refine can take up to 30 s for the Claude call + image processing.
@@ -100,11 +100,23 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .limit(1);
 
   if (!approval) {
-    return NextResponse.json({ ok: false, error: "Approval thread not found" }, { status: 404 });
+    return NextResponse.json(
+      { ok: false, error: "This link isn't valid. Ask the marketing team for a new one." },
+      { status: 404 },
+    );
   }
 
   if (approval.decision !== "pending") {
-    return NextResponse.json({ ok: false, error: "This draft has already been decided" }, { status: 409 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          approval.decision === "approved"
+            ? "You already approved this eblast, so notes can't be added here. Email the marketing team with any changes."
+            : "You've already sent notes for this eblast. The marketing team will follow up with a new version.",
+      },
+      { status: 409 },
+    );
   }
 
   // A leftover request — draft already approved, pushed, deleted, or re-sent —
@@ -130,7 +142,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   });
   if (blocked && !isApprovalExpired(approval.sentAt)) {
     return NextResponse.json(
-      { ok: false, error: `This request is no longer open — ${blocked}.` },
+      { ok: false, error: approvalBlockedMessage(blocked).body },
       { status: 409 },
     );
   }
@@ -141,7 +153,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     return NextResponse.json(
       {
         ok: false,
-        error: `This approval link expired after ${APPROVAL_LINK_TTL_DAYS} days. Please ask the marketing team to send this eblast for approval again.`,
+        error: `Approval links last ${APPROVAL_LINK_TTL_DAYS} days. Ask the marketing team to send this one again.`,
       },
       { status: 410 },
     );

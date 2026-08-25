@@ -8,7 +8,7 @@ import { inlineRelativeImages } from "@/lib/inline-images";
 import { renderSavedDraftHtml, draftEventCategory } from "@/lib/draft-render-server";
 import { sendPushFailureEmail } from "@/lib/email";
 import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
-import { approvalBlockedReason, newestApprovalTokenByDraft } from "@/lib/approval-status";
+import { approvalBlockedReason, approvalBlockedMessage, newestApprovalTokenByDraft } from "@/lib/approval-status";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 
@@ -171,10 +171,10 @@ async function loadApproval(token: string) {
 function expiredPage(community: string, subject: string) {
   return page({
     icon: "⌛", iconColor: "#8a8378",
-    title: "This Link Has Expired",
+    title: "Link expired",
     community,
     subject,
-    body: `Approval links are only valid for ${APPROVAL_LINK_TTL_DAYS} days, and this one was sent longer ago than that. Nothing has been sent to HubSpot. Please ask the marketing team to send this eblast for approval again.`,
+    body: `Approval links last ${APPROVAL_LINK_TTL_DAYS} days. Ask the marketing team to send this one again.`,
   });
 }
 
@@ -183,29 +183,29 @@ function decidedPage(decision: string, community: string, subject: string, pushe
   if (decision === "approved") {
     return page({
       icon: "✓", iconColor: "#2d6a4f",
-      title: "Already Approved",
+      title: "Already approved",
       community,
       subject,
       body: pushedEmailId
-        ? "This draft has already been approved and created in HubSpot. You can close this tab."
-        : "This draft has already been approved. You can close this tab.",
+        ? "This eblast is approved and in HubSpot. Nothing more to do."
+        : "You approved this one already. Nothing more to do.",
     });
   }
   if (decision === "approving") {
     return page({
       icon: "⏳", iconColor: "#b45309",
-      title: "Approval In Progress",
+      title: "Approval in progress",
       community,
       subject,
-      body: "This draft is being sent to HubSpot right now &mdash; that can take up to a minute. Please wait a moment, then refresh this page rather than clicking Approve again.",
+      body: "This one is going to HubSpot now. Refresh this page in a minute to see the result.",
     });
   }
   return page({
     icon: "✎", iconColor: "#b45309",
-    title: "Edits Requested",
+    title: "Edits requested",
     community,
     subject,
-    body: "Edit notes were already submitted for this draft. A revised version will be sent once it&rsquo;s ready.",
+    body: "You asked for changes on this one. The marketing team will send you a new version to review.",
   });
 }
 
@@ -226,7 +226,7 @@ export async function GET(
   const { token } = params;
   const ctx = await loadApproval(token);
   if (!ctx) {
-    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid or has expired."), {
+    return new NextResponse(errorPage("Link not found", "This approval link isn't valid. Ask the marketing team for a new one."), {
       status: 404,
       headers: HTML_HEADERS,
     });
@@ -249,31 +249,34 @@ export async function GET(
 
   // Superseded / already-handled elsewhere. Nothing to approve.
   if (ctx.blockedReason) {
+    const { title, body } = approvalBlockedMessage(ctx.blockedReason);
     return new NextResponse(page({
-      icon: "✓", iconColor: "#8a8378",
-      title: "Nothing Left To Approve",
+      icon: "•", iconColor: "#8a8378",
+      title,
       community: displayName,
       subject,
-      body: `This request is no longer open &mdash; ${esc(ctx.blockedReason)}. Nothing was sent to HubSpot. You can close this tab.`,
+      body: esc(body),
     }), { headers: HTML_HEADERS });
   }
 
+  // The reviewer gets the fact, not the stack trace — the raw error goes to
+  // the marketing team's notification instead.
   const retryNote = approval.pushError
-    ? `<div class="error">A previous attempt didn&rsquo;t reach HubSpot: ${esc(approval.pushError)}<br><br>You can safely try again.</div>`
+    ? `<div class="error">The last attempt didn&rsquo;t reach HubSpot. It&rsquo;s safe to try again.</div>`
     : "";
 
   return new NextResponse(page({
     icon: "✓", iconColor: "#2d6a4f",
-    title: "Approve This Eblast?",
+    title: "Approve this eblast?",
     community: displayName,
     subject,
-    body: `Confirm below and this eblast will be created in HubSpot, ready to send.
+    body: `Approving creates it in HubSpot, ready for the marketing team to send.
       <form method="POST" style="margin-top:22px;">
         <button type="submit"
           style="display:inline-block;padding:13px 30px;background:#2d6a4f;color:#ffffff;
                  font-family:Arial,sans-serif;font-size:15px;font-weight:600;border:none;
                  border-radius:6px;cursor:pointer;letter-spacing:.02em;">
-          ✓ &nbsp;Yes, approve and send to HubSpot
+          ✓ &nbsp;Yes, approve
         </button>
       </form>${retryNote}`,
   }), { headers: HTML_HEADERS });
@@ -288,7 +291,7 @@ export async function POST(
 
   const preCheck = await loadApproval(token);
   if (!preCheck) {
-    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid."), {
+    return new NextResponse(errorPage("Link not found", "This approval link isn't valid. Ask the marketing team for a new one."), {
       status: 404,
       headers: HTML_HEADERS,
     });
@@ -308,12 +311,13 @@ export async function POST(
   // though the atomic claim below already prevents double-pushing this token.
   if (preCheck.blockedReason) {
     const c = await getCommunity(preCheck.approval.communitySlug).catch(() => null);
+    const { title, body } = approvalBlockedMessage(preCheck.blockedReason);
     return new NextResponse(page({
-      icon: "✓", iconColor: "#8a8378",
-      title: "Nothing Left To Approve",
+      icon: "•", iconColor: "#8a8378",
+      title,
       community: c?.displayName ?? preCheck.approval.communitySlug,
       subject: preCheck.subject,
-      body: `This request is no longer open &mdash; ${esc(preCheck.blockedReason)}. Nothing was sent to HubSpot.`,
+      body: esc(body),
     }), { headers: HTML_HEADERS });
   }
 
@@ -329,7 +333,7 @@ export async function POST(
 
   const ctx = await loadApproval(token);
   if (!ctx) {
-    return new NextResponse(errorPage("Link Not Found", "This approval link is invalid."), {
+    return new NextResponse(errorPage("Link not found", "This approval link isn't valid. Ask the marketing team for a new one."), {
       status: 404,
       headers: HTML_HEADERS,
     });
@@ -461,10 +465,10 @@ export async function POST(
 
     return new NextResponse(page({
       icon: "⚠", iconColor: "#b45309",
-      title: "Couldn&rsquo;t Send to HubSpot",
+      title: "Couldn&rsquo;t reach HubSpot",
       community: displayName,
       subject,
-      body: "Nothing was created in HubSpot, so this eblast has <strong>not</strong> been approved yet. The marketing team has been notified. You can click Approve again from your email — the link still works.",
+      body: "This eblast wasn&rsquo;t approved. The marketing team has been told, and your Approve link still works if you want to try again.",
       errorDetail: pushError,
     }), { headers: HTML_HEADERS });
   }
@@ -491,14 +495,13 @@ export async function POST(
   if (approval.isTest) {
     return new NextResponse(page({
       icon: "🧪", iconColor: "#5a6b63",
-      title: "Test Approval Complete",
+      title: "Test approval complete",
       community: displayName,
       subject,
       body:
-        `The full approval flow ran and the email was created in HubSpot as ` +
-        `<strong>[TEST]</strong> &mdash; delete it there when you're done with it.<br><br>` +
-        `Nothing in the drafter changed: the draft is not marked approved, it stays editable, ` +
-        `and this doesn't count toward anything. You can send another test on the same draft.`,
+        `The whole flow ran and created a <strong>[TEST]</strong> email in HubSpot &mdash; ` +
+        `delete it there when you're done.<br><br>` +
+        `Nothing in the drafter changed, and you can test this draft again.`,
     }), { headers: HTML_HEADERS });
   }
 
@@ -507,6 +510,6 @@ export async function POST(
     title: "Approved",
     community: displayName,
     subject,
-    body: "This eblast has been created in HubSpot and is ready to send. You can close this tab.",
+    body: "This eblast is now in HubSpot, ready to send. You can close this tab.",
   }), { headers: HTML_HEADERS });
 }

@@ -5,6 +5,7 @@ import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { buildEblastHtml } from "@/lib/render-email";
+import { IMAGE_LOADING_PLACEHOLDER } from "@/lib/image-bank";
 import { ColorPickerPopover } from "@/components/drafter/ColorPickerPopover";
 import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
 import { ImageLinkPopover } from "@/components/drafter/ImageLinkPopover";
@@ -294,7 +295,7 @@ function resizeIframe(iframe: HTMLIFrameElement) {
 }
 
 export default function PreviewPanel() {
-  const { setActiveSection, fields, setField, images, community } = useDraft();
+  const { setActiveSection, fields, setField, images, community, imagesLoading } = useDraft();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -308,12 +309,16 @@ export default function PreviewPanel() {
 
   const html = useMemo(() => {
     if (!fields || !community) return "";
+    // A slot whose photo is still downloading gets a plain grey block, so the
+    // eblast keeps its real shape and nothing shifts when the photo lands.
+    // Preview only — a send always waits for the real photos.
+    const stand = (url?: string) => (!url && imagesLoading ? IMAGE_LOADING_PLACEHOLDER : url);
     return buildEblastHtml(fields, community as any, {
-      heroImageUrl: images.hero?.url,
-      secondaryImageUrl: images.secondary?.url,
-      galleryImageUrls: images.gallery.map((g) => g.url),
+      heroImageUrl: stand(images.hero?.url),
+      secondaryImageUrl: stand(images.secondary?.url),
+      galleryImageUrls: images.gallery.map((g) => stand(g.url) ?? ""),
     });
-  }, [fields, images, community]);
+  }, [fields, images, community, imagesLoading]);
 
   // srcDoc is set once when the draft first loads, then never changed via React.
   // Subsequent updates go directly into the iframe DOM to avoid reload flicker.

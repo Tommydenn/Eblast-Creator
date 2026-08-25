@@ -26,6 +26,8 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
     pushResult,
     pushError,
     approvalStatus,
+    imagesLoading,
+    waitingForImages,
     save,
     push,
     discard,
@@ -131,6 +133,14 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
 
       {/* Right: action buttons */}
       <div className="flex items-center gap-2 shrink-0">
+        {/* Reopened drafts pull their photos in after the text, so say so
+            rather than letting the eblast look like it has none. */}
+        {imagesLoading && (
+          <span className="flex items-center gap-1.5 text-xs text-[#7a8c85]">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10"/></svg>
+            Loading photos…
+          </span>
+        )}
         {/* Push success banner */}
         {pushResult && !pushError && !pushFlash && (
           <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
@@ -154,7 +164,7 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
                 : "text-[#5a6b63] hover:text-[#1F4538] border-[#ddd8d0] hover:border-[#1F4538]/40",
             ].join(" ")}
           >
-            {isSaving ? "Saving…" : savedFlash ? (
+            {waitingForImages ? "Adding photos…" : isSaving ? "Saving…" : savedFlash ? (
               <span className="flex items-center gap-1">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 Saved
@@ -211,7 +221,7 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
             {isPushing ? (
               <>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10"/></svg>
-                Pushing…
+                {waitingForImages ? "Adding photos…" : "Pushing…"}
               </>
             ) : pushFlash ? (
               <>

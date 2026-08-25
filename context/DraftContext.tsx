@@ -18,6 +18,14 @@ import React, {
   useState,
 } from "react";
 import { buildEblastHtml } from "@/lib/render-email";
+import {
+  IMAGE_REF_PREFIX,
+  buildImageRows,
+  dedupeImageRows,
+  resolveImageRefs,
+  type ImagePhaseName,
+  type ImageRow,
+} from "@/lib/image-bank";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 
 // ─── Chunked PDF upload ───────────────────────────────────────────────────────
@@ -233,6 +241,14 @@ export interface DraftContextValue {
   setActiveSection: (section: EditorSection) => void;
   swapSubjectLine: (subject: string, previewText: string) => void;
   buildHtml: () => string;
+  /** A reopened draft is still fetching the photos shown in the eblast. */
+  imagesLoading: boolean;
+  /** The unplaced flyer photos behind the picker are still arriving. */
+  imageBankLoading: boolean;
+  /** Set when the photos could not be loaded, so nothing should be saved or sent. */
+  imagesError: string | null;
+  /** A save or send is holding until the photos are in. */
+  waitingForImages: boolean;
   addToImageBank: (url: string) => void;
   dismissPushResult: () => void;
   makeCopy: () => Promise<void>;
@@ -278,16 +294,25 @@ function snapshotFooterOverrides(fields: ExtractedFlyer): void {
 // dropped) rather than risk a failed request — in practice no observed
 // original/cropped image has come close to this.
 const IMAGE_BATCH_MAX_CHARS = 3_500_000;
-async function postImageBatches(draftId: string, items: Array<{ idx: number; url: string }>): Promise<void> {
+async function postImageBatches(draftId: string, rows: Array<{ idx: number; url: string }>): Promise<void> {
+  // A photo used in more than one place is stored once and pointed at from the
+  // others. Ordering keepers before pointers matters: if a request fails, the
+  // loop stops, so a pointer can never be stored without the photo it needs.
+  const items = dedupeImageRows(rows).sort(
+    (a, b) =>
+      Number(a.url.startsWith(IMAGE_REF_PREFIX)) - Number(b.url.startsWith(IMAGE_REF_PREFIX)),
+  );
+
   let batch: Array<{ idx: number; url: string }> = [];
   let batchChars = 0;
   const flush = async () => {
     if (batch.length === 0) return;
-    await fetch(`/api/saved-drafts/${draftId}/images`, {
+    const res = await fetch(`/api/saved-drafts/${draftId}/images`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ images: batch }),
     }).catch(() => null);
+    if (!res?.ok) throw new Error("Image save failed");
     batch = [];
     batchChars = 0;
   };
@@ -313,6 +338,40 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [fields, setFields_] = useState<ExtractedFlyer | null>(null);
   const [images, setImages] = useState<DraftImages>(EMPTY_IMAGES);
   const [imageBank, setImageBank] = useState<string[]>([]);
+  // Reopening a saved draft pulls its photos in over several requests (see
+  // lib/image-bank). `imagesLoading` drives the placeholders; `imagesReadyRef`
+  // is what save/push/approval await so nothing is ever sent or stored from a
+  // half-loaded draft; `imagesLoadedRef` stays false if the load failed, which
+  // keeps a failed load from being written back as "no photos".
+  const [imagesLoading, setImagesLoading] = useState(false);
+  const [imageBankLoading, setImageBankLoading] = useState(false);
+  const [imagesError, setImagesError] = useState<string | null>(null);
+  // Set while a save or send is holding for the photos, so the button can say
+  // so rather than appearing to hang.
+  const [waitingForImages, setWaitingForImages] = useState(false);
+  // The photos IN the eblast settle first; the untouched originals and the
+  // unplaced flyer pool keep arriving afterwards. Saving and sending wait only
+  // on the first of those, since that is all either one needs: a send carries
+  // the photos on screen, and a save that omits a row leaves the stored one
+  // alone rather than clearing it.
+  const shownLoadedRef = useRef(true);
+  const shownReadyRef = useRef<Promise<void> | null>(null);
+  const imagesLoadedRef = useRef(true);
+  const imagesErrorRef = useRef<string | null>(null);
+  const imagesReadyRef = useRef<Promise<void> | null>(null);
+  useEffect(() => { imagesErrorRef.current = imagesError; }, [imagesError]);
+  // Back to "nothing to wait for": a new draft holds its photos in memory, and
+  // a discarded one must not leave a stale flag blocking the next save.
+  const resetImageLoadState = useCallback(() => {
+    imagesLoadedRef.current = true;
+    imagesReadyRef.current = null;
+    shownLoadedRef.current = true;
+    shownReadyRef.current = null;
+    setImagesLoading(false);
+    setImageBankLoading(false);
+    setImagesError(null);
+    setWaitingForImages(false);
+  }, []);
 
   // Save state
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -449,6 +508,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── buildHtml ─────────────────────────────────────────────────────────────
   // Synchronous, uses refs so it's always current even during async operations.
+  // This feeds pushes, approvals and test sends only — never the preview, which
+  // builds its own HTML so it can show grey blocks for photos still arriving.
+  // Nothing here substitutes a placeholder: every caller waits for the real
+  // photos first, so what goes out is always the real eblast.
   const buildHtml = useCallback((): string => {
     const f = fieldsRef.current;
     const c = communityRef.current;
@@ -565,6 +628,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setIsGenerating(true);
     setGenerateError(null);
     setStage("generating");
+    // A freshly drafted eblast holds its photos in memory already — nothing to
+    // wait for, and no stale flag from a previously opened draft.
+    resetImageLoadState();
     try {
       const MAX_DIRECT = 4 * 1024 * 1024;
       let res: Response;
@@ -648,22 +714,9 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ draft: initDraft }),
         })
           .then(async () => {
-            // originalUrl must be saved even as a data URI — see postImageBatches
-            // for why (it's what repositionImage() re-crops from after a reload).
-            const slotItems: Array<{ idx: number; url: string }> = [];
-            if (newImages.hero?.url) slotItems.push({ idx: -1, url: newImages.hero.url });
-            if (newImages.hero?.originalUrl) slotItems.push({ idx: -2, url: newImages.hero.originalUrl });
-            if (newImages.secondary?.url) slotItems.push({ idx: -3, url: newImages.secondary.url });
-            if (newImages.secondary?.originalUrl) slotItems.push({ idx: -4, url: newImages.secondary.originalUrl });
-            newImages.gallery.forEach((g, i) => {
-              if (g.url) slotItems.push({ idx: -(10 + i * 2), url: g.url });
-              if (g.originalUrl) slotItems.push({ idx: -(11 + i * 2), url: g.originalUrl });
-            });
-            const bankEntries: Array<{ idx: number; url: string }> = [];
-            bank.forEach((url, i) => {
-              if (url) bankEntries.push({ idx: i, url });
-            });
-            return postImageBatches(newDraftId, [...slotItems, ...bankEntries]);
+            // The untouched originals must be saved even as data URIs — they
+            // are what repositionImage() re-crops from after a reload.
+            return postImageBatches(newDraftId, buildImageRows(newImages, bank));
           })
           .catch(() => null);
       }
@@ -838,36 +891,18 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // secondary.url: -3, secondary.originalUrl: -4
   // gallery[i].url: -(10+i*2), gallery[i].originalUrl: -(11+i*2)
   const saveImagesForDraft = useCallback(async (draftId: string) => {
-    const imgs = imagesRef.current;
-    const bank = imageBankRef.current;
+    // Never write photos out of a half-loaded draft. Until every phase has
+    // arrived, the in-memory slots hold empty URLs and the flyer pool is
+    // empty, so saving here would record "this eblast has no photos" over a
+    // draft that has them. Callers await imagesReady first; this is the
+    // backstop for any path that doesn't.
+    if (!shownLoadedRef.current) return;
 
-    // originalUrl (the full, uncropped photo) MUST be saved even as a data URI —
-    // it's the only way repositionImage() can ever crop to a different part of
-    // the photo after a reload. Previously this was skipped whenever it was a
-    // data URI (i.e. almost always, since images aren't hosted until push/
-    // approval), so every reopened draft lost the ability to reposition/re-crop
-    // and effectively "lost" any part of the photo outside the saved crop.
-    // Every observed original/cropped image so far is well under 1.5 MB as a
-    // data URI, so batch multiple per request instead of one-per-request.
-    const slotItems: Array<{ idx: number; url: string }> = [];
-    if (imgs.hero?.url) slotItems.push({ idx: -1, url: imgs.hero.url });
-    if (imgs.hero?.originalUrl) slotItems.push({ idx: -2, url: imgs.hero.originalUrl });
-    if (imgs.secondary?.url) slotItems.push({ idx: -3, url: imgs.secondary.url });
-    if (imgs.secondary?.originalUrl) slotItems.push({ idx: -4, url: imgs.secondary.originalUrl });
-    imgs.gallery.forEach((g, i) => {
-      if (g.url) slotItems.push({ idx: -(10 + i * 2), url: g.url });
-      if (g.originalUrl) slotItems.push({ idx: -(11 + i * 2), url: g.originalUrl });
-    });
-
-    // imageBank (the "pick a different extracted photo" pool) was HTTPS-only
-    // before, same bug — pre-hosting, every entry is a data URI, so the pool
-    // was always saved empty. Include data URIs here too.
-    const bankEntries: Array<{ idx: number; url: string }> = [];
-    bank.forEach((url, i) => {
-      if (url) bankEntries.push({ idx: i, url });
-    });
-
-    await postImageBatches(draftId, [...slotItems, ...bankEntries]);
+    // The untouched originals (the full, uncropped photos) MUST be saved even
+    // as data URIs — they are the only way repositionImage() can crop to a
+    // different part of a photo after a reload. Skipping them, as an earlier
+    // version did, silently lost everything outside the saved crop.
+    await postImageBatches(draftId, buildImageRows(imagesRef.current, imageBankRef.current));
   }, []);
 
   // ─── Save (explicit — shows "Saving…" indicator) ─────────────────────────
@@ -877,6 +912,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // here meant a locked draft couldn't even be re-saved, which reads as the
   // app refusing an action that changes nothing.
   const save = useCallback(async () => {
+    // Wait for a reopened draft to finish pulling its photos in. Saving over
+    // a half-loaded draft would otherwise record it as having none.
+    setWaitingForImages(true);
+    try { await shownReadyRef.current; } finally { setWaitingForImages(false); }
+    if (!shownLoadedRef.current) { setSaveError(imagesErrorRef.current ?? "Photos are still loading"); return; }
     const payload = buildDraftPayload();
     if (!payload) return;
     const { id, draft } = payload;
@@ -914,6 +954,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // never even gets scheduled), but this covers any other path that might.
   const autoSave = useCallback(async () => {
     if (lockInfoRef.current?.locked) return;
+    // Same reasoning as save(), and this one runs on a timer, so it is the
+    // likeliest to fire while a freshly opened draft is still loading.
+    await shownReadyRef.current;
+    if (!shownLoadedRef.current) return;
     const payload = buildDraftPayload();
     if (!payload) return;
     const { id, draft } = payload;
@@ -965,79 +1009,131 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setLockInfo(computeLockInfo(draft));
     setCopyPromptOpen(false);
 
-    // Load images from separate endpoint (saved to avoid 4.5 MB payload limit)
-    fetch(`/api/saved-drafts/${draft.id}/images`)
-      .then((r) => r.json())
-      .then((data: { ok: boolean; images?: Array<{ idx: number; url: string }> }) => {
-        if (!data.ok || !data.images?.length) return;
+    // ── Load the photos, in the order they're needed ──────────────────────
+    // The photos in the eblast come first so the draft stops looking empty,
+    // then the untouched originals that Reposition needs, then the unplaced
+    // flyer pool behind the picker. On the largest real draft that is 1.2 MB
+    // before anything is visible instead of 17.4 MB.
+    //
+    // Which slots exist is decided by the saved draft, not by what's in
+    // storage: rows for a removed slot are not deleted, so a removed photo
+    // would otherwise reappear on load. The exception is a draft with no
+    // recorded slots at all (older drafts, or one saved before its photos
+    // finished loading), where the stored rows are the only record there is
+    // and ignoring them is what makes a draft look permanently empty.
+    const blob = draft.images;
+    const slotsUnrecorded = !blob || (!blob.hero && !blob.secondary && !blob.gallery?.length);
+    const gallerySlotCount = blob?.gallery?.length ?? 0;
 
-        const bank: string[] = [];
-        let heroUrl = "", heroOrigUrl = "";
-        let secUrl = "", secOrigUrl = "";
-        const gallerySlots: Record<number, { url?: string; origUrl?: string }> = {};
+    imagesLoadedRef.current = false;
+    setImagesLoading(true);
+    setImageBankLoading(true);
+    setImagesError(null);
 
-        for (const { idx, url } of data.images) {
-          if (idx >= 0) {
-            bank[idx] = url;
-          } else if (idx === -1) {
-            heroUrl = url;
-          } else if (idx === -2) {
-            heroOrigUrl = url;
-          } else if (idx === -3) {
-            secUrl = url;
-          } else if (idx === -4) {
-            secOrigUrl = url;
-          } else if (idx <= -10) {
-            const neg = Math.abs(idx) - 10;
-            const slot = Math.floor(neg / 2);
-            const isOrig = neg % 2 === 1;
-            if (!gallerySlots[slot]) gallerySlots[slot] = {};
-            if (isOrig) gallerySlots[slot].origUrl = url;
-            else gallerySlots[slot].url = url;
+    const received: ImageRow[] = [];
+    // Whether the untouched originals have arrived yet. It decides whether a
+    // slot missing one may fall back to the cropped photo: some older drafts
+    // genuinely have no original stored and need that fallback, but applying
+    // it while the originals are still downloading would treat every slot as
+    // having none, and a save at that moment would write the cropped photo
+    // over the original — destroying everything outside the crop.
+    let originalsIn = false;
+
+    // Rebuilds from everything received so far, so each phase can merge in
+    // without needing to know what the previous ones set.
+    const applyReceived = () => {
+      const bank: string[] = [];
+      let heroUrl = "", heroOrigUrl = "";
+      let secUrl = "", secOrigUrl = "";
+      const gallerySlots: Record<number, { url?: string; origUrl?: string }> = {};
+
+      for (const { idx, url } of received) {
+        if (idx >= 0) bank[idx] = url;
+        else if (idx === -1) heroUrl = url;
+        else if (idx === -2) heroOrigUrl = url;
+        else if (idx === -3) secUrl = url;
+        else if (idx === -4) secOrigUrl = url;
+        else if (idx <= -10) {
+          const neg = Math.abs(idx) - 10;
+          const slot = Math.floor(neg / 2);
+          if (!gallerySlots[slot]) gallerySlots[slot] = {};
+          if (neg % 2 === 1) gallerySlots[slot].origUrl = url;
+          else gallerySlots[slot].url = url;
+        }
+      }
+
+      const compactBank = bank.filter(Boolean);
+      if (compactBank.length) setImageBank(compactBank);
+
+      setImages((prev) => {
+        const next = { ...prev };
+        const fallback = (v: string, other: string) => v || (originalsIn ? other : "");
+        if ((slotsUnrecorded || blob?.hero) && (heroUrl || heroOrigUrl)) {
+          next.hero = {
+            url: fallback(heroUrl, heroOrigUrl),
+            originalUrl: fallback(heroOrigUrl, heroUrl),
+          };
+        }
+        if ((slotsUnrecorded || blob?.secondary) && (secUrl || secOrigUrl)) {
+          next.secondary = {
+            url: fallback(secUrl, secOrigUrl),
+            originalUrl: fallback(secOrigUrl, secUrl),
+          };
+        }
+        const gallery = [...prev.gallery];
+        Object.entries(gallerySlots).forEach(([s, { url: u, origUrl: o }]) => {
+          const i = parseInt(s);
+          if (!slotsUnrecorded && i >= gallerySlotCount) return; // removed slot
+          gallery[i] = { url: fallback(u ?? "", o ?? ""), originalUrl: fallback(o ?? "", u ?? "") };
+        });
+        next.gallery = gallery;
+        return next;
+      });
+    };
+
+    // Released as soon as the photos in the eblast are in, so a save or send
+    // doesn't sit through the originals and the flyer pool as well.
+    let releaseShown: () => void = () => {};
+    shownLoadedRef.current = false;
+    shownReadyRef.current = new Promise<void>((r) => { releaseShown = r; });
+
+    const ready = (async () => {
+      try {
+        for (const phase of ["shown", "originals", "pool"] as ImagePhaseName[]) {
+          const res = await fetch(`/api/saved-drafts/${draft.id}/images?phase=${phase}`);
+          const data: { ok: boolean; images?: ImageRow[] } = await res.json();
+          if (!data.ok) throw new Error("Could not load this draft's photos");
+          // A repeated photo is stored once and pointed at from its other
+          // rows; the pointer always names a row from this phase or an
+          // earlier one, so everything received so far resolves it.
+          received.push(...resolveImageRefs(data.images ?? [], received));
+          if (phase === "originals") originalsIn = true;
+          applyReceived();
+          if (phase === "shown") {
+            shownLoadedRef.current = true;
+            setImagesLoading(false);
+            releaseShown();
           }
         }
-
-        const compactBank = bank.filter(Boolean);
-        if (compactBank.length) setImageBank(compactBank);
-
-        // draft_image_bank rows for a removed slot aren't deleted when that
-        // slot is removed (only the current slots get re-upserted on save) —
-        // so a removed hero/secondary/gallery image can still have a stale
-        // row here. The main draft blob (`draft.images`, captured above) IS
-        // authoritative for which slots actually exist: null means no hero/
-        // secondary, and the gallery array's length is trimmed on removal.
-        // Only apply a slot's stale-or-not image data if the blob agrees that
-        // slot still exists — otherwise a removed image would reappear on load.
-        const gallerySlotCount = draft.images?.gallery?.length ?? 0;
-        const hasSlotImages =
-          (draft.images?.hero && (heroUrl || heroOrigUrl)) ||
-          (draft.images?.secondary && (secUrl || secOrigUrl)) ||
-          Object.keys(gallerySlots).some((s) => parseInt(s) < gallerySlotCount);
-        if (hasSlotImages) {
-          setImages((prev) => {
-            const next = { ...prev };
-            if (draft.images?.hero && (heroUrl || heroOrigUrl)) {
-              next.hero = { url: heroUrl || heroOrigUrl, originalUrl: heroOrigUrl || heroUrl };
-            }
-            if (draft.images?.secondary && (secUrl || secOrigUrl)) {
-              next.secondary = { url: secUrl || secOrigUrl, originalUrl: secOrigUrl || secUrl };
-            }
-            const gallery = [...prev.gallery];
-            Object.entries(gallerySlots).forEach(([s, { url: u, origUrl: o }]) => {
-              const i = parseInt(s);
-              if (i >= gallerySlotCount) return; // stale row for a removed gallery slot
-              gallery[i] = { url: u || o || "", originalUrl: o || u || "" };
-            });
-            next.gallery = gallery;
-            return next;
-          });
-        }
-      })
-      .catch(() => null);
+        imagesLoadedRef.current = true;
+      } catch {
+        // Leave imagesLoadedRef false so saving can't record this draft as
+        // having no photos, and say so rather than looking merely slow.
+        setImagesError("Could not load this draft's photos. Reload before saving or sending.");
+      } finally {
+        setImagesLoading(false);
+        setImageBankLoading(false);
+        // Always release, so a save or send reports the failure rather than
+        // waiting on a phase that is never going to arrive.
+        releaseShown();
+      }
+    })();
+    imagesReadyRef.current = ready;
   }, []);
 
   // ─── Discard ──────────────────────────────────────────────────────────────
   const discard = useCallback(() => {
+    resetImageLoadState();
     // Write localStorage SYNCHRONOUSLY before clearing state so GenerateView
     // can read the resume ID on its very first mount (no async race).
     const payload = buildDraftPayload();
@@ -1087,6 +1183,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setPushError(null);
     setPushResult(null);
     try {
+      // The eblast must go to HubSpot with its photos whether or not the
+      // screen has finished loading them.
+      setWaitingForImages(true);
+      try { await shownReadyRef.current; } finally { setWaitingForImages(false); }
+      if (!shownLoadedRef.current) throw new Error(imagesErrorRef.current ?? "Photos are still loading");
       // Community-page edits (colors, fonts, senders) made since this session
       // started must land in the pushed eblast — refresh before rendering.
       await refreshCommunity(c.slug);
@@ -1128,6 +1229,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (!draftId) throw new Error("Save the draft first before sending for approval.");
     const c = communityRef.current;
     if (!c) throw new Error("No community selected.");
+    // Approval and test sends carry the photos too, loaded or not.
+    setWaitingForImages(true);
+    try { await shownReadyRef.current; } finally { setWaitingForImages(false); }
+    if (!shownLoadedRef.current) throw new Error(imagesErrorRef.current ?? "Photos are still loading");
     // Same freshness guarantee as push() — the approval email must reflect
     // the community's current brand/sender, not a stale in-memory copy.
     await refreshCommunity(c.slug);
@@ -1265,6 +1370,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     stage,
     fields,
     images,
+    imagesLoading,
+    imageBankLoading,
+    imagesError,
+    waitingForImages,
     imageBank,
     draftId,
     isSaved,

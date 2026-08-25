@@ -7,12 +7,15 @@ import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 function SlotCard({
   label,
   url,
+  loading,
   onAssign,
   onRemove,
   onReposition,
 }: {
   label: string;
   url?: string | null;
+  /** This slot holds a photo that is still downloading. */
+  loading?: boolean;
   onAssign: () => void;
   onRemove?: () => void;
   onReposition?: () => void;
@@ -40,7 +43,9 @@ function SlotCard({
           )}
         </div>
       </div>
-      {url ? (
+      {loading ? (
+        <div className="h-[112px] bg-[#f0ede7] animate-pulse" aria-label={`${label} loading`} />
+      ) : url ? (
         <div className="relative">
           <img
             src={url}
@@ -121,11 +126,14 @@ function RepositionModal({
 
 function BankPicker({
   imageBank,
+  bankLoading,
   onPick,
   onClose,
   onUpload,
 }: {
   imageBank: string[];
+  /** The unplaced flyer photos are still arriving. */
+  bankLoading?: boolean;
   onPick: (url: string) => void;
   onClose: () => void;
   onUpload: (url: string) => void;
@@ -161,7 +169,13 @@ function BankPicker({
           </button>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
 
-          {imageBank.length === 0 ? (
+          {bankLoading && imageBank.length === 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="aspect-video rounded-lg bg-[#f0ede7] animate-pulse" />
+              ))}
+            </div>
+          ) : imageBank.length === 0 ? (
             <p className="text-sm text-[#9aaba4] text-center py-8">No images extracted from PDF.</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -186,7 +200,7 @@ type ActivePicker = { slot: "hero" | "secondary" | "gallery"; galleryIdx?: numbe
 type ActiveReposition = { slot: "hero" | "secondary" | "gallery"; galleryIdx?: number; originalUrl: string } | null;
 
 export default function ImagesSection() {
-  const { images, imageBank, assignImage, assignGalleryImage, removeImage, repositionImage, addToImageBank, fields, setField } = useDraft();
+  const { images, imageBank, imagesLoading, imageBankLoading, imagesError, assignImage, assignGalleryImage, removeImage, repositionImage, addToImageBank, fields, setField } = useDraft();
   const [picker, setPicker] = React.useState<ActivePicker>(null);
   const [reposition, setReposition] = React.useState<ActiveReposition>(null);
 
@@ -211,9 +225,16 @@ export default function ImagesSection() {
         <HiddenBanner label="The photo gallery" onRestore={() => setField("gallerySectionHidden", undefined)} />
       )}
 
+      {imagesError && (
+        <p className="rounded-lg bg-[#fdf2f2] border border-[#f0d5d5] px-3 py-2 text-xs text-[#9a3a34]">
+          {imagesError}
+        </p>
+      )}
+
       <SlotCard
         label="Hero Image"
         url={images.hero?.url}
+        loading={imagesLoading && !!images.hero && !images.hero.url}
         onAssign={() => setPicker({ slot: "hero" })}
         onRemove={images.hero ? () => removeImage("hero") : undefined}
         onReposition={images.hero ? () => setReposition({ slot: "hero", originalUrl: images.hero!.originalUrl }) : undefined}
@@ -222,6 +243,7 @@ export default function ImagesSection() {
       <SlotCard
         label="Secondary Image"
         url={images.secondary?.url}
+        loading={imagesLoading && !!images.secondary && !images.secondary.url}
         onAssign={() => setPicker({ slot: "secondary" })}
         onRemove={images.secondary ? () => removeImage("secondary") : undefined}
         onReposition={images.secondary ? () => setReposition({ slot: "secondary", originalUrl: images.secondary!.originalUrl }) : undefined}
@@ -250,7 +272,11 @@ export default function ImagesSection() {
           <div className="grid grid-cols-2 gap-2">
             {images.gallery.map((img, i) => (
               <div key={i} className="relative rounded-lg overflow-hidden border border-[#e8e3dc]">
-                <img src={img.url} alt={`Gallery ${i + 1}`} className="w-full aspect-video object-cover" />
+                {img.url ? (
+                  <img src={img.url} alt={`Gallery ${i + 1}`} className="w-full aspect-video object-cover" />
+                ) : (
+                  <div className="w-full aspect-video bg-[#f0ede7] animate-pulse" aria-label={`Gallery ${i + 1} loading`} />
+                )}
                 <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors flex items-center justify-center gap-2 opacity-0 hover:opacity-100">
                   <button
                     onClick={() => setReposition({ slot: "gallery", galleryIdx: i, originalUrl: img.originalUrl })}
@@ -274,6 +300,7 @@ export default function ImagesSection() {
       {picker && (
         <BankPicker
           imageBank={imageBank}
+          bankLoading={imageBankLoading}
           onPick={handlePick}
           onClose={() => setPicker(null)}
           onUpload={(url) => addToImageBank(url)}

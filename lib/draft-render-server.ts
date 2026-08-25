@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { draftImageBank } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { buildEblastHtml } from "@/lib/render-email";
+import { resolveImageRefs } from "@/lib/image-bank";
 import type { Community } from "@/lib/db/queries";
 
 /**
@@ -29,7 +30,9 @@ export async function loadDraftImageUrls(draftId: string): Promise<{
     .from(draftImageBank)
     .where(eq(draftImageBank.draftId, draftId));
 
-  const byIdx = new Map(rows.map((r) => [r.idx, r.url]));
+  // A photo stored once and pointed at from its other rows arrives here as a
+  // "ref:<idx>" pointer — expand those before any URL is read out.
+  const byIdx = new Map(resolveImageRefs(rows).map((r) => [r.idx, r.url]));
   const gallery: string[] = [];
   for (let i = 0; ; i++) {
     const url = byIdx.get(-(10 + i * 2));

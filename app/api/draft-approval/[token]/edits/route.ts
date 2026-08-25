@@ -12,7 +12,7 @@ import { inlineRelativeImages } from "@/lib/inline-images";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { randomBytes } from "node:crypto";
-import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
+import { isApprovalExpired, APPROVAL_LINK_TTL_LABEL } from "@/lib/approval-expiry";
 import { approvalBlockedReason, approvalBlockedMessage, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
 export const runtime = "nodejs";
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     return NextResponse.json(
       {
         ok: false,
-        error: `Approval links last ${APPROVAL_LINK_TTL_DAYS} days. Ask the marketing team to send this one again.`,
+        error: `Approval links last ${APPROVAL_LINK_TTL_LABEL}. Ask the marketing team to send this one again.`,
       },
       { status: 410 },
     );

@@ -1,4 +1,4 @@
-import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
+import { isApprovalExpired, APPROVAL_LINK_TTL_LABEL } from "@/lib/approval-expiry";
 
 /** Why an approval link can't be acted on. See approvalBlockedMessage. */
 export type ApprovalBlockedReason =
@@ -87,7 +87,7 @@ const BLOCKED_MESSAGE: Record<ApprovalBlockedReason, { title: string; body: stri
   },
   expired: {
     title: "Link expired",
-    body: `Approval links last ${APPROVAL_LINK_TTL_DAYS} days. Ask the marketing team to send this one again.`,
+    body: `Approval links last ${APPROVAL_LINK_TTL_LABEL}. Ask the marketing team to send this one again.`,
   },
   approved: {
     title: "Already approved",

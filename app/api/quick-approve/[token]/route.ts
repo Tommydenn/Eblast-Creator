@@ -7,7 +7,7 @@ import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generate
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { renderSavedDraftHtml, draftEventCategory } from "@/lib/draft-render-server";
 import { sendPushFailureEmail } from "@/lib/email";
-import { isApprovalExpired, APPROVAL_LINK_TTL_DAYS } from "@/lib/approval-expiry";
+import { isApprovalExpired, APPROVAL_LINK_TTL_LABEL } from "@/lib/approval-expiry";
 import { approvalBlockedReason, approvalBlockedMessage, newestApprovalTokenByDraft } from "@/lib/approval-status";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
@@ -174,7 +174,7 @@ function expiredPage(community: string, subject: string) {
     title: "Link expired",
     community,
     subject,
-    body: `Approval links last ${APPROVAL_LINK_TTL_DAYS} days. Ask the marketing team to send this one again.`,
+    body: `Approval links last ${APPROVAL_LINK_TTL_LABEL}. Ask the marketing team to send this one again.`,
   });
 }
 

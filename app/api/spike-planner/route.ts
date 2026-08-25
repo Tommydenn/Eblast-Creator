@@ -83,54 +83,123 @@ export async function GET(req: NextRequest) {
     return a;
   };
 
-  // Which Microsoft 365 groups exist — every Team has one, and Planner plans
-  // hang off them. Needs Group.Read.All or Directory.Read.All.
-  const groups = record(
-    await graph(token, "/groups?$select=id,displayName&$top=25&$filter=groupTypes/any(c:c+eq+'Unified')"),
-  );
-
-  // The two calls the feature actually depends on: find the plans in a group,
-  // then read that plan's tasks. Needs Tasks.Read.All as an APPLICATION
-  // permission — the thing in question.
+  // A plan can be named directly (?planId=…), which is all the real feature
+  // needs. Discovery is only attempted as a fallback, because listing groups
+  // needs Group.Read.All — a much broader grant worth avoiding if the plan is
+  // simply configured.
+  const planId = req.nextUrl.searchParams.get("planId");
   const plansFound: Array<{ group: string; plan: string; planId: string }> = [];
-  let tasksSample: any = null;
 
-  if (groups.ok && Array.isArray(groups.body?.value)) {
-    for (const g of groups.body.value.slice(0, 10)) {
-      const plans = record(await graph(token, `/groups/${g.id}/planner/plans`));
-      if (!plans.ok) break; // same permission error will repeat; one is enough
-      for (const p of plans.body?.value ?? []) {
-        plansFound.push({ group: g.displayName, plan: p.title, planId: p.id });
+  if (!planId) {
+    const groups = record(
+      await graph(token, "/groups?$select=id,displayName&$top=25&$filter=groupTypes/any(c:c+eq+'Unified')"),
+    );
+    if (groups.ok && Array.isArray(groups.body?.value)) {
+      for (const g of groups.body.value.slice(0, 10)) {
+        const plans = record(await graph(token, `/groups/${g.id}/planner/plans`));
+        if (!plans.ok) break; // the same permission error would just repeat
+        for (const p of plans.body?.value ?? []) {
+          plansFound.push({ group: g.displayName, plan: p.title, planId: p.id });
+        }
+        if (plansFound.length) break;
       }
-      if (plansFound.length) break;
     }
   }
 
-  if (plansFound.length) {
-    const t = record(await graph(token, `/planner/plans/${plansFound[0].planId}/tasks`));
-    if (t.ok) {
-      tasksSample = (t.body?.value ?? []).slice(0, 5).map((x: any) => ({
-        title: x.title,
-        dueDateTime: x.dueDateTime,
-        bucketId: x.bucketId,
-        percentComplete: x.percentComplete,
-        hasDescription: !!x.hasDescription,
-        referenceCount: x.referenceCount,
-      }));
+  const targetPlan = planId ?? plansFound[0]?.planId;
+  let tasksSample: any = null;
+  let attachmentCheck: any = null;
+  let writeCheck: any = null;
+
+  if (targetPlan) {
+    // 1. READ — the core capability. Needs Tasks.Read.All or ReadWrite.All.
+    const t = record(await graph(token, `/planner/plans/${targetPlan}/tasks`));
+    const tasks: any[] = t.ok ? (t.body?.value ?? []) : [];
+    tasksSample = tasks.slice(0, 15).map((x) => ({
+      id: x.id,
+      title: x.title,
+      dueDateTime: x.dueDateTime,
+      percentComplete: x.percentComplete,
+      hasDescription: !!x.hasDescription,
+      attachments: x.referenceCount ?? 0,
+    }));
+
+    // 2. ATTACHMENTS — a Planner attachment is a LINK to a file living in the
+    // team's SharePoint library, not a blob on the task. Reading the task only
+    // yields the URL; fetching the flyer itself needs Files.Read.All. Without
+    // this the generated eblasts would have no photos.
+    const withFile = tasks.find((x) => (x.referenceCount ?? 0) > 0);
+    if (withFile) {
+      const details = record(await graph(token, `/planner/tasks/${withFile.id}/details`));
+      const refs = Object.keys(details.body?.references ?? {});
+      const decoded = refs.map((r) => decodeURIComponent(r));
+      attachmentCheck = { task: withFile.title, referenceUrls: decoded.slice(0, 5), downloaded: null };
+
+      if (decoded.length) {
+        // Graph resolves a sharing URL to the underlying file this way.
+        const shareId =
+          "u!" + Buffer.from(decoded[0]).toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-");
+        const item = record(await graph(token, `/shares/${shareId}/driveItem`));
+        attachmentCheck.downloaded = item.ok
+          ? { name: item.body?.name, sizeBytes: item.body?.size, mimeType: item.body?.file?.mimeType }
+          : `FAILED — ${item.detail}`;
+      }
+    } else if (tasks.length) {
+      attachmentCheck = "No task in this plan has an attachment, so the flyer path is untested.";
+    }
+
+    // 3. WRITE — marking a task in progress. Only runs when explicitly asked
+    // with ?write=<taskId>, so a diagnostic never quietly edits real work.
+    const writeTaskId = req.nextUrl.searchParams.get("write");
+    if (writeTaskId) {
+      const cur = await graph(token, `/planner/tasks/${writeTaskId}`);
+      const etag = cur.body?.["@odata.etag"];
+      if (!cur.ok || !etag) {
+        writeCheck = `Could not read the task to update — ${cur.detail}`;
+      } else {
+        const res = await fetch(`${GRAPH}/planner/tasks/${writeTaskId}`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "If-Match": etag,
+          },
+          // 50 = in progress, which is all this feature would ever set.
+          body: JSON.stringify({ percentComplete: 50 }),
+        });
+        const body = await res.text();
+        attempts.push({
+          call: `PATCH /planner/tasks/${writeTaskId}`,
+          status: res.status,
+          ok: res.ok,
+          detail: res.ok ? "marked in progress" : body.slice(0, 200),
+        });
+        writeCheck = res.ok
+          ? "Write works — the task was set to In progress. Set it back by hand."
+          : `Write failed — ${body.slice(0, 200)}`;
+      }
     }
   }
 
-  const plannerWorks = attempts.some((a) => a.call.includes("/planner/") && a.ok);
+  const canRead = attempts.some((a) => a.call.includes("/planner/") && a.ok);
 
   return NextResponse.json({
     ok: true,
-    verdict: plannerWorks
+    verdict: canRead
       ? "App-only Planner access WORKS with the existing credentials."
       : "App-only Planner access does NOT work yet — see grantedApplicationPermissions and attempts.",
     grantedApplicationPermissions: roles,
-    hasTasksPermission: roles.some((r) => r.startsWith("Tasks.")),
+    capabilities: {
+      readTasks: canRead,
+      readAttachedFlyer:
+        attachmentCheck && typeof attachmentCheck === "object"
+          ? attachmentCheck.downloaded && typeof attachmentCheck.downloaded === "object"
+          : "untested",
+      markInProgress: writeCheck ?? "untested — pass ?write=<taskId> to try it",
+    },
     attempts,
     plansFound: plansFound.slice(0, 10),
     tasksSample,
+    attachmentCheck,
   });
 }

@@ -4,8 +4,6 @@ import { savedDrafts, savedDraftApprovals } from "@/lib/db/schema";
 import { eq, desc, inArray, isNull, and } from "drizzle-orm";
 import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
-const MAX_PER_COMMUNITY = 8;
-
 // GET /api/saved-drafts?communitySlug=X  — filter by community (omit for all)
 // Only returns non-deleted drafts — see /api/saved-drafts/deleted for the trash view.
 export async function GET(req: NextRequest) {
@@ -76,7 +74,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/saved-drafts  — saves a draft, enforces per-community cap
+// POST /api/saved-drafts  — saves a draft. No limit on how many a community
+// may keep: drafts are only ever removed when someone deletes one.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body?.draft) {
@@ -109,22 +108,6 @@ export async function POST(req: NextRequest) {
           data: draft,
         },
       });
-
-    // Enforce the per-community cap — soft-delete (move to trash) the oldest
-    // if over limit, same as a manual delete, so an auto-evicted draft is
-    // still recoverable for 30 days rather than lost outright. Approved
-    // drafts (a salesperson approved them via the approval email) are exempt
-    // — they're a record of what actually went out, not work-in-progress.
-    const existing = await db
-      .select({ id: savedDrafts.id, approvedAt: savedDrafts.approvedAt })
-      .from(savedDrafts)
-      .where(and(eq(savedDrafts.communitySlug, communitySlug), isNull(savedDrafts.deletedAt)))
-      .orderBy(desc(savedDrafts.savedAt));
-    const evictionCandidates = existing.filter((r) => !r.approvedAt);
-    if (evictionCandidates.length > MAX_PER_COMMUNITY) {
-      const toDelete = evictionCandidates.slice(MAX_PER_COMMUNITY).map((r) => r.id);
-      await db.update(savedDrafts).set({ deletedAt: new Date() }).where(inArray(savedDrafts.id, toDelete));
-    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

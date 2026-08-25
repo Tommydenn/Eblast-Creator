@@ -278,7 +278,6 @@ export const savedDrafts = pgTable("saved_drafts", {
    * Set when a salesperson approves this draft via the approval email
    * (quick-approve route) and it's successfully pushed to HubSpot. NOT set on
    * an edit request — only a genuine approval marks a draft this way.
-   * Approved drafts are exempt from the per-community cap-eviction below.
    */
   approvedAt: timestamp("approved_at", { withTimezone: true }),
   /**
@@ -296,9 +295,11 @@ export const savedDrafts = pgTable("saved_drafts", {
    * Drafts list — the row (and its data/images/approval history) stays
    * intact and recoverable via the Deleted Drafts view until the daily
    * purge cron hard-deletes it 30 days later (see
-   * app/api/cron/purge-deleted-drafts). Cap-eviction (the automatic
-   * per-community 8-draft limit) also soft-deletes rather than hard-deletes,
-   * for the same recoverability.
+   * app/api/cron/purge-deleted-drafts).
+   *
+   * Only ever set by a person deleting a draft. There was once an automatic
+   * per-community limit that evicted the oldest draft on save; it is gone, and
+   * a community may now keep as many drafts as it likes.
    */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });

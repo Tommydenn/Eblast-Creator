@@ -22,8 +22,8 @@
  * Complete — because a draft is waiting for a person, not finished.
  */
 import { db } from "@/lib/db";
-import { savedDrafts, plannerTasks, draftImageBank } from "@/lib/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { savedDrafts, plannerTasks, plannerTaskFlyers, draftImageBank } from "@/lib/db/schema";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { listCommunities, getCommunity } from "@/data/communities";
 import {
   isTaskInProgress,
@@ -106,6 +106,14 @@ export async function runPlannerDraftPass(opts?: {
 
   const lookaheadDays = await getLookaheadDays();
   const all = await listAssignedTasks(userEmail, token);
+
+  // Drafts made before the flyer was kept, or before the Planner ordering was
+  // recorded, have neither. Filling those in here means they heal themselves
+  // over a run or two instead of needing a one-off script. Capped so this
+  // never eats the time meant for drafting.
+  if (!opts?.dryRun) {
+    await backfillFlyersAndOrder(all, token);
+  }
   summary.scanned = all.length;
 
   const candidates = all.filter(
@@ -192,6 +200,27 @@ export async function runPlannerDraftPass(opts?: {
 
       await draftFromTask(task, community.slug, flyer.bytes, draftId);
 
+      // Hold on to the flyer so it can be opened next to the draft. It was
+      // already downloaded to generate from; throwing it away is what made
+      // checking the eblast against its source impossible.
+      await db
+        .insert(plannerTaskFlyers)
+        .values({
+          taskId: task.id,
+          fileName: flyer.fileName,
+          pdfBase64: flyer.bytes.toString("base64"),
+          bytes: flyer.bytes.length,
+        })
+        .onConflictDoUpdate({
+          target: plannerTaskFlyers.taskId,
+          set: {
+            fileName: flyer.fileName,
+            pdfBase64: flyer.bytes.toString("base64"),
+            bytes: flyer.bytes.length,
+            storedAt: new Date(),
+          },
+        });
+
       let marked = false;
       let markError = "";
       try {
@@ -213,6 +242,7 @@ export async function runPlannerDraftPass(opts?: {
         .update(plannerTasks)
         .set({
           savedDraftId: draftId,
+          assigneePriority: task.assigneePriority,
           markedInProgress: marked,
           skipReason: null,
           lastError: null,
@@ -260,6 +290,55 @@ export async function runPlannerDraftPass(opts?: {
 
   summary.remaining = Math.max(0, summary.remaining);
   return summary;
+}
+
+/**
+ * Give existing drafts the two things added after they were made: the flyer
+ * they came from, and their place in the Planner list.
+ *
+ * A missing flyer costs a download, so only a few are done per run. A missing
+ * order is free, since the task list is already in hand.
+ */
+const BACKFILL_FLYERS_PER_RUN = 8;
+
+async function backfillFlyersAndOrder(tasks: PlannerTask[], token: string): Promise<void> {
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+
+  // Ordering first: no extra calls, so every stale row can be fixed at once.
+  const missingOrder = await db
+    .select({ taskId: plannerTasks.taskId })
+    .from(plannerTasks)
+    .where(and(isNotNull(plannerTasks.savedDraftId), isNull(plannerTasks.assigneePriority)));
+  for (const row of missingOrder) {
+    const priority = byId.get(row.taskId)?.assigneePriority;
+    if (!priority) continue;
+    await db
+      .update(plannerTasks)
+      .set({ assigneePriority: priority })
+      .where(eq(plannerTasks.taskId, row.taskId));
+  }
+
+  const missingFlyer = await db
+    .select({ taskId: plannerTasks.taskId })
+    .from(plannerTasks)
+    .leftJoin(plannerTaskFlyers, eq(plannerTaskFlyers.taskId, plannerTasks.taskId))
+    .where(and(isNotNull(plannerTasks.savedDraftId), isNull(plannerTaskFlyers.taskId)))
+    .limit(BACKFILL_FLYERS_PER_RUN);
+
+  for (const row of missingFlyer) {
+    try {
+      const flyer = await downloadTaskFlyer(row.taskId, token);
+      if (!flyer) continue;
+      await db.insert(plannerTaskFlyers).values({
+        taskId: row.taskId,
+        fileName: flyer.fileName,
+        pdfBase64: flyer.bytes.toString("base64"),
+        bytes: flyer.bytes.length,
+      }).onConflictDoNothing();
+    } catch (e) {
+      console.error(`[planner] could not fetch the flyer for ${row.taskId}:`, e);
+    }
+  }
 }
 
 /** Note that a task was seen and passed over, without claiming it. */

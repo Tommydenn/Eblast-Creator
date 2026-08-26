@@ -464,6 +464,8 @@ export const plannerTasks = pgTable("planner_tasks", {
   lastError: text("last_error"),
   /** Three failures: stop retrying, leave unchecked, hand to the marketing team. */
   abandoned: boolean("abandoned").notNull().default(false),
+  /** Planner s ordering value for the My Tasks list, so Pending Drafts can match it. */
+  assigneePriority: text("assignee_priority"),
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
   draftedAt: timestamp("drafted_at", { withTimezone: true }),
 });
@@ -513,3 +515,23 @@ export const plannerRuns = pgTable("planner_runs", {
 });
 
 export type PlannerRunRow = InferSelectModel<typeof plannerRuns>;
+
+
+// ---------- planner task flyers -------------------------------------------
+// The PDF a draft was generated from, kept so it can be opened alongside the
+// draft to check the eblast against the source.
+//
+// Its own table rather than a column on planner_tasks, so a multi-megabyte PDF
+// is never dragged in by a query that only wanted a task title.
+
+export const plannerTaskFlyers = pgTable("planner_task_flyers", {
+  taskId: text("task_id")
+    .primaryKey()
+    .references(() => plannerTasks.taskId, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  pdfBase64: text("pdf_base64").notNull(),
+  bytes: integer("bytes").notNull(),
+  storedAt: timestamp("stored_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type PlannerTaskFlyerRow = InferSelectModel<typeof plannerTaskFlyers>;

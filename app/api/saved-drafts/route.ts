@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { savedDrafts, savedDraftApprovals, plannerTasks } from "@/lib/db/schema";
+import { savedDrafts, savedDraftApprovals, plannerTasks, plannerTaskFlyers } from "@/lib/db/schema";
 import { eq, desc, inArray, isNull, isNotNull, and } from "drizzle-orm";
 import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
@@ -83,8 +83,11 @@ export async function GET(req: NextRequest) {
             savedDraftId: plannerTasks.savedDraftId,
             taskTitle: plannerTasks.title,
             dueAt: plannerTasks.dueAt,
+            assigneePriority: plannerTasks.assigneePriority,
+            flyerName: plannerTaskFlyers.fileName,
           })
           .from(plannerTasks)
+          .leftJoin(plannerTaskFlyers, eq(plannerTaskFlyers.taskId, plannerTasks.taskId))
           .where(inArray(plannerTasks.savedDraftId, rawRows.map((r) => r.id)))
       : [];
     const taskByDraft = new Map(taskRows.filter((t) => t.savedDraftId).map((t) => [t.savedDraftId!, t]));
@@ -98,16 +101,25 @@ export async function GET(req: NextRequest) {
         fromPlanner: !!task,
         taskTitle: task?.taskTitle ?? null,
         dueAt: task?.dueAt ?? null,
+        assigneePriority: task?.assigneePriority ?? null,
+        /** Whether the flyer it was generated from can be opened alongside it. */
+        hasFlyer: !!task?.flyerName,
+        flyerName: task?.flyerName ?? null,
       };
     });
 
     const awaitingAction = (r: (typeof rows)[number]) => r.fromPlanner && !r.pushedAt && !r.approvedAt;
     if (view === "pending") {
-      // Soonest due first — the due date is the send deadline, so the top of
-      // this list is the most urgent thing to look at.
-      rows = rows
-        .filter(awaitingAction)
-        .sort((a, b) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
+      // Same order as Planner's My Tasks list. assigneePriority is Planner's
+      // own ordering value for that list — opaque strings that sort
+      // lexicographically — so matching it means the first task on screen
+      // there is the first draft here. Tasks that have never been given a
+      // position have none, and fall back to the send deadline.
+      const byPriority = rows.filter(awaitingAction).filter((r) => r.assigneePriority);
+      const rest = rows.filter(awaitingAction).filter((r) => !r.assigneePriority);
+      byPriority.sort((a, b) => String(a.assigneePriority).localeCompare(String(b.assigneePriority)));
+      rest.sort((a, b) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
+      rows = [...byPriority, ...rest];
     } else if (view === "saved") {
       rows = rows.filter((r) => !awaitingAction(r));
     }

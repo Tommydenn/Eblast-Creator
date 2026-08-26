@@ -26,6 +26,15 @@ export interface PlannerTask {
   dueDateTime: string | null;
   percentComplete: number;
   attachmentCount: number;
+  /**
+   * Planner s own ordering value for the "My Tasks" list.
+   *
+   * Opaque strings that sort lexicographically. This is the field that decides
+   * the order someone sees in My Tasks, which is why it is carried through:
+   * matching it makes Pending Drafts read in the same order as Planner.
+   * Empty for tasks that have never been dragged into a position.
+   */
+  assigneePriority: string | null;
 }
 
 export interface PlannerAttachment {
@@ -49,6 +58,7 @@ export async function listAssignedTasks(userEmail: string, token?: string): Prom
     dueDateTime: x.dueDateTime ?? null,
     percentComplete: x.percentComplete ?? 0,
     attachmentCount: x.referenceCount ?? 0,
+    assigneePriority: x.assigneePriority ?? null,
   }));
 }
 

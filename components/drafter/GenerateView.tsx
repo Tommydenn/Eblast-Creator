@@ -19,6 +19,12 @@ interface DraftMeta {
   pushedAt: string | null;
   pendingApproval: boolean;
   isNewFormat: boolean;
+  /** True when the daily Planner pass created this draft rather than a person. */
+  fromPlanner?: boolean;
+  /** The Planner task's own title, e.g. "Eblast - Oktoberfest October 8". */
+  taskTitle?: string | null;
+  /** When the eblast has to go out, taken from the task's due date. */
+  dueAt?: string | null;
 }
 
 function DraftCard({
@@ -68,6 +74,17 @@ function DraftCard({
           </p>
           <p className="text-[10px] text-[#b0a89f] shrink-0">{relTime}</p>
         </div>
+
+        {draft.dueAt && (
+          <p className="mb-1.5 text-[10px] font-semibold text-[#8a6d3b]">
+            Send by{" "}
+            {new Date(draft.dueAt).toLocaleDateString(undefined, {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })}
+          </p>
+        )}
 
         {/* Subject */}
         <p className={`text-sm font-medium leading-snug line-clamp-2 ${isLegacy ? "text-[#7a8c85]" : "text-[#1a1a1a]"}`}>
@@ -144,7 +161,7 @@ function DraftCard({
   );
 }
 
-function SavedDraftsView() {
+function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
   const { loadSavedDraft, communities } = useDraft();
   const [drafts, setDrafts] = useState<DraftMeta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,7 +175,7 @@ function SavedDraftsView() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch("/api/saved-drafts")
+    fetch(`/api/saved-drafts?view=${view}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) {
@@ -169,7 +186,7 @@ function SavedDraftsView() {
       .catch((e) => { if (!cancelled) setFetchError(String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [view]);
 
   const openDraft = useCallback(async (id: string) => {
     setOpeningId(id);
@@ -311,7 +328,11 @@ function SavedDraftsView() {
       {/* Cards grid */}
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[#ddd8d0] py-12 text-center">
-          <p className="text-sm text-[#9aaba4]">No drafts match your search.</p>
+          <p className="text-sm text-[#9aaba4]">
+            {view === "pending"
+              ? "Nothing waiting. Drafts made from your Planner tasks show up here."
+              : "No drafts match your search."}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -586,7 +607,7 @@ export default function GenerateView() {
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
   const [dragOver, setDragOver] = useState(false);
-  const [tab, setTab] = useState<"new" | "drafts" | "deleted">("new");
+  const [tab, setTab] = useState<"new" | "pending" | "drafts" | "deleted">("new");
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
   const [isResuming, setIsResuming] = useState(false);
 
@@ -679,6 +700,15 @@ export default function GenerateView() {
               ].join(" ")}
             >
               New Draft
+            </button>
+            <button
+              onClick={() => setTab("pending")}
+              className={[
+                "px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
+                tab === "pending" ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
+              ].join(" ")}
+            >
+              Pending Drafts
             </button>
             <button
               onClick={() => setTab("drafts")}
@@ -904,8 +934,10 @@ export default function GenerateView() {
                 </div>
               </div>
             </div>
+          ) : tab === "pending" ? (
+            <SavedDraftsView view="pending" />
           ) : tab === "drafts" ? (
-            <SavedDraftsView />
+            <SavedDraftsView view="saved" />
           ) : (
             <DeletedDraftsView />
           )}

@@ -428,3 +428,36 @@ export const approvalThreads = pgTable("approval_threads", {
   sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
 });
+
+// ---------- planner tasks (scheduled drafting from Microsoft Planner) -------
+// One row per Planner task the daily job has acted on.
+//
+// Planner task status is the real guard against drafting the same task twice:
+// a drafted task is marked In progress, which removes it from the job's view,
+// and a person handling one themselves does the same. This table is the
+// backstop for the gap between creating a draft and successfully writing that
+// status back — without it, a failed write would mean a second draft tomorrow.
+//
+// It's also what the Pending Drafts tab reads: a draft with a row here came
+// from a task rather than from someone uploading a flyer by hand.
+
+export const plannerTasks = pgTable("planner_tasks", {
+  taskId: text("task_id").primaryKey(),
+  planId: text("plan_id").notNull(),
+  /** Resolved from the PLAN's title — task titles name the event, not the community. */
+  communitySlug: varchar("community_slug", { length: 64 }),
+  title: text("title").notNull(),
+  dueAt: timestamp("due_at", { withTimezone: true }),
+  /** Null until a draft exists. Cleared if that draft is hard-deleted. */
+  savedDraftId: text("saved_draft_id").references(() => savedDrafts.id, { onDelete: "set null" }),
+  /** False means the draft exists but Planner wasn't updated — see above. */
+  markedInProgress: boolean("marked_in_progress").notNull().default(false),
+  /** Why it was passed over: no flyer yet, unknown community, generation failed. */
+  skipReason: text("skip_reason"),
+  attempts: integer("attempts").notNull().default(0),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  draftedAt: timestamp("drafted_at", { withTimezone: true }),
+});
+
+export type PlannerTaskRow = InferSelectModel<typeof plannerTasks>;
+export type NewPlannerTaskRow = InferInsertModel<typeof plannerTasks>;

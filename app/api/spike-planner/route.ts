@@ -14,6 +14,7 @@
  * Protected by SPIKE_SECRET so only a caller holding that value can run it.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { runPlannerDraftPass } from "@/lib/planner-drafts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +49,23 @@ export async function GET(req: NextRequest) {
   const expected = process.env.SPIKE_SECRET ?? "";
   if (!expected || req.nextUrl.searchParams.get("key") !== expected) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Run the real daily pass by hand. The cron route is gated on CRON_SECRET,
+  // whose value is not readable, so this is how the pass gets exercised
+  // against real tasks before it is trusted to run on a schedule.
+  //   ?pass=dry            report what it would do, write nothing
+  //   ?pass=real&limit=1   actually draft, capped so one can be inspected
+  const pass = req.nextUrl.searchParams.get("pass");
+  if (pass === "dry" || pass === "real") {
+    const limitRaw = Number(req.nextUrl.searchParams.get("limit"));
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : undefined;
+    try {
+      const summary = await runPlannerDraftPass({ dryRun: pass === "dry", limit, startedAt: Date.now() });
+      return NextResponse.json({ ok: true, mode: pass, ...summary });
+    } catch (e: any) {
+      return NextResponse.json({ ok: false, mode: pass, error: e?.message ?? String(e) }, { status: 500 });
+    }
   }
 
   const { GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET } = process.env;

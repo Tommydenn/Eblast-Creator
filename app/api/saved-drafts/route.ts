@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { savedDrafts, savedDraftApprovals } from "@/lib/db/schema";
+import { savedDrafts, savedDraftApprovals, plannerTasks } from "@/lib/db/schema";
 import { eq, desc, inArray, isNull, and } from "drizzle-orm";
 import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
 // GET /api/saved-drafts?communitySlug=X  — filter by community (omit for all)
 // Only returns non-deleted drafts — see /api/saved-drafts/deleted for the trash view.
+/**
+ * ?view=pending  — drafts the schedule made from a Planner task that nobody
+ *                  has acted on yet. This is the "Pending Drafts" tab.
+ * ?view=saved    — everything else: drafts made by hand, plus scheduled ones
+ *                  that have since been pushed or approved, which are then a
+ *                  record rather than something waiting for you.
+ * omitted        — everything, unchanged, for any other caller.
+ *
+ * A draft never appears under both, and a scheduled draft moves from one to
+ * the other by being acted on rather than by anything changing about it.
+ */
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("communitySlug");
+  const view = req.nextUrl.searchParams.get("view");
   try {
     const query = db
       .select({
@@ -62,11 +74,44 @@ export async function GET(req: NextRequest) {
         .map((a) => a.savedDraftId),
     );
 
-    const rows = rawRows.map(({ data, ...meta }) => ({
-      ...meta,
-      isNewFormat: !!(data as any)?.fields,
-      pendingApproval: pendingIds.has(meta.id),
-    }));
+    // Where each draft came from. A row here means a Planner task produced it;
+    // the task's title and due date ride along, since the due date is the day
+    // the eblast actually has to go out.
+    const taskRows = rawRows.length
+      ? await db
+          .select({
+            savedDraftId: plannerTasks.savedDraftId,
+            taskTitle: plannerTasks.title,
+            dueAt: plannerTasks.dueAt,
+          })
+          .from(plannerTasks)
+          .where(inArray(plannerTasks.savedDraftId, rawRows.map((r) => r.id)))
+      : [];
+    const taskByDraft = new Map(taskRows.filter((t) => t.savedDraftId).map((t) => [t.savedDraftId!, t]));
+
+    let rows = rawRows.map(({ data, ...meta }) => {
+      const task = taskByDraft.get(meta.id);
+      return {
+        ...meta,
+        isNewFormat: !!(data as any)?.fields,
+        pendingApproval: pendingIds.has(meta.id),
+        fromPlanner: !!task,
+        taskTitle: task?.taskTitle ?? null,
+        dueAt: task?.dueAt ?? null,
+      };
+    });
+
+    const awaitingAction = (r: (typeof rows)[number]) => r.fromPlanner && !r.pushedAt && !r.approvedAt;
+    if (view === "pending") {
+      // Soonest due first — the due date is the send deadline, so the top of
+      // this list is the most urgent thing to look at.
+      rows = rows
+        .filter(awaitingAction)
+        .sort((a, b) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
+    } else if (view === "saved") {
+      rows = rows.filter((r) => !awaitingAction(r));
+    }
+
     return NextResponse.json({ ok: true, drafts: rows });
   } catch (err) {
     console.error("[saved-drafts GET]", err);

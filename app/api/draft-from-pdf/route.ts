@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, asc } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
-import { buildDraft } from "@/lib/build-draft";
-import { extractFlyerContent } from "@/lib/anthropic";
-import { extractImagesFromPdf, cropDataUriToAspectRatio } from "@/lib/pdf-images";
-import { classifyImagesForSlots } from "@/lib/image-selector";
-import { buildEblastHtml } from "@/lib/render-email";
-import { inlineRelativeImages } from "@/lib/inline-images";
-import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
-import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
+import { generateDraft, TransientDraftError } from "@/lib/generate-draft";
 import { db } from "@/lib/db";
 import { pdfChunks } from "@/lib/db/schema";
 
@@ -93,119 +86,43 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Recent sends for this community, threaded into the drafter as context.
-  const pastSends = await getRecentSendsForCommunity({ communityId: community.id, limit: 12 });
-
-  // Image extraction runs in parallel with the draft so both are ready before
-  // slots are assigned.
-  const [imagesResult, initialDraftResult] = await Promise.allSettled([
-    buffer ? extractImagesFromPdf(buffer) : Promise.reject(new Error("No PDF — text-only draft")),
-    extractFlyerContent({
-      pdfBase64: buffer ? buffer.toString("base64") : undefined,
-      notes: notes || undefined,
-      community,
-      pastSends,
-    }),
-  ]);
-
-  if (initialDraftResult.status === "rejected") {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: `Initial draft failed: ${initialDraftResult.reason}`,
-        step: "initial_draft",
-      },
-      { status: 500 },
-    );
-  }
-
-  const imageRun =
-    imagesResult.status === "fulfilled"
-      ? imagesResult.value
-      : {
-          images: [],
-          diagnostic: {
-            method: "none" as const,
-            totalStreams: 0,
-            imageStreams: 0,
-            imagesExtracted: 0,
-            imagesSkipped: 0,
-            cmykConvertedToSrgb: 0,
-            cmykConvertedVia: { mupdf: 0, sharp: 0 },
-            cmykConversionFailed: 0,
-            imagesByFormat: { jpeg: 0, jpeg2000: 0, flate: 0, ccitt: 0, other: 0 },
-            errors: [String((imagesResult as any).reason)],
-            imageDetails: [],
-          },
-        };
-
-  // Rank images by relevance to the event before entering the loop so the
-  // most contextually appropriate photo becomes hero rather than whichever
-  // happened to have the largest pixel area. Failures fall back gracefully.
-  let rankedImages = imageRun.images;
+  // The pipeline itself lives in lib/generate-draft so the scheduled Planner
+  // job runs the identical path rather than a second copy that would drift.
+  let generated;
   try {
-    rankedImages = await classifyImagesForSlots(imageRun.images);
-  } catch {
-    // fall back to area-sorted order
-  }
-
-  // Single pass: the drafter's output stands as written. There is no reviewer.
-  let loop;
-  try {
-    loop = await buildDraft({
-      initialDraft: initialDraftResult.value,
-      community,
-      availableImages: rankedImages,
-      pastSends,
-    });
+    generated = await generateDraft({ community, pdf: buffer, notes: notes || undefined });
   } catch (e: any) {
-    console.error("[draft-from-pdf] Draft assembly threw:", e);
-    const isTransient = e?.status === 500 || e?.status === 503 || e?.status === 529;
+    const transient = e instanceof TransientDraftError;
+    if (!transient) console.error("[draft-from-pdf] generation failed:", e);
     return NextResponse.json(
       {
         ok: false,
-        error: isTransient
+        error: transient
           ? "Anthropic's API returned a temporary error. Please try generating again — it usually resolves on the next attempt."
-          : `Draft assembly failed: ${e.message ?? String(e)}`,
+          : e?.message ?? String(e),
         step: "draft",
-        retryable: isTransient,
-        stack: process.env.NODE_ENV === "development" ? e.stack : undefined,
+        retryable: transient,
+        stack: process.env.NODE_ENV === "development" ? e?.stack : undefined,
       },
       { status: 500 },
     );
   }
 
-  const extracted = loop.finalDraft;
-  const rawHero = loop.finalImages.heroDataUri;
-  const rawSecondary = loop.finalImages.secondaryDataUri;
-  const rawGallery = loop.finalImages.galleryDataUris ?? [];
-
-  // Crop all images to consistent aspect ratios so the email grid looks intentional.
-  // Hero + secondary → 16:9 (matches the 600×338 / 528×297 HTML slots).
-  // Gallery tiles → 4:3 (classic photography proportion, works at any column count).
-  const [heroImageUrl, secondaryImageUrl, ...galleryImageUrls] = await Promise.all([
-    rawHero ? cropDataUriToAspectRatio(rawHero, 16 / 9) : Promise.resolve(undefined as string | undefined),
-    rawSecondary ? cropDataUriToAspectRatio(rawSecondary, 16 / 9) : Promise.resolve(undefined as string | undefined),
-    ...rawGallery.map((uri) => cropDataUriToAspectRatio(uri, 4 / 3)),
-  ]);
-
-  // Use sentinel placeholders — images are returned as separate fields and
-  // injected client-side, so they aren't duplicated inside the HTML blob.
-  const galleryCount = (galleryImageUrls as (string | undefined)[]).filter(Boolean).length;
-  const html = await inlineRelativeImages(buildEblastHtml(extracted, community, {
-    heroImageUrl: heroImageUrl ? SENTINEL_HERO : undefined,
-    secondaryImageUrl: secondaryImageUrl ? SENTINEL_SECONDARY : undefined,
-    galleryImageUrls: galleryCount > 0
-      ? Array.from({ length: galleryCount }, (_, i) => sentinelGallery(i))
-      : undefined,
-  }));
-
-  // All original (pre-crop) ranked images — passed to the refine tool so the
-  // AI can reference them for fresh crops, and shown in the image bank so the
-  // user can swap images with full control over crop focus.
-  const allExtractedImageUrls: string[] = rankedImages
-    .map((img) => img.dataUri)
-    .filter((u): u is string => !!u);
+  const {
+    extracted,
+    html,
+    heroImageUrl,
+    secondaryImageUrl,
+    galleryImageUrls,
+    heroOriginalUrl,
+    secondaryOriginalUrl,
+    galleryOriginalUrls,
+    allExtractedImageUrls,
+    imageCount,
+    imageDiagnostic,
+    pastSendsContext,
+    subjectSpecialist,
+  } = generated;
 
   return NextResponse.json({
     ok: true,
@@ -215,15 +132,15 @@ export async function POST(req: NextRequest) {
     heroImageUrl,
     secondaryImageUrl,
     galleryImageUrls,
-    heroOriginalUrl: rawHero,
-    secondaryOriginalUrl: rawSecondary,
-    galleryOriginalUrls: rawGallery,
+    heroOriginalUrl,
+    secondaryOriginalUrl,
+    galleryOriginalUrls,
     allExtractedImageUrls,
-    imageCount: imageRun.images.length,
-    imageDiagnostic: imageRun.diagnostic,
+    imageCount,
+    imageDiagnostic,
     // Echo back the past sends the drafter saw this round so the UI can
     // render an "Intelligence applied" panel — proof of memory.
-    pastSendsContext: pastSends,
-    subjectSpecialist: loop.subjectSpecialist,
+    pastSendsContext,
+    subjectSpecialist,
   });
 }

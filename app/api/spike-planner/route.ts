@@ -241,23 +241,50 @@ export async function GET(req: NextRequest) {
   // simply stays Not started and gets re-checked each day, so if the flyer is
   // attached later it is picked up, and if a person deals with it instead
   // their status change ends it.
-  const decided = (userTasks && typeof userTasks === "object" ? userTasks.sample : tasksSample) ?? [];
+  const decided = (userTasks && typeof userTasks === "object" ? userTaskRows : tasksSample) ?? [];
   const isEblastTitle = (t: any) => /^\s*eblast\b/i.test(t.title ?? "");
   const notStarted = (t: any) => (t.percentComplete ?? 0) === 0;
+  const files = (t: any) => t.referenceCount ?? t.attachments ?? 0;
   const triage = Array.isArray(decided)
     ? {
-        wouldDraft: decided
-          .filter((t: any) => notStarted(t) && isEblastTitle(t) && (t.attachments ?? 0) > 0)
-          .map((t: any) => t.title),
-        eblastButNoFlyer: decided
-          .filter((t: any) => notStarted(t) && isEblastTitle(t) && (t.attachments ?? 0) === 0)
-          .map((t: any) => t.title),
-        skippedAlreadyUnderway: decided
-          .filter((t: any) => !notStarted(t) && isEblastTitle(t))
-          .map((t: any) => `${t.title} (${t.percentComplete}%)`),
-        ignoredNotAnEblast: decided.filter((t: any) => !isEblastTitle(t)).map((t: any) => t.title),
+        wouldDraft: decided.filter((t: any) => notStarted(t) && isEblastTitle(t) && files(t) > 0).length,
+        eblastButNoFlyer: decided.filter((t: any) => notStarted(t) && isEblastTitle(t) && files(t) === 0).length,
+        skippedAlreadyUnderway: decided.filter((t: any) => !notStarted(t) && isEblastTitle(t)).length,
+        ignoredNotAnEblast: decided.filter((t: any) => !isEblastTitle(t)).length,
+        wouldDraftTitles: decided
+          .filter((t: any) => notStarted(t) && isEblastTitle(t) && files(t) > 0)
+          .slice(0, 20)
+          .map((t: any) => ({ title: t.title, due: t.dueDateTime, plan: t.planId })),
       }
     : null;
+
+  // Which plan each candidate task belongs to. Task titles turned out to carry
+  // the event, not the community ("Eblast - Oktoberfest October 8"), so the
+  // plan a task sits in is the only thing left that could identify the
+  // community. Resolve the titles and let the numbers say whether that holds.
+  const planTitles: Record<string, string> = {};
+  const wantPlans = Array.from(
+    new Set(
+      (Array.isArray(decided) ? decided : [])
+        .filter((t: any) => isEblastTitle(t) && notStarted(t))
+        .map((t: any) => t.planId)
+        .filter(Boolean),
+    ),
+  ).slice(0, 40);
+  for (const id of wantPlans) {
+    const r = await graph(token, `/planner/plans/${id}`);
+    planTitles[id as string] = r.ok ? (r.body?.title ?? "(untitled)") : `FAILED — ${r.detail}`;
+    if (!r.ok) { record(r); break; }
+  }
+
+  const byPlan: Record<string, { total: number; withFlyer: number }> = {};
+  for (const t of Array.isArray(decided) ? decided : []) {
+    if (!isEblastTitle(t) || !notStarted(t)) continue;
+    const name = planTitles[t.planId] ?? t.planId;
+    byPlan[name] ??= { total: 0, withFlyer: 0 };
+    byPlan[name].total++;
+    if ((t.referenceCount ?? t.attachments ?? 0) > 0) byPlan[name].withFlyer++;
+  }
 
   const canRead = attempts.some((a) => a.call.includes("/planner/") && a.ok);
 
@@ -278,6 +305,8 @@ export async function GET(req: NextRequest) {
     attempts,
     userTasks,
     triage,
+    planTitles,
+    byPlan,
     plansFound: plansFound.slice(0, 10),
     tasksSample,
     attachmentCheck,

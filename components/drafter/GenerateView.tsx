@@ -170,6 +170,170 @@ function DraftCard({
   );
 }
 
+interface PlannerState {
+  lookaheadDays: number;
+  min: number;
+  max: number;
+  configured: boolean;
+  running: { drafted: number; remaining: number | null; currentTask: string | null } | null;
+  lastRun: { status: string; drafted: number; skipped: number; failed: number; remaining: number | null } | null;
+}
+
+/**
+ * How far ahead to draft, and a button to run it now.
+ *
+ * The run keeps going across several passes until the backlog is clear, so
+ * this polls while one is going rather than waiting on a single request.
+ */
+function PlannerControls({ onFinished }: { onFinished: () => void }) {
+  const [state, setState] = useState<PlannerState | null>(null);
+  const [days, setDays] = useState<string>("");
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch("/api/planner");
+      const d = await r.json();
+      if (d.ok) {
+        setState(d);
+        setDays((prev) => (prev === "" ? String(d.lookaheadDays) : prev));
+      }
+      return d.ok ? (d as PlannerState) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // While a run is going, keep checking — it hands off between passes, so the
+  // work continues after any one request has returned.
+  //
+  // If a run finishes with work still left, start the next one from here. The
+  // server hands off on its own, but a serverless function can be cut off
+  // before that request goes out. This makes the backlog finish either way,
+  // for as long as the page is open.
+  useEffect(() => {
+    if (!state?.running) return;
+    const timer = setInterval(async () => {
+      const next = await load();
+      if (next && !next.running) {
+        clearInterval(timer);
+        onFinished();
+        if ((next.lastRun?.remaining ?? 0) > 0 && next.lastRun?.status === "done") {
+          fetch("/api/planner", { method: "POST" }).then(load).catch(() => null);
+        }
+      }
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [state?.running, load, onFinished]);
+
+  async function saveDays(value: string) {
+    setDays(value);
+    const n = Number(value);
+    if (!Number.isFinite(n) || !state) return;
+    const clamped = Math.min(state.max, Math.max(state.min, Math.round(n)));
+    const r = await fetch("/api/planner", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lookaheadDays: clamped }),
+    });
+    const d = await r.json();
+    if (d.ok) setState((s) => (s ? { ...s, lookaheadDays: d.lookaheadDays } : s));
+  }
+
+  async function runNow() {
+    setStarting(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/planner", { method: "POST" });
+      const d = await r.json();
+      if (!d.ok) setError(d.error ?? "Couldn't start");
+      await load();
+      onFinished();
+    } catch (e: any) {
+      setError(String(e));
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  if (!state) return null;
+  if (!state.configured) {
+    return (
+      <div className="mb-4 rounded-xl border border-[#e8e3dc] bg-[#faf8f4] px-4 py-3">
+        <p className="text-xs text-[#7a8c85]">No Planner account is connected, so nothing is drafted automatically.</p>
+      </div>
+    );
+  }
+
+  const running = state.running;
+  const last = state.lastRun;
+
+  return (
+    <div className="mb-4 rounded-xl border border-[#e8e3dc] bg-white px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-xs text-[#5a6b63]">
+          Draft eblasts due in the next
+          <input
+            type="number"
+            min={state.min}
+            max={state.max}
+            value={days}
+            onChange={(e) => saveDays(e.target.value)}
+            disabled={!!running}
+            className="w-16 rounded-lg border border-[#ddd8d0] px-2 py-1 text-sm text-center text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 disabled:opacity-50"
+          />
+          days
+          <span className="text-[#b0a89f]">(1&ndash;{state.max})</span>
+        </label>
+
+        <button
+          onClick={runNow}
+          disabled={!!running || starting}
+          className="text-xs font-semibold rounded-lg px-4 py-1.5 bg-[#1F4538] text-white hover:bg-[#173829] transition-colors disabled:opacity-50"
+        >
+          {running || starting ? "Running…" : "Run now"}
+        </button>
+      </div>
+
+      {running && (
+        <div className="mt-2.5">
+          <p className="text-xs text-[#5a6b63]">
+            Drafted {running.drafted}
+            {running.remaining !== null && running.remaining > 0 && ` · ${running.remaining} to go`}
+            {running.currentTask && <span className="text-[#9aaba4]"> · {running.currentTask}</span>}
+          </p>
+          <div className="mt-1.5 h-1 rounded-full bg-[#f0ede7] overflow-hidden">
+            <div
+              className="h-full bg-[#1F4538] transition-all duration-500"
+              style={{
+                width: `${
+                  running.remaining !== null && running.drafted + running.remaining > 0
+                    ? Math.round((running.drafted / (running.drafted + running.remaining)) * 100)
+                    : 10
+                }%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {!running && last && last.status !== "running" && (
+        <p className="mt-2 text-[11px] text-[#9aaba4]">
+          Last run: {last.drafted} drafted
+          {last.skipped > 0 && `, ${last.skipped} skipped`}
+          {last.failed > 0 && `, ${last.failed} failed`}
+          {last.remaining ? `, ${last.remaining} still to do` : ""}
+        </p>
+      )}
+
+      {error && <p className="mt-2 text-[11px] text-[#9a3a34]">{error}</p>}
+    </div>
+  );
+}
+
 function NeedsAttentionPanel({ tasks }: { tasks: StuckTask[] }) {
   const blocked = tasks.filter((t) => t.kind === "missing_community" || t.kind === "other");
   const waiting = tasks.filter((t) => t.kind === "waiting_on_flyer");
@@ -235,6 +399,9 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
   const [confirmDelete, setConfirmDelete] = useState<DraftMeta | null>(null);
   const [needsAttention, setNeedsAttention] = useState<StuckTask[]>([]);
 
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -251,7 +418,7 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
       .catch((e) => { if (!cancelled) setFetchError(String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [view]);
+  }, [view, reloadKey]);
 
   const openDraft = useCallback(async (id: string) => {
     setOpeningId(id);
@@ -389,6 +556,8 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
           {filtered.length} {filtered.length === 1 ? "draft" : "drafts"}
         </p>
       </div>
+
+      {view === "pending" && <PlannerControls onFinished={reload} />}
 
       {needsAttention.length > 0 && <NeedsAttentionPanel tasks={needsAttention} />}
 

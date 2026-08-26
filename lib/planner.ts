@@ -165,3 +165,32 @@ export async function isTaskInProgress(taskId: string, token?: string): Promise<
   const task = await graphGet<{ percentComplete?: number }>(t, `/planner/tasks/${taskId}`);
   return (task.percentComplete ?? 0) >= IN_PROGRESS;
 }
+
+/**
+ * Put a task back to Not started.
+ *
+ * Used when a draft was abandoned: the half-made eblast is deleted outright,
+ * so leaving the task In progress would tell the marketing team it was handled
+ * when nothing exists. Un-checking it makes Planner agree with reality and
+ * lets the task be picked up again.
+ */
+export async function markTaskNotStarted(taskId: string, token?: string): Promise<void> {
+  const t = token ?? (await getGraphToken());
+  const current = await graphGet<Record<string, any>>(t, `/planner/tasks/${taskId}`);
+  if ((current.percentComplete ?? 0) === NOT_STARTED) return;
+  const etag = current["@odata.etag"];
+  if (!etag) throw new Error(`No ETag for task ${taskId} — refusing to update`);
+
+  const res = await fetch(`${GRAPH}/planner/tasks/${taskId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${t}`,
+      "Content-Type": "application/json",
+      "If-Match": etag,
+    },
+    body: JSON.stringify({ percentComplete: NOT_STARTED }),
+  });
+  if (!res.ok) {
+    throw new Error(`Could not un-check task — ${res.status} ${(await res.text()).slice(0, 200)}`);
+  }
+}

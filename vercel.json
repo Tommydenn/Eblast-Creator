@@ -10,7 +10,11 @@
     },
     {
       "path": "/api/cron/plan-eblasts",
-      "schedule": "0 7 * * *"
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/plan-eblasts",
+      "schedule": "0 13 * * *"
     }
   ]
 }

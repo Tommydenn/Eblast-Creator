@@ -455,9 +455,61 @@ export const plannerTasks = pgTable("planner_tasks", {
   /** Why it was passed over: no flyer yet, unknown community, generation failed. */
   skipReason: text("skip_reason"),
   attempts: integer("attempts").notNull().default(0),
+  /** Set while a run is generating this task. A stale claim means that run died. */
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  claimedBy: text("claimed_by"),
+  /** The draft id this attempt will use, written before generation so an
+   *  interrupted run can be cleaned up exactly rather than guessed at. */
+  pendingDraftId: text("pending_draft_id"),
+  lastError: text("last_error"),
+  /** Three failures: stop retrying, leave unchecked, hand to the marketing team. */
+  abandoned: boolean("abandoned").notNull().default(false),
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
   draftedAt: timestamp("drafted_at", { withTimezone: true }),
 });
 
 export type PlannerTaskRow = InferSelectModel<typeof plannerTasks>;
 export type NewPlannerTaskRow = InferInsertModel<typeof plannerTasks>;
+
+
+// ---------- app settings (small values the app can change at runtime) -------
+// Currently just how far ahead the Planner pass drafts. In the database rather
+// than an env var so changing it takes effect at once and survives deploys.
+
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type AppSettingRow = InferSelectModel<typeof appSettings>;
+
+// ---------- planner runs ---------------------------------------------------
+// One row per pass over the task list.
+//
+// It is the lock that stops the morning run and the Run now button colliding,
+// the source of the progress readout, and how a run hands off to a fresh one
+// before Vercel cuts it off at five minutes.
+
+export const plannerRuns = pgTable("planner_runs", {
+  id: text("id").primaryKey(),
+  /** cron | manual | chain */
+  trigger: text("trigger").notNull(),
+  /** running | done | failed */
+  status: text("status").notNull().default("running"),
+  /** How many runs deep this chain is, so a bug cannot loop forever. */
+  chainIndex: integer("chain_index").notNull().default(0),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  /** Bumped as work completes. A quiet heartbeat means the run was killed. */
+  heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  drafted: integer("drafted").notNull().default(0),
+  skipped: integer("skipped").notNull().default(0),
+  failed: integer("failed").notNull().default(0),
+  /** Candidates still waiting when this run handed off. Drives the progress line. */
+  remaining: integer("remaining"),
+  currentTask: text("current_task"),
+  error: text("error"),
+});
+
+export type PlannerRunRow = InferSelectModel<typeof plannerRuns>;

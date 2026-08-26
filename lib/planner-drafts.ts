@@ -1,16 +1,22 @@
 /**
- * The daily pass: Planner tasks in, eblast drafts out.
+ * The pass: Planner tasks in, eblast drafts out.
  *
  * What it will act on, and nothing else:
  *   - assigned to the configured person (their "My Tasks")
  *   - status Not started — In progress and Complete are never touched
  *   - title's first word is "Eblast" — "FB Event" and everything else ignored
- *   - due within the look-ahead window
+ *   - due on or before the last day in the lookahead window
  *   - has a flyer attached, and the plan's title matches a known community
+ *   - hasn't already failed three times
  *
- * A task missing a flyer, or sitting in an unrecognised plan, is recorded with
- * a reason and left Not started, so it is reconsidered tomorrow. That is how a
+ * A task missing a flyer, or in an unrecognised plan, is recorded with a
+ * reason and left Not started, so it is reconsidered next time. That is how a
  * flyer attached late still gets drafted, and how nothing is ever guessed.
+ *
+ * Timing: a run stops STARTING new eblasts three minutes in, but never
+ * interrupts one already generating — that draft finishes even if it runs past
+ * the mark. When there is still work left, the run hands off to a fresh one, so
+ * a backlog clears in one sitting without any single run being cut off.
  *
  * Nothing here sends anything. A drafted task is marked In progress — never
  * Complete — because a draft is waiting for a person, not finished.
@@ -26,6 +32,7 @@ import {
   isEblastTask,
   downloadTaskFlyer,
   markTaskInProgress,
+  markTaskNotStarted,
   matchCommunity,
   NOT_STARTED,
   type PlannerTask,
@@ -33,47 +40,42 @@ import {
 import { getGraphToken } from "@/lib/graph";
 import { generateDraft } from "@/lib/generate-draft";
 import { buildImageRows, dedupeImageRows } from "@/lib/image-bank";
+import { getLookaheadDays, isDueWithinWindow } from "@/lib/planner-settings";
+import {
+  MAX_ATTEMPTS,
+  STOP_STARTING_MS,
+  claimTask,
+  finishRun,
+  heartbeat,
+  recoverInterruptedTasks,
+  releaseTask,
+} from "@/lib/planner-run";
 
 export interface PlannerRunSummary {
   scanned: number;
   candidates: number;
   drafted: Array<{ task: string; community: string; draftId: string; markedInProgress: boolean }>;
-  /** Drafted, but Planner still says Not started. Needs a human to look. */
   notMarked: Array<{ task: string; draftId: string; error: string }>;
   skipped: Array<{ task: string; reason: string }>;
   failed: Array<{ task: string; error: string }>;
-  ranOutOfTime: boolean;
-}
-
-/** How far ahead to look. Tasks due beyond this are left for a later run. */
-const DEFAULT_LOOKAHEAD_DAYS = 30;
-
-/**
- * Stop starting new drafts once this much of the run's budget is gone.
- * Generation is two Claude calls and can take the better part of a minute, so
- * a run does as many as fit and the rest are picked up tomorrow rather than
- * being cut off half-finished.
- */
-const TIME_BUDGET_MS = 220_000;
-
-function lookaheadDays(): number {
-  const raw = Number(process.env.PLANNER_LOOKAHEAD_DAYS);
-  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LOOKAHEAD_DAYS;
+  recovered: number;
+  /** Candidates still waiting when this run stopped. Non-zero means hand off. */
+  remaining: number;
 }
 
 export async function runPlannerDraftPass(opts?: {
-  /** Whose tasks to read. Defaults to PLANNER_USER_EMAIL. */
   userEmail?: string;
-  /** Report what would happen without generating or writing anything. */
   dryRun?: boolean;
-  /** Cap on drafts this run, on top of the time budget. */
   limit?: number;
   startedAt?: number;
+  /** Written to as work completes, so the UI can follow along. */
+  runId?: string;
 }): Promise<PlannerRunSummary> {
   const userEmail = opts?.userEmail ?? process.env.PLANNER_USER_EMAIL;
   if (!userEmail) throw new Error("PLANNER_USER_EMAIL is not set");
 
   const startedAt = opts?.startedAt ?? Date.now();
+  const runId = opts?.runId;
   const summary: PlannerRunSummary = {
     scanned: 0,
     candidates: 0,
@@ -81,44 +83,69 @@ export async function runPlannerDraftPass(opts?: {
     notMarked: [],
     skipped: [],
     failed: [],
-    ranOutOfTime: false,
+    recovered: 0,
+    remaining: 0,
   };
 
   const token = await getGraphToken();
+
+  // Anything a killed run left behind, before deciding what to do this time.
+  // The half-made drafts are already gone; these tasks need putting back to
+  // Not started so Planner agrees with the database.
+  if (!opts?.dryRun) {
+    const recovered = await recoverInterruptedTasks();
+    summary.recovered = recovered.length;
+    for (const r of recovered) {
+      try {
+        await markTaskNotStarted(r.taskId, token);
+      } catch (e) {
+        console.error(`[planner] could not un-check interrupted task ${r.taskId}:`, e);
+      }
+    }
+  }
+
+  const lookaheadDays = await getLookaheadDays();
   const all = await listAssignedTasks(userEmail, token);
   summary.scanned = all.length;
 
-  const horizon = Date.now() + lookaheadDays() * 24 * 60 * 60 * 1000;
-  const candidates = all.filter((t) => {
-    if (t.percentComplete !== NOT_STARTED) return false;
-    if (!isEblastTask(t.title)) return false;
-    if (!t.dueDateTime) return false;
-    const due = new Date(t.dueDateTime).getTime();
-    return Number.isFinite(due) && due <= horizon;
-  });
+  const candidates = all.filter(
+    (t) =>
+      t.percentComplete === NOT_STARTED &&
+      isEblastTask(t.title) &&
+      isDueWithinWindow(t.dueDateTime, lookaheadDays),
+  );
   summary.candidates = candidates.length;
 
-  // Which tasks already produced a draft. Planner status normally keeps these
-  // out of the candidate list anyway; this catches the case where a draft was
-  // made but marking the task In progress failed.
+  // Tasks already drafted, and tasks that have run out of attempts. Planner
+  // status normally keeps drafted ones out of the list anyway; this catches the
+  // case where the draft was made but Planner wasn't updated.
   const known = await db
-    .select({ taskId: plannerTasks.taskId, savedDraftId: plannerTasks.savedDraftId })
+    .select({
+      taskId: plannerTasks.taskId,
+      savedDraftId: plannerTasks.savedDraftId,
+      attempts: plannerTasks.attempts,
+      abandoned: plannerTasks.abandoned,
+    })
     .from(plannerTasks);
-  const alreadyDrafted = new Set(known.filter((k) => k.savedDraftId).map((k) => k.taskId));
+  const done = new Set(known.filter((k) => k.savedDraftId).map((k) => k.taskId));
+  const givenUp = new Set(
+    known.filter((k) => k.abandoned || k.attempts >= MAX_ATTEMPTS).map((k) => k.taskId),
+  );
+
+  const workable = candidates.filter((t) => !done.has(t.id) && !givenUp.has(t.id));
+  summary.remaining = workable.length;
 
   const communities = await listCommunities();
   const planTitleCache = new Map<string, string | null>();
 
-  for (const task of candidates) {
+  for (const task of workable) {
     if (opts?.limit && summary.drafted.length >= opts.limit) break;
-    if (Date.now() - startedAt > TIME_BUDGET_MS) {
-      summary.ranOutOfTime = true;
-      break;
-    }
-    if (alreadyDrafted.has(task.id)) continue;
+    // Only the DECISION to begin is time-boxed. A draft already under way runs
+    // to completion; if Vercel kills it first, the claim makes it recoverable.
+    if (Date.now() - startedAt > STOP_STARTING_MS) break;
 
+    let claimed = false;
     try {
-      // The community lives in the plan's title, not the task's.
       if (!planTitleCache.has(task.planId)) {
         planTitleCache.set(task.planId, await getPlanTitle(task.planId, token));
       }
@@ -128,12 +155,14 @@ export async function runPlannerDraftPass(opts?: {
       if (!community) {
         await recordSkip(task, null, `Plan "${planTitle ?? task.planId}" doesn't match a known community`);
         summary.skipped.push({ task: task.title, reason: `unknown community (plan: ${planTitle ?? "?"})` });
+        summary.remaining--;
         continue;
       }
 
       if (task.attachmentCount === 0) {
         await recordSkip(task, community.slug, "No flyer attached yet");
         summary.skipped.push({ task: task.title, reason: "no flyer attached" });
+        summary.remaining--;
         continue;
       }
 
@@ -141,6 +170,7 @@ export async function runPlannerDraftPass(opts?: {
       if (!flyer) {
         await recordSkip(task, community.slug, "Attachment isn't a readable PDF");
         summary.skipped.push({ task: task.title, reason: "attachment isn't a readable PDF" });
+        summary.remaining--;
         continue;
       }
 
@@ -151,60 +181,47 @@ export async function runPlannerDraftPass(opts?: {
           draftId: "(dry run)",
           markedInProgress: false,
         });
+        summary.remaining--;
         continue;
       }
 
-      const draftId = await draftFromTask(task, community.slug, flyer.bytes);
+      const draftId = `planner-${task.id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24)}-${Date.now().toString(36)}`;
+      await claimTask(runId ?? "adhoc", task, community.slug, draftId);
+      claimed = true;
+      if (runId) await heartbeat(runId, { currentTask: `${community.displayName} — ${task.title}` });
 
-      // Marking In progress is what removes the task from tomorrow's run. If
-      // this fails the draft still exists, and the planner_tasks row above is
-      // what stops it being drafted twice.
+      await draftFromTask(task, community.slug, flyer.bytes, draftId);
+
       let marked = false;
       let markError = "";
       try {
         await markTaskInProgress(task.id, token);
-        // Read it back rather than trusting the write: a 2xx that doesn't
-        // stick leaves the task Not started, and tomorrow's run would draft
-        // the same eblast a second time.
+        // Read it back: a 2xx that doesn't stick would leave the task Not
+        // started and it would be drafted a second time.
         marked = await isTaskInProgress(task.id, token);
         if (!marked) markError = "Planner accepted the update but the task is still Not started";
       } catch (e: any) {
         markError = e?.message ?? String(e);
       }
       if (!marked) {
-        console.error(`[planner] draft ${draftId} made but task ${task.id} not marked in progress: ${markError}`);
+        console.error(`[planner] draft ${draftId} made but task ${task.id} not marked: ${markError}`);
         summary.notMarked.push({ task: task.title, draftId, error: markError.slice(0, 200) });
       }
 
-      // Must be an upsert, not an update: a task drafted on the first attempt
-      // has no row yet, and an UPDATE would match nothing — leaving the draft
-      // with no record of the task it came from, so it would never appear in
-      // Pending Drafts and would have no backstop against being drafted again.
+      // Releases the claim: the draft exists, so this attempt is finished.
       await db
-        .insert(plannerTasks)
-        .values({
-          taskId: task.id,
-          planId: task.planId,
-          communitySlug: community.slug,
-          title: task.title,
-          dueAt: task.dueDateTime ? new Date(task.dueDateTime) : undefined,
+        .update(plannerTasks)
+        .set({
           savedDraftId: draftId,
           markedInProgress: marked,
+          skipReason: null,
+          lastError: null,
+          claimedAt: null,
+          claimedBy: null,
+          pendingDraftId: null,
           draftedAt: new Date(),
-          attempts: 1,
         })
-        .onConflictDoUpdate({
-          target: plannerTasks.taskId,
-          set: {
-            communitySlug: community.slug,
-            title: task.title,
-            dueAt: task.dueDateTime ? new Date(task.dueDateTime) : undefined,
-            savedDraftId: draftId,
-            markedInProgress: marked,
-            skipReason: null,
-            draftedAt: new Date(),
-          },
-        });
+        .where(eq(plannerTasks.taskId, task.id));
 
       summary.drafted.push({
         task: task.title,
@@ -212,14 +229,36 @@ export async function runPlannerDraftPass(opts?: {
         draftId,
         markedInProgress: marked,
       });
+      summary.remaining--;
+      if (runId) {
+        await heartbeat(runId, {
+          drafted: summary.drafted.length,
+          skipped: summary.skipped.length,
+          failed: summary.failed.length,
+          remaining: summary.remaining,
+          currentTask: null,
+        });
+      }
     } catch (e: any) {
       const message = e?.message ?? String(e);
       console.error(`[planner] task ${task.id} failed:`, e);
-      await recordSkip(task, null, `Generation failed: ${message}`.slice(0, 500));
+      if (claimed) await releaseTask(task.id, message);
+      else await recordSkip(task, null, `Generation failed: ${message}`.slice(0, 500));
       summary.failed.push({ task: task.title, error: message.slice(0, 200) });
+      summary.remaining--;
     }
   }
 
+  if (runId) {
+    await finishRun(runId, "done", {
+      drafted: summary.drafted.length,
+      skipped: summary.skipped.length,
+      failed: summary.failed.length,
+      remaining: Math.max(0, summary.remaining),
+    });
+  }
+
+  summary.remaining = Math.max(0, summary.remaining);
   return summary;
 }
 
@@ -234,7 +273,7 @@ async function recordSkip(task: PlannerTask, communitySlug: string | null, reaso
       title: task.title,
       dueAt: task.dueDateTime ? new Date(task.dueDateTime) : undefined,
       skipReason: reason,
-      attempts: 1,
+      attempts: 0,
     })
     .onConflictDoUpdate({
       target: plannerTasks.taskId,
@@ -243,7 +282,6 @@ async function recordSkip(task: PlannerTask, communitySlug: string | null, reaso
         dueAt: task.dueDateTime ? new Date(task.dueDateTime) : undefined,
         communitySlug: communitySlug ?? undefined,
         skipReason: reason,
-        attempts: sql`${plannerTasks.attempts} + 1`,
       },
     });
 }
@@ -252,13 +290,17 @@ async function recordSkip(task: PlannerTask, communitySlug: string | null, reaso
  * Generate a draft from the task's flyer and store it exactly the way the
  * drafter does, so it opens, edits, approves and pushes like any other.
  */
-async function draftFromTask(task: PlannerTask, communitySlug: string, pdf: Buffer): Promise<string> {
+async function draftFromTask(
+  task: PlannerTask,
+  communitySlug: string,
+  pdf: Buffer,
+  draftId: string,
+): Promise<void> {
   const community = await getCommunity(communitySlug);
   if (!community) throw new Error(`Unknown community ${communitySlug}`);
 
   const generated = await generateDraft({ community, pdf });
 
-  const draftId = `planner-${task.id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24)}-${Date.now().toString(36)}`;
   const gallery = (generated.galleryImageUrls ?? []).filter((u): u is string => !!u);
   const galleryOriginals = generated.galleryOriginalUrls ?? [];
 
@@ -279,8 +321,7 @@ async function draftFromTask(task: PlannerTask, communitySlug: string, pdf: Buff
     fields: generated.extracted,
     images,
     imageBank: [],
-    imageCount:
-      (generated.heroImageUrl ? 1 : 0) + (generated.secondaryImageUrl ? 1 : 0) + gallery.length,
+    imageCount: (generated.heroImageUrl ? 1 : 0) + (generated.secondaryImageUrl ? 1 : 0) + gallery.length,
     pastSendsContext: generated.pastSendsContext ?? [],
     subjectSpecialist: generated.subjectSpecialist ?? null,
   };
@@ -295,8 +336,6 @@ async function draftFromTask(task: PlannerTask, communitySlug: string, pdf: Buff
     data,
   });
 
-  // Photos go to the image bank under the same index convention the editor
-  // uses, deduplicated the same way, so the draft loads identically.
   const rows = buildImageRows(
     {
       hero: generated.heroImageUrl
@@ -323,6 +362,4 @@ async function draftFromTask(task: PlannerTask, communitySlug: string, pdf: Buff
         set: { url: sql`excluded.url` },
       });
   }
-
-  return draftId;
 }

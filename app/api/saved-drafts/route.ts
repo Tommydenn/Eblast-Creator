@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { savedDrafts, savedDraftApprovals, plannerTasks } from "@/lib/db/schema";
-import { eq, desc, inArray, isNull, and } from "drizzle-orm";
+import { eq, desc, inArray, isNull, isNotNull, and } from "drizzle-orm";
 import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
 // GET /api/saved-drafts?communitySlug=X  — filter by community (omit for all)
@@ -112,7 +112,51 @@ export async function GET(req: NextRequest) {
       rows = rows.filter((r) => !awaitingAction(r));
     }
 
-    return NextResponse.json({ ok: true, drafts: rows });
+    // Tasks the schedule looked at and couldn't draft. These only ever
+    // reached a log line before, which meant a community missing from the app
+    // was invisible: the eblast simply never appeared and nothing said why.
+    // They ride along with the pending view so they surface where someone is
+    // actually looking.
+    let needsAttention: Array<{
+      taskId: string;
+      title: string;
+      dueAt: Date | null;
+      reason: string;
+      kind: "missing_community" | "waiting_on_flyer" | "other";
+    }> = [];
+    if (view === "pending") {
+      const stuck = await db
+        .select({
+          taskId: plannerTasks.taskId,
+          title: plannerTasks.title,
+          dueAt: plannerTasks.dueAt,
+          reason: plannerTasks.skipReason,
+        })
+        .from(plannerTasks)
+        .where(and(isNull(plannerTasks.savedDraftId), isNotNull(plannerTasks.skipReason)));
+
+      needsAttention = stuck
+        .map((t) => ({
+          taskId: t.taskId,
+          title: t.title,
+          dueAt: t.dueAt,
+          reason: t.reason ?? "",
+          kind: /doesn't match a known community/i.test(t.reason ?? "")
+            ? ("missing_community" as const)
+            : /no flyer/i.test(t.reason ?? "")
+              ? ("waiting_on_flyer" as const)
+              : ("other" as const),
+        }))
+        // A missing community needs someone to add it; a missing flyer sorts
+        // itself out. Put the ones needing action first, then by deadline.
+        .sort((a, b) => {
+          const rank = (k: string) => (k === "missing_community" ? 0 : k === "other" ? 1 : 2);
+          return rank(a.kind) - rank(b.kind) ||
+            new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime();
+        });
+    }
+
+    return NextResponse.json({ ok: true, drafts: rows, needsAttention });
   } catch (err) {
     console.error("[saved-drafts GET]", err);
     return NextResponse.json({ ok: false, error: "Database error" }, { status: 500 });

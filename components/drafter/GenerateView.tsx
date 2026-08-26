@@ -27,6 +27,15 @@ interface DraftMeta {
   dueAt?: string | null;
 }
 
+/** A Planner task the schedule looked at but couldn't draft, and why. */
+interface StuckTask {
+  taskId: string;
+  title: string;
+  dueAt: string | null;
+  reason: string;
+  kind: "missing_community" | "waiting_on_flyer" | "other";
+}
+
 function DraftCard({
   draft,
   accentColor,
@@ -161,6 +170,59 @@ function DraftCard({
   );
 }
 
+function NeedsAttentionPanel({ tasks }: { tasks: StuckTask[] }) {
+  const blocked = tasks.filter((t) => t.kind === "missing_community" || t.kind === "other");
+  const waiting = tasks.filter((t) => t.kind === "waiting_on_flyer");
+  const when = (d: string | null) =>
+    d ? new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "no date";
+
+  return (
+    <div className="mb-4 space-y-3">
+      {blocked.length > 0 && (
+        <div className="rounded-xl border border-[#f0d5d5] bg-[#fdf6f6] px-4 py-3">
+          <p className="text-xs font-semibold text-[#9a3a34]">
+            {blocked.length === 1 ? "1 task needs your attention" : `${blocked.length} tasks need your attention`}
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {blocked.map((t) => (
+              <li key={t.taskId} className="text-xs text-[#7a4a44] leading-relaxed">
+                <span className="font-medium">{t.title}</span>
+                <span className="text-[#b09a97]"> · send by {when(t.dueAt)}</span>
+                <br />
+                <span className="text-[#9a3a34]">{t.reason}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2.5 text-[11px] text-[#9a8582]">
+            Add the community on the Communities page and it&rsquo;ll be drafted on the next run.
+          </p>
+        </div>
+      )}
+
+      {waiting.length > 0 && (
+        <div className="rounded-xl border border-[#e8e3dc] bg-[#faf8f4] px-4 py-3">
+          <p className="text-xs font-semibold text-[#7a8c85]">
+            {waiting.length === 1
+              ? "1 eblast is waiting on a flyer"
+              : `${waiting.length} eblasts are waiting on a flyer`}
+          </p>
+          <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+            {waiting.map((t) => (
+              <li key={t.taskId} className="text-xs text-[#5a6b63] truncate">
+                {t.title}
+                <span className="text-[#b0a89f]"> · {when(t.dueAt)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2.5 text-[11px] text-[#9aaba4]">
+            Nothing to do &mdash; each is checked again daily and drafted once a flyer is attached to the task.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
   const { loadSavedDraft, communities } = useDraft();
   const [drafts, setDrafts] = useState<DraftMeta[]>([]);
@@ -171,6 +233,7 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
   const [search, setSearch] = useState("");
   const [filterSlug, setFilterSlug] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<DraftMeta | null>(null);
+  const [needsAttention, setNeedsAttention] = useState<StuckTask[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,8 +242,10 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) {
-          if (d.ok) setDrafts(d.drafts);
-          else setFetchError(d.error ?? "Failed to load");
+          if (d.ok) {
+            setDrafts(d.drafts);
+            setNeedsAttention(d.needsAttention ?? []);
+          } else setFetchError(d.error ?? "Failed to load");
         }
       })
       .catch((e) => { if (!cancelled) setFetchError(String(e)); })
@@ -324,6 +389,8 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
           {filtered.length} {filtered.length === 1 ? "draft" : "drafts"}
         </p>
       </div>
+
+      {needsAttention.length > 0 && <NeedsAttentionPanel tasks={needsAttention} />}
 
       {/* Cards grid */}
       {filtered.length === 0 ? (

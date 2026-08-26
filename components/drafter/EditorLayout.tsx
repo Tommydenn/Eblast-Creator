@@ -8,6 +8,7 @@ import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
 import ApprovalModal from "./ApprovalModal";
 import { CopyPromptModal } from "./CopyPromptModal";
+import { FlyerPanel, useHasFlyer } from "./FlyerPanel";
 
 // Error code generator — gives each error a short stable identifier
 function errorCode(msg: string): string {
@@ -254,8 +255,24 @@ export default function EditorLayout() {
   const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
   const {
     isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, activeFieldNameRef, community,
-    lockInfo, copyPromptOpen, isMakingCopy, makeCopy, cancelCopyPrompt,
+    lockInfo, copyPromptOpen, isMakingCopy, makeCopy, cancelCopyPrompt, draftId,
   } = useDraft();
+
+  // The flyer this draft was written from, for checking the copy against.
+  // Hidden until asked for, so the preview keeps its full width by default.
+  const hasFlyer = useHasFlyer(draftId);
+  const [flyerOpen, setFlyerOpen] = useState(false);
+
+  // Opening the flyer narrows the preview column, and the email is a fixed
+  // 600px that has to scale down to fit or it gets clipped on the right.
+  // The preview re-measures on window resize, so say so once the new layout
+  // has actually settled — measuring in the same tick reads the old width.
+  useEffect(() => {
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => window.dispatchEvent(new Event("resize"))),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [flyerOpen]);
 
   const isSavingRef = useRef(isSaving);
   const fieldsRef2 = useRef(fields);
@@ -323,6 +340,20 @@ export default function EditorLayout() {
           {/* Preview header */}
           <div className="h-9 flex items-center justify-between px-4 bg-[#f0ede7] border-b border-[#e8e3dc] shrink-0">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4]">Live Preview</span>
+            <div className="flex items-center gap-4">
+            {hasFlyer && (
+              <button
+                onClick={() => setFlyerOpen((o) => !o)}
+                title="The flyer this eblast was written from"
+                className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                {flyerOpen ? "Hide flyer" : "Show flyer"}
+              </button>
+            )}
             <button
               onClick={() => setPreviewWidth((w) => (w === "full" ? "half" : "full"))}
               className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1"
@@ -339,6 +370,7 @@ export default function EditorLayout() {
                 </>
               )}
             </button>
+            </div>
           </div>
 
           {/* Formatting toolbar — always visible above the email preview */}
@@ -353,11 +385,19 @@ export default function EditorLayout() {
             />
           </div>
 
-          {/* Preview iframe container */}
-          <div className="flex-1 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
-            <div className="w-full max-w-[640px] mx-auto shadow-xl rounded-lg overflow-hidden">
-              <PreviewPanel />
+          {/* Preview, with the flyer alongside it when asked for */}
+          <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
+              <div className="w-full max-w-[640px] mx-auto shadow-xl rounded-lg overflow-hidden">
+                <PreviewPanel layoutSignal={flyerOpen ? "flyer" : "no-flyer"} />
+              </div>
             </div>
+
+            {hasFlyer && flyerOpen && draftId && (
+              <div className="w-[42%] min-w-[320px] max-w-[620px] h-full shrink-0">
+                <FlyerPanel draftId={draftId} onClose={() => setFlyerOpen(false)} />
+              </div>
+            )}
           </div>
         </div>
       </div>

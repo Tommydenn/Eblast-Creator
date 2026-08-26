@@ -517,21 +517,34 @@ export const plannerRuns = pgTable("planner_runs", {
 export type PlannerRunRow = InferSelectModel<typeof plannerRuns>;
 
 
-// ---------- planner task flyers -------------------------------------------
-// The PDF a draft was generated from, kept so it can be opened alongside the
-// draft to check the eblast against the source.
+// ---------- draft flyers --------------------------------------------------
+// The PDF a draft was written from, shown beside the eblast in the editor so
+// the copy can be checked against its source.
 //
-// Its own table rather than a column on planner_tasks, so a multi-megabyte PDF
-// is never dragged in by a query that only wanted a task title.
+// Keyed by the draft, not by a Planner task, because a draft made by uploading
+// a flyer by hand has no task. Its own table so a multi-megabyte PDF is never
+// pulled in by the queries that list drafts.
 
-export const plannerTaskFlyers = pgTable("planner_task_flyers", {
-  taskId: text("task_id")
+export const draftFlyers = pgTable("draft_flyers", {
+  draftId: text("draft_id")
     .primaryKey()
-    .references(() => plannerTasks.taskId, { onDelete: "cascade" }),
+    .references(() => savedDrafts.id, { onDelete: "cascade" }),
   fileName: text("file_name").notNull(),
   pdfBase64: text("pdf_base64").notNull(),
   bytes: integer("bytes").notNull(),
   storedAt: timestamp("stored_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export type PlannerTaskFlyerRow = InferSelectModel<typeof plannerTaskFlyers>;
+export type DraftFlyerRow = InferSelectModel<typeof draftFlyers>;
+
+// A hand-uploaded flyer arrives while the draft is still being generated,
+// before the draft has an id. It waits here until the draft is saved and
+// claims it; the daily purge clears anything left behind.
+
+export const pendingFlyers = pgTable("pending_flyers", {
+  key: text("key").primaryKey(),
+  fileName: text("file_name").notNull(),
+  pdfBase64: text("pdf_base64").notNull(),
+  bytes: integer("bytes").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

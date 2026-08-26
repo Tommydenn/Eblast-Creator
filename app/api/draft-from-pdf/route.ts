@@ -3,7 +3,8 @@ import { eq, asc } from "drizzle-orm";
 import { getCommunity } from "@/data/communities";
 import { generateDraft, TransientDraftError } from "@/lib/generate-draft";
 import { db } from "@/lib/db";
-import { pdfChunks } from "@/lib/db/schema";
+import { pdfChunks, pendingFlyers } from "@/lib/db/schema";
+import { randomBytes } from "node:crypto";
 
 export const runtime = "nodejs";
 // A draft is one Claude call plus the subject specialist; 300s (Vercel Pro
@@ -108,6 +109,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Park the flyer for the editor to show beside the eblast. The draft has no
+  // id yet — the browser saves it after this returns — so it waits under a key
+  // the draft claims on save. Failing here must not cost anyone their draft,
+  // so it is deliberately non-fatal.
+  let flyerKey: string | null = null;
+  if (buffer) {
+    try {
+      flyerKey = randomBytes(16).toString("hex");
+      await db.insert(pendingFlyers).values({
+        key: flyerKey,
+        fileName: file instanceof File && file.name ? file.name : "flyer.pdf",
+        pdfBase64: buffer.toString("base64"),
+        bytes: buffer.length,
+      });
+    } catch (e) {
+      console.error("[draft-from-pdf] could not stage the flyer:", e);
+      flyerKey = null;
+    }
+  }
+
   const {
     extracted,
     html,
@@ -126,6 +147,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
+    flyerKey,
     community: { slug: community.slug, displayName: community.displayName },
     extracted,
     html,

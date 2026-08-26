@@ -22,7 +22,7 @@
  * Complete — because a draft is waiting for a person, not finished.
  */
 import { db } from "@/lib/db";
-import { savedDrafts, plannerTasks, plannerTaskFlyers, draftImageBank } from "@/lib/db/schema";
+import { savedDrafts, plannerTasks, draftFlyers, draftImageBank } from "@/lib/db/schema";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { listCommunities, getCommunity } from "@/data/communities";
 import {
@@ -204,15 +204,15 @@ export async function runPlannerDraftPass(opts?: {
       // already downloaded to generate from; throwing it away is what made
       // checking the eblast against its source impossible.
       await db
-        .insert(plannerTaskFlyers)
+        .insert(draftFlyers)
         .values({
-          taskId: task.id,
+          draftId,
           fileName: flyer.fileName,
           pdfBase64: flyer.bytes.toString("base64"),
           bytes: flyer.bytes.length,
         })
         .onConflictDoUpdate({
-          target: plannerTaskFlyers.taskId,
+          target: draftFlyers.draftId,
           set: {
             fileName: flyer.fileName,
             pdfBase64: flyer.bytes.toString("base64"),
@@ -319,18 +319,19 @@ async function backfillFlyersAndOrder(tasks: PlannerTask[], token: string): Prom
   }
 
   const missingFlyer = await db
-    .select({ taskId: plannerTasks.taskId })
+    .select({ taskId: plannerTasks.taskId, draftId: plannerTasks.savedDraftId })
     .from(plannerTasks)
-    .leftJoin(plannerTaskFlyers, eq(plannerTaskFlyers.taskId, plannerTasks.taskId))
-    .where(and(isNotNull(plannerTasks.savedDraftId), isNull(plannerTaskFlyers.taskId)))
+    .leftJoin(draftFlyers, eq(draftFlyers.draftId, plannerTasks.savedDraftId))
+    .where(and(isNotNull(plannerTasks.savedDraftId), isNull(draftFlyers.draftId)))
     .limit(BACKFILL_FLYERS_PER_RUN);
 
   for (const row of missingFlyer) {
+    if (!row.draftId) continue;
     try {
       const flyer = await downloadTaskFlyer(row.taskId, token);
       if (!flyer) continue;
-      await db.insert(plannerTaskFlyers).values({
-        taskId: row.taskId,
+      await db.insert(draftFlyers).values({
+        draftId: row.draftId,
         fileName: flyer.fileName,
         pdfBase64: flyer.bytes.toString("base64"),
         bytes: flyer.bytes.length,

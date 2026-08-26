@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { savedDrafts, savedDraftApprovals, plannerTasks, plannerTaskFlyers } from "@/lib/db/schema";
+import { savedDrafts, savedDraftApprovals, plannerTasks, draftFlyers } from "@/lib/db/schema";
 import { eq, desc, inArray, isNull, isNotNull, and } from "drizzle-orm";
 import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
@@ -84,10 +84,10 @@ export async function GET(req: NextRequest) {
             taskTitle: plannerTasks.title,
             dueAt: plannerTasks.dueAt,
             assigneePriority: plannerTasks.assigneePriority,
-            flyerName: plannerTaskFlyers.fileName,
+            flyerName: draftFlyers.fileName,
           })
           .from(plannerTasks)
-          .leftJoin(plannerTaskFlyers, eq(plannerTaskFlyers.taskId, plannerTasks.taskId))
+          .leftJoin(draftFlyers, eq(draftFlyers.draftId, plannerTasks.savedDraftId))
           .where(inArray(plannerTasks.savedDraftId, rawRows.map((r) => r.id)))
       : [];
     const taskByDraft = new Map(taskRows.filter((t) => t.savedDraftId).map((t) => [t.savedDraftId!, t]));

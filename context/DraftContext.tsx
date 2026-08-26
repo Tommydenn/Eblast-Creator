@@ -714,6 +714,17 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ draft: initDraft }),
         })
           .then(async () => {
+            // Attach the flyer this was written from, so the editor can show
+            // it beside the eblast. It was parked during generation rather
+            // than uploaded twice. Non-fatal: a draft without one simply has
+            // no flyer to show.
+            if (data.flyerKey) {
+              fetch(`/api/drafts/${newDraftId}/flyer`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ flyerKey: data.flyerKey }),
+              }).catch(() => null);
+            }
             // The untouched originals must be saved even as data URIs — they
             // are what repositionImage() re-crops from after a reload.
             return postImageBatches(newDraftId, buildImageRows(newImages, bank));

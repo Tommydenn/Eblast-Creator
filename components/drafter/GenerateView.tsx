@@ -148,23 +148,20 @@ function DraftCard({
           {/* Actions */}
           <div className="flex items-center gap-1.5">
             {draft.hasFlyer && (
-              <button
-                onClick={(e) => { e.stopPropagation(); window.open(`/api/planner/flyer/${draft.id}`, "_blank", "noopener"); }}
-                title={draft.flyerName ?? "Open the flyer this was written from"}
+              <a
+                href={`/api/drafts/${draft.id}/flyer`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title={draft.flyerName ?? "The flyer this was written from"}
                 className="text-[11px] font-medium text-[#7a8c85] hover:text-[#1F4538] underline decoration-dotted underline-offset-2 transition-colors"
               >
                 Flyer
-              </button>
+              </a>
             )}
             {!isLegacy && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Opened here, in the click, or the browser blocks it as a
-                  // popup nobody asked for.
-                  if (draft.hasFlyer) window.open(`/api/planner/flyer/${draft.id}`, "_blank", "noopener");
-                  onOpen();
-                }}
+                onClick={(e) => { e.stopPropagation(); onOpen(); }}
                 disabled={isOpening || isDeleting}
                 className="text-[11px] font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1 transition-all disabled:opacity-40"
               >

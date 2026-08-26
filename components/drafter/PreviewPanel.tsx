@@ -294,7 +294,7 @@ function resizeIframe(iframe: HTMLIFrameElement) {
   container.style.height = h > 0 ? `${Math.ceil(h * scale)}px` : "";
 }
 
-export default function PreviewPanel() {
+export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown } = {}) {
   const { setActiveSection, fields, setField, images, community, imagesLoading } = useDraft();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -455,10 +455,16 @@ export default function PreviewPanel() {
       if (iframe) resizeIframe(iframe);
     };
     const ro = new ResizeObserver(rescale);
+    // Watch the column the preview sits in, not just the container: rescale
+    // sets the container's own height, and an observer on an element the
+    // callback resizes gets its notifications suppressed as a loop. That is
+    // why opening the flyer panel beside the preview left the email clipped
+    // until something else forced a re-measure.
     ro.observe(container);
-    // A ResizeObserver on the container alone proved unreliable for viewport
-    // changes, so listen for window resize too. Both call the same function and
-    // it's idempotent, so firing twice is harmless.
+    if (container.parentElement) ro.observe(container.parentElement);
+    // A ResizeObserver alone proved unreliable for viewport changes, so listen
+    // for window resize too. Both call the same function and it is idempotent,
+    // so firing twice is harmless.
     window.addEventListener("resize", rescale);
     rescale();
     return () => {
@@ -466,6 +472,31 @@ export default function PreviewPanel() {
       window.removeEventListener("resize", rescale);
     };
   }, [initSrc]);
+
+  // Told directly when the surrounding layout changes — opening the flyer
+  // beside the preview narrows this column, and the email is a fixed 600px
+  // that has to scale down or it gets clipped on the right. A ResizeObserver
+  // did not reliably catch it, and a clipped preview is exactly the bug this
+  // scaling exists to prevent, so the signal is explicit. Two frames so the
+  // new widths are settled before measuring.
+  useEffect(() => {
+    // Re-measure when the surrounding layout changes — opening the flyer beside
+    // the preview narrows this column, and the email is a fixed 600px that has
+    // to scale down or it is clipped on the right, which is the exact bug this
+    // scaling exists to prevent.
+    //
+    // Measured a few times rather than once: the first read can land before the
+    // new widths have settled, and a single animation frame proved unreliable
+    // (its cleanup cancelled it before it ever ran). resizeIframe is idempotent,
+    // so repeating it costs nothing.
+    const timers = [0, 80, 250, 600].map((delay) =>
+      setTimeout(() => {
+        const iframe = iframeRef.current;
+        if (iframe) resizeIframe(iframe);
+      }, delay),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [layoutSignal]);
 
   if (!initSrc) {
     return (

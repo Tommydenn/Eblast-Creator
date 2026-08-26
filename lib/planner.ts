@@ -152,3 +152,16 @@ export function matchCommunity<T extends { slug: string; displayName: string }>(
   if (!target) return null;
   return communities.find((c) => norm(c.displayName) === target) ?? null;
 }
+
+/**
+ * Read a task's status back.
+ *
+ * Used to confirm a mark actually stuck. Planner answering 204 to the update
+ * is not proof: if the task is still Not started afterwards, tomorrow's run
+ * would draft the same eblast again, so this is checked rather than assumed.
+ */
+export async function isTaskInProgress(taskId: string, token?: string): Promise<boolean> {
+  const t = token ?? (await getGraphToken());
+  const task = await graphGet<{ percentComplete?: number }>(t, `/planner/tasks/${taskId}`);
+  return (task.percentComplete ?? 0) >= IN_PROGRESS;
+}

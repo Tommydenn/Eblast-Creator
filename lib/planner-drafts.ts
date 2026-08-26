@@ -20,6 +20,7 @@ import { savedDrafts, plannerTasks, draftImageBank } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { listCommunities, getCommunity } from "@/data/communities";
 import {
+  isTaskInProgress,
   listAssignedTasks,
   getPlanTitle,
   isEblastTask,
@@ -36,7 +37,9 @@ import { buildImageRows, dedupeImageRows } from "@/lib/image-bank";
 export interface PlannerRunSummary {
   scanned: number;
   candidates: number;
-  drafted: Array<{ task: string; community: string; draftId: string }>;
+  drafted: Array<{ task: string; community: string; draftId: string; markedInProgress: boolean }>;
+  /** Drafted, but Planner still says Not started. Needs a human to look. */
+  notMarked: Array<{ task: string; draftId: string; error: string }>;
   skipped: Array<{ task: string; reason: string }>;
   failed: Array<{ task: string; error: string }>;
   ranOutOfTime: boolean;
@@ -75,6 +78,7 @@ export async function runPlannerDraftPass(opts?: {
     scanned: 0,
     candidates: 0,
     drafted: [],
+    notMarked: [],
     skipped: [],
     failed: [],
     ranOutOfTime: false,
@@ -141,7 +145,12 @@ export async function runPlannerDraftPass(opts?: {
       }
 
       if (opts?.dryRun) {
-        summary.drafted.push({ task: task.title, community: community.displayName, draftId: "(dry run)" });
+        summary.drafted.push({
+          task: task.title,
+          community: community.displayName,
+          draftId: "(dry run)",
+          markedInProgress: false,
+        });
         continue;
       }
 
@@ -151,19 +160,58 @@ export async function runPlannerDraftPass(opts?: {
       // this fails the draft still exists, and the planner_tasks row above is
       // what stops it being drafted twice.
       let marked = false;
+      let markError = "";
       try {
         await markTaskInProgress(task.id, token);
-        marked = true;
-      } catch (e) {
-        console.error(`[planner] draft ${draftId} made but task ${task.id} not marked in progress:`, e);
+        // Read it back rather than trusting the write: a 2xx that doesn't
+        // stick leaves the task Not started, and tomorrow's run would draft
+        // the same eblast a second time.
+        marked = await isTaskInProgress(task.id, token);
+        if (!marked) markError = "Planner accepted the update but the task is still Not started";
+      } catch (e: any) {
+        markError = e?.message ?? String(e);
+      }
+      if (!marked) {
+        console.error(`[planner] draft ${draftId} made but task ${task.id} not marked in progress: ${markError}`);
+        summary.notMarked.push({ task: task.title, draftId, error: markError.slice(0, 200) });
       }
 
+      // Must be an upsert, not an update: a task drafted on the first attempt
+      // has no row yet, and an UPDATE would match nothing — leaving the draft
+      // with no record of the task it came from, so it would never appear in
+      // Pending Drafts and would have no backstop against being drafted again.
       await db
-        .update(plannerTasks)
-        .set({ savedDraftId: draftId, markedInProgress: marked, skipReason: null, draftedAt: new Date() })
-        .where(eq(plannerTasks.taskId, task.id));
+        .insert(plannerTasks)
+        .values({
+          taskId: task.id,
+          planId: task.planId,
+          communitySlug: community.slug,
+          title: task.title,
+          dueAt: task.dueDateTime ? new Date(task.dueDateTime) : undefined,
+          savedDraftId: draftId,
+          markedInProgress: marked,
+          draftedAt: new Date(),
+          attempts: 1,
+        })
+        .onConflictDoUpdate({
+          target: plannerTasks.taskId,
+          set: {
+            communitySlug: community.slug,
+            title: task.title,
+            dueAt: task.dueDateTime ? new Date(task.dueDateTime) : undefined,
+            savedDraftId: draftId,
+            markedInProgress: marked,
+            skipReason: null,
+            draftedAt: new Date(),
+          },
+        });
 
-      summary.drafted.push({ task: task.title, community: community.displayName, draftId });
+      summary.drafted.push({
+        task: task.title,
+        community: community.displayName,
+        draftId,
+        markedInProgress: marked,
+      });
     } catch (e: any) {
       const message = e?.message ?? String(e);
       console.error(`[planner] task ${task.id} failed:`, e);

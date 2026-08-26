@@ -221,7 +221,8 @@ export interface DraftContextValue {
   activeFieldNameRef: React.MutableRefObject<string | null>;
 
   selectCommunity: (slug: string) => void;
-  generate: (file: File | null, notes?: string) => Promise<void>;
+  /** Resolves with the new draft's id, so the caller can navigate to it. */
+  generate: (file: File | null, notes?: string) => Promise<string | null>;
   cancelGenerate: () => void;
   setField: <K extends keyof ExtractedFlyer>(key: K, value: ExtractedFlyer[K]) => void;
   setFields: (patch: Partial<ExtractedFlyer>) => void;
@@ -251,7 +252,8 @@ export interface DraftContextValue {
   waitingForImages: boolean;
   addToImageBank: (url: string) => void;
   dismissPushResult: () => void;
-  makeCopy: () => Promise<void>;
+  /** Resolves with the copy's id, so the caller can navigate to it. */
+  makeCopy: () => Promise<string | null>;
   cancelCopyPrompt: () => void;
   /** Opens the copy prompt directly — used by RichInput/RichBodyEditor to
    * reject a locked edit at the DOM level (revert innerHTML, don't call
@@ -619,10 +621,11 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Generate ──────────────────────────────────────────────────────────────
   // Either input alone is enough: a flyer PDF, pasted event details, or both.
-  const generate = useCallback(async (file: File | null, notes?: string) => {
+  const generate = useCallback(async (file: File | null, notes?: string): Promise<string | null> => {
     const slug = selectedCommunitySlug;
-    if (!slug) return;
-    if (!file && !notes?.trim()) return;
+    if (!slug) return null;
+    if (!file && !notes?.trim()) return null;
+    let createdId: string | null = null;
     const ctrl = new AbortController();
     generateAbortRef.current = ctrl;
     setIsGenerating(true);
@@ -688,6 +691,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       // Eagerly claim a draftId and write it to localStorage so the resume
       // banner always points to the draft just generated, not a previous one.
       const newDraftId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      createdId = newDraftId;
       setDraftId(newDraftId);
       try { localStorage.setItem("eblast_lastDraftId", newDraftId); } catch {}
 
@@ -742,6 +746,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setIsGenerating(false);
       generateAbortRef.current = null;
     }
+    return createdId;
   }, [selectedCommunitySlug]);
 
   const cancelGenerate = useCallback(() => {
@@ -1300,10 +1305,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // most similar tools (the copy's title visibly says "Copy of ..." until the
   // user renames it) rather than permanently diverging the list title from
   // the actual subject field.
-  const makeCopy = useCallback(async () => {
+  const makeCopy = useCallback(async (): Promise<string | null> => {
     const f = fieldsRef.current;
     const c = communityRef.current;
-    if (!f || !c) return;
+    if (!f || !c) return null;
     setIsMakingCopy(true);
     try {
       const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1344,8 +1349,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setSaveNotice("Created a copy — you're now editing it");
       setTimeout(() => setSaveNotice(null), 4000);
       saveImagesForDraft(newId).catch(() => null);
+      return newId;
     } catch (e: any) {
       setSaveError(e.message ?? "Failed to create copy");
+      return null;
     } finally {
       setIsMakingCopy(false);
     }

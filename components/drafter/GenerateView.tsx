@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useDraft, type SavedDraft } from "@/context/DraftContext";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
 import { Header } from "@/components/Header";
@@ -414,6 +415,7 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
   const [confirmDelete, setConfirmDelete] = useState<DraftMeta | null>(null);
   const [needsAttention, setNeedsAttention] = useState<StuckTask[]>([]);
 
+  const router = useRouter();
   const [reloadKey, setReloadKey] = useState(0);
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -447,11 +449,13 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
           pushedAt: data.pushedAt,
           pendingApproval: data.pendingApproval,
         });
+        // Give the draft its own address so the back button returns here.
+        router.push(`/draft/${encodeURIComponent(id)}`);
       }
     } finally {
       setOpeningId(null);
     }
-  }, [loadSavedDraft]);
+  }, [loadSavedDraft, router]);
 
   const deleteDraft = useCallback(async (id: string) => {
     setDeletingId(id);
@@ -858,6 +862,7 @@ export default function GenerateView() {
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const router = useRouter();
   const [tab, setTab] = useState<"new" | "pending" | "drafts" | "deleted">("new");
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
   const [isResuming, setIsResuming] = useState(false);
@@ -909,6 +914,7 @@ export default function GenerateView() {
           pendingApproval: data.pendingApproval,
         });
         setResumeDraft(null);
+        router.push(`/draft/${encodeURIComponent(resumeDraft.id)}`);
       }
     } finally {
       setIsResuming(false);
@@ -923,7 +929,8 @@ export default function GenerateView() {
 
   async function handleGenerate() {
     if ((!file && !notes.trim()) || !selectedCommunitySlug) return;
-    await generate(file, notes);
+    const id = await generate(file, notes);
+    if (id) router.push(`/draft/${encodeURIComponent(id)}`);
   }
 
   return (

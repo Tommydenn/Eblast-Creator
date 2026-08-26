@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useDraft } from "@/context/DraftContext";
 import { FormatToolbar } from "@/components/drafter/RichEditor";
 import EditorPanel from "./EditorPanel";
@@ -18,6 +19,7 @@ function errorCode(msg: string): string {
 }
 
 function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () => void; onTestApproval: () => void; autoSaveLabel: string | null }) {
+  const router = useRouter();
   const {
     community,
     fields,
@@ -102,7 +104,7 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
         <div className="w-px h-5 bg-[#e8e3dc] shrink-0" />
 
         <button
-          onClick={discard}
+          onClick={() => { discard(); router.push("/"); }}
           className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1.5 transition-all"
           title="Discard and start a new draft"
         >
@@ -249,6 +251,7 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
 }
 
 export default function EditorLayout() {
+  const router = useRouter();
   const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [approvalMode, setApprovalMode] = useState<"real" | "test">("real");
@@ -408,7 +411,10 @@ export default function EditorLayout() {
         <CopyPromptModal
           reasons={lockInfo.reasons}
           isMakingCopy={isMakingCopy}
-          onMakeCopy={makeCopy}
+          onMakeCopy={async () => {
+            const copyId = await makeCopy();
+            if (copyId) router.replace(`/draft/${encodeURIComponent(copyId)}`);
+          }}
           onCancel={cancelCopyPrompt}
         />
       )}

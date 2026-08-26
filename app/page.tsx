@@ -1,10 +1,15 @@
 "use client";
 
-import { useDraft } from "@/context/DraftContext";
+/**
+ * The start page: new draft, and the lists of existing ones.
+ *
+ * The editor used to live here too, swapped in whenever a draft was open,
+ * which meant opening one never changed the URL and the back button had
+ * nothing to return to. A draft has its own address now — /draft/[id] — so
+ * this page only ever shows the lists.
+ */
 import GenerateView from "@/components/drafter/GenerateView";
-import EditorLayout from "@/components/drafter/EditorLayout";
 
 export default function Home() {
-  const { stage } = useDraft();
-  return stage === "editing" ? <EditorLayout /> : <GenerateView />;
+  return <GenerateView />;
 }

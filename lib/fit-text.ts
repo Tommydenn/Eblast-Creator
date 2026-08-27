@@ -47,12 +47,24 @@ const UNKNOWN = 60;
  */
 const SAFETY = 1.08;
 
-/** Width of `text` at `size` px in the given face, in px. */
+/**
+ * Width of `text` at `size` px, in px.
+ *
+ * For anything but the script face this takes the WIDER of the serif and sans
+ * tables rather than guessing which one a recipient will get. The brand fonts
+ * carry no stated backup — that was asked for deliberately, so each client
+ * picks its own substitute and we cannot know which. Sizing for the wider of
+ * the two costs a point of size at worst; sizing for the narrower would put
+ * text past the edge on everyone who lands on the other.
+ */
 export function measureLine(text: string, face: FitFace, size: number): number {
-  const table = TABLES[face];
-  let units = 0;
-  for (const ch of text) units += table[ch] ?? UNKNOWN;
-  return (units / 100) * size * SAFETY;
+  const measure = (t: WidthTable) => {
+    let units = 0;
+    for (const ch of text) units += t[ch] ?? UNKNOWN;
+    return (units / 100) * size * SAFETY;
+  };
+  if (face === "script") return measure(SCRIPT);
+  return Math.max(measure(GEORGIA), measure(ARIAL));
 }
 
 /**

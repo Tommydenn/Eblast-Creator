@@ -141,7 +141,6 @@ function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
  * and the CTA. Shared as a constant so the RSVP label can't drift away from
  * the address again.
  */
-import { withFallback } from "@/lib/font-stacks";
 import { faceFor, fitFontSize, needsShortening } from "@/lib/fit-text";
 
 const HERO_ADDRESS_COLOR = "#E8DDC4";
@@ -349,10 +348,18 @@ export function buildEblastHtml(
   // the same column as every other section and lines up with the header.
   const HERO_CONTENT_WIDTH = CONTENT_WIDTH;
 
-  // Brand fonts, each followed by its backup. Bound once here so no call site
-  // can accidentally emit a bare font name with nothing after it.
-  const fontHeadline = withFallback(brand.fontHeadline);
-  const fontBody = withFallback(brand.fontBody);
+  // The brand font, exactly as the Community page has it, with nothing added.
+  //
+  // A backup was tried here and taken out again on request: naming one means
+  // every recipient without the brand font gets the SAME substitute we picked,
+  // where before each client chose its own. The preference is for the
+  // recipient s own system to choose, so nothing is appended.
+  //
+  // The cost is that line widths are no longer predictable, which is why the
+  // fitting below measures against the widest common substitute rather than
+  // any particular one.
+  const fontHeadline = brand.fontHeadline;
+  const fontBody = brand.fontBody;
 
   /**
    * The size to render a never-wrap line at.
@@ -805,8 +812,22 @@ export function buildEblastHtml(
     max-width: 100% !important;
   }
 
+  /*
+    The seven lines that should hold one line. Their size is fitted before
+    sending so the text is known to fit the column.
+    
+    Deliberately NOT white-space:nowrap. Nowrap guarantees no wrap, but the
+    moment a recipient s font is wider than predicted the text is pushed out of
+    the frame instead — which is what put the hero section past the edge in both
+    Gmail and Apple Mail. There is no way to know a recipient s exact font
+    metrics, so that failure cannot be designed out. Sizing to fit does the work;
+    if a client still surprises us the line wraps, which is contained and
+    recoverable, rather than breaking the layout.
+    
+    The global break-word rule is still undone here, so a long word breaks at a
+    space rather than being split down the middle.
+  */
   .glm-nowrap {
-    white-space: nowrap !important;
     word-break: normal !important;
     overflow-wrap: normal !important;
     word-wrap: normal !important;

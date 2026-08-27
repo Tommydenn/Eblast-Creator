@@ -683,12 +683,40 @@ export function FormatToolbar({
       const st = queryFormatState(el, getPending(el), fieldDefaults());
       setState(st);
       const fieldName = activeFieldNameRef?.current;
-      const fallback = fieldName ? FIELD_FONT_SIZES[fieldName] : undefined;
-      setFontSizeInput(st.fontSize != null ? String(st.fontSize) : fallback != null ? String(fallback) : "");
+      // What the box shows, in order of authority: the size set on the
+      // selection itself, then the size this field is actually rendered at in
+      // the email, then the table.
+      //
+      // The table alone was wrong whenever it disagreed with the template, and
+      // being a second copy of the same numbers it was always liable to. It is
+      // last resort now, for a field the preview hasn't rendered.
+      const size = st.fontSize ?? renderedFieldSize(fieldName) ?? (fieldName ? FIELD_FONT_SIZES[fieldName] : undefined);
+      setFontSizeInput(size != null ? String(size) : "");
     }
     document.addEventListener("selectionchange", refresh);
     return () => document.removeEventListener("selectionchange", refresh);
   }, [editorRef, activeFieldNameRef]);
+
+  /**
+   * The size a field is rendered at in the preview, read from the preview
+   * itself rather than from a list that has to be kept in step by hand.
+   *
+   * Deliberately not the computed size of whatever is being edited: a sidebar
+   * box displays at its own size on purpose, so reading that would report the
+   * sidebar's size rather than the eblast's.
+   */
+  function renderedFieldSize(fieldName?: string | null): number | undefined {
+    if (!fieldName) return undefined;
+    try {
+      const frame = document.querySelector("iframe");
+      const el = frame?.contentDocument?.querySelector(`[data-field="${fieldName}"]`);
+      if (!el) return undefined;
+      const px = parseFloat(getComputedStyle(el as Element).fontSize);
+      return Number.isFinite(px) ? Math.round(px) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   // Template-forced formatting for whichever field is currently focused.
   function fieldDefaults(): { bold?: boolean; italic?: boolean } | undefined {

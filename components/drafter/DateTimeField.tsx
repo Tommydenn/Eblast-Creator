@@ -20,12 +20,21 @@ import { RichInput } from "@/components/drafter/RichEditor";
 
 const SEPARATOR = "·";
 
+/** The text of a field with any formatting markup taken off. */
+function plainText(html: string): string {
+  return html.replace(/<[^>]+>/g, "").trim();
+}
+
 export function combineDateTime(date: string | undefined, time: string | undefined): string {
   const d = (date ?? "").trim();
   const t = (time ?? "").trim();
   if (!t) return d;
-  // The stored time normally already begins with the separator.
-  if (t.startsWith(SEPARATOR)) return d ? `${d} ${t}` : t;
+  // Test the TEXT, not the markup. Once the time has any formatting it starts
+  // with "<span …>", so a check against the raw HTML never matched and a
+  // second separator was added every time the box was rebuilt — and because
+  // the footer falls back to the header's date and time when it has no
+  // override of its own, editing one field grew a dot on the other.
+  if (plainText(t).startsWith(SEPARATOR)) return d ? `${d} ${t}` : t;
   return d ? `${d} ${SEPARATOR} ${t}` : t;
 }
 

@@ -1043,7 +1043,15 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     // finished loading), where the stored rows are the only record there is
     // and ignoring them is what makes a draft look permanently empty.
     const blob = draft.images;
-    const slotsUnrecorded = !blob || (!blob.hero && !blob.secondary && !blob.gallery?.length);
+    // Only a draft with NO images key at all — an old one saved before slots
+    // were recorded — may fall back to whatever photos are in storage.
+    //
+    // This used to also treat "every slot empty" as unrecorded, which is
+    // indistinguishable from the far more common case of someone deleting all
+    // the photos and saving: their removal stuck in the database, then loading
+    // put every photo straight back. Rows for a removed slot are deliberately
+    // left in place, so there was always something to restore.
+    const slotsUnrecorded = !blob;
     const gallerySlotCount = blob?.gallery?.length ?? 0;
 
     imagesLoadedRef.current = false;

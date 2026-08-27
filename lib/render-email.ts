@@ -302,6 +302,27 @@ export interface RenderOptions {
   secondaryImageUrl?: string;
   /** Additional images for the gallery section near the bottom. Up to 4 used. */
   galleryImageUrls?: string[];
+  /**
+   * Emit <meta name="viewport" content="width=600">, stating the design's
+   * width instead of leaving the client to work it out.
+   *
+   * Gmail's guess at the width is what gets stuck when a phone is rotated:
+   * turning to landscape makes it measure again, and turning back reuses the
+   * landscape scale, which is the squeezed rendering. Giving it a stated
+   * number to scale from is the only lever the HTML has over that.
+   *
+   * This tag was blamed once for breaking Apple Mail and taken out. It was
+   * never tested on its own: it shipped in the same commit as
+   * white-space:nowrap, and the nowrap was later proven to be what pushed the
+   * hero past the edge in Gmail and Apple Mail both. The tag was convicted
+   * while the real cause was still in the file.
+   *
+   * So it is behind the Send Test button until someone has actually looked at
+   * it in Gmail and Apple Mail. Defaults to false, which leaves every other
+   * caller — preview, real approval sends, HubSpot pushes — rendering exactly
+   * what it rendered before.
+   */
+  declareViewportWidth?: boolean;
 }
 
 export function buildEblastHtml(
@@ -313,6 +334,7 @@ export function buildEblastHtml(
   const heroImg = options.heroImageUrl;
   const secondaryImg = options.secondaryImageUrl;
   const galleryImgs = (options.galleryImageUrls ?? []).slice(0, 4);
+  const declareViewportWidth = options.declareViewportWidth ?? false;
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
@@ -712,10 +734,8 @@ export function buildEblastHtml(
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<!-- No viewport tag on purpose: this is a fixed 600px design, and clients
-     zoom it to fit. Setting width=device-width made Gmail squeeze and reflow
-     it; setting width=600 fixed Gmail and broke Apple Mail. -->
+<meta charset="UTF-8">${declareViewportWidth ? `
+<meta name="viewport" content="width=600">` : ""}
 <!-- Stops iOS turning phone numbers, dates and addresses into its own blue
      underlined links — which is what put a blue number inside the call button. -->
 <meta name="format-detection" content="telephone=no,date=no,address=no,email=no">

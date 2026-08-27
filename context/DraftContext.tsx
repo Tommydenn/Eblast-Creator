@@ -26,6 +26,7 @@ import {
   type ImagePhaseName,
   type ImageRow,
 } from "@/lib/image-bank";
+import { canCropInBrowser, cropInBrowser } from "@/lib/crop-image-client";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 
 // ─── Chunked PDF upload ───────────────────────────────────────────────────────
@@ -172,7 +173,27 @@ export interface PushStep { step: string; ok: boolean; status?: number; body?: a
 // it visibly taller and narrower than the draft was generated with.
 const ASPECT = { hero: 600 / 340, secondary: 528 / 300, gallery: 4 / 3 } as const;
 
+/**
+ * Crop a photo to a slot's shape.
+ *
+ * Done in the browser. It used to POST the whole photo to the server, but
+ * Vercel rejects a request body over 4.5 MB and a full-size flyer photo is
+ * routinely larger — one measured 6.15 MB and came back 413. The crop threw,
+ * nothing caught it, and the photo just never appeared, which is what "I can't
+ * assign an image" was. Cropping here has no size limit at all, and skips
+ * shipping megabytes both ways.
+ *
+ * The server route stays for anything that can't do it locally, and the
+ * geometry is shared, so both produce the same framing.
+ */
 async function cropImage(imageUrl: string, ratio: number, x = 50, y = 50): Promise<string> {
+  if (canCropInBrowser()) {
+    try {
+      return await cropInBrowser(imageUrl, ratio, x, y);
+    } catch (e) {
+      console.warn("[cropImage] cropping in the browser failed, asking the server:", e);
+    }
+  }
   const res = await fetch("/api/crop-image", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -557,15 +578,25 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // ─── Image management ──────────────────────────────────────────────────────
   const assignImage = useCallback(async (slot: "hero" | "secondary", imageUrl: string) => {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
-    const ratio = ASPECT[slot];
-    const croppedUrl = await cropImage(imageUrl, ratio);
-    setImages((prev) => ({ ...prev, [slot]: { url: croppedUrl, originalUrl: imageUrl } }));
-    setIsSaved(false);
+    try {
+      const ratio = ASPECT[slot];
+      const croppedUrl = await cropImage(imageUrl, ratio);
+      setImages((prev) => ({ ...prev, [slot]: { url: croppedUrl, originalUrl: imageUrl } }));
+      setIsSaved(false);
+    } catch (e: any) {
+      setSaveError(`Couldn't add that photo: ${e?.message ?? String(e)}`);
+    }
   }, [requestCopyPrompt]);
 
   const assignGalleryImage = useCallback(async (idx: number, imageUrl: string) => {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
-    const croppedUrl = await cropImage(imageUrl, ASPECT.gallery);
+    let croppedUrl: string;
+    try {
+      croppedUrl = await cropImage(imageUrl, ASPECT.gallery);
+    } catch (e: any) {
+      setSaveError(`Couldn't add that photo: ${e?.message ?? String(e)}`);
+      return;
+    }
     setImages((prev) => {
       const gallery = [...prev.gallery];
       while (gallery.length <= idx) gallery.push({ url: "", originalUrl: "" });
@@ -608,7 +639,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       originalUrl = img.originalUrl;
       ratio = ASPECT[slot];
     }
-    const croppedUrl = await cropImage(originalUrl, ratio, x, y);
+    let croppedUrl: string;
+    try {
+      croppedUrl = await cropImage(originalUrl, ratio, x, y);
+    } catch (e: any) {
+      setSaveError(`Couldn't reposition that photo: ${e?.message ?? String(e)}`);
+      return;
+    }
     setImages((prev) => {
       if (slot === "gallery") {
         const gallery = prev.gallery.map((g, i) =>

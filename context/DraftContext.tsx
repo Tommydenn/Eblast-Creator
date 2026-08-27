@@ -566,7 +566,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // builds its own HTML so it can show grey blocks for photos still arriving.
   // Nothing here substitutes a placeholder: every caller waits for the real
   // photos first, so what goes out is always the real eblast.
-  const buildHtml = useCallback((opts?: { declareViewportWidth?: boolean }): string => {
+  const buildHtml = useCallback((): string => {
     const f = fieldsRef.current;
     const c = communityRef.current;
     if (!f || !c) return "";
@@ -575,7 +575,6 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       heroImageUrl: imgs.hero?.url,
       secondaryImageUrl: imgs.secondary?.url,
       galleryImageUrls: imgs.gallery.map((g) => g.url),
-      declareViewportWidth: opts?.declareViewportWidth ?? false,
     });
   }, []);
 
@@ -1346,9 +1345,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     // Same freshness guarantee as push() — the approval email must reflect
     // the community's current brand/sender, not a stale in-memory copy.
     await refreshCommunity(c.slug);
-    // Test sends alone carry the declared width, so the rotation fix can be
-    // tried in a real inbox without changing anything a recipient receives.
-    const html = buildHtml({ declareViewportWidth: opts.isTest === true });
+    const html = buildHtml();
     const res = await fetch("/api/draft-approval", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

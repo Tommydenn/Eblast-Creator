@@ -276,11 +276,11 @@ function dateTimeRow(opts: {
   // with it; this only adds one for older values that don't.
   const scaledTime = scaleInlineSizes(timeHtml, sizeFactor);
   const timeContent = timeStartsWithSeparator ? scaledTime : `${SEPARATOR} ${scaledTime}`;
-  const timePart = timeHtml ? `&nbsp;<span data-field="${timeField}">${timeContent}</span>` : "";
+  const timePart = timeHtml ? `&nbsp;<span data-field="${timeField}" style="color:#FFFFFF; text-decoration:none;">${timeContent}</span>` : "";
 
   // Both date lines — hero and footer — must hold one line, so the paragraph
   // carries the no-wrap class and the space before the time is non-breaking.
-  return `<p${lock ? ' class="glm-nowrap"' : ""} style="${style}"><span data-field="${dateField}">${scaleInlineSizes(dateHtml, sizeFactor)}</span>${timePart}</p>`;
+  return `<p${lock ? ' class="glm-nowrap"' : ""} style="${style}"><span data-field="${dateField}" style="color:#FFFFFF; text-decoration:none;">${scaleInlineSizes(dateHtml, sizeFactor)}</span>${timePart}</p>`;
 }
 
 export interface RenderOptions {
@@ -763,7 +763,9 @@ export function buildEblastHtml(
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- No viewport tag on purpose: this is a fixed 600px design, and clients
+     zoom it to fit. Setting width=device-width made Gmail squeeze and reflow
+     it; setting width=600 fixed Gmail and broke Apple Mail. -->
 <!-- Stops iOS turning phone numbers, dates and addresses into its own blue
      underlined links — which is what put a blue number inside the call button. -->
 <meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
@@ -783,6 +785,12 @@ export function buildEblastHtml(
     word-break: break-word;
   }
   img { max-width: 100%; }
+
+  body, table, td, p, a, span, div {
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
 
   /*
     Apple Mail and iOS wrap anything they think is a phone number, date or

@@ -574,7 +574,7 @@ export function buildEblastHtml(
                  600px frame, which is what stretched the email (and, once the
                  frame was pinned, spilled off the edge instead). Constrained
                  to the hero's content width so the text wraps inside it. -->
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 12px auto 22px auto; max-width: ${HERO_CONTENT_WIDTH}px; table-layout: fixed;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${HERO_CONTENT_WIDTH}" style="width: ${HERO_CONTENT_WIDTH}px; margin: 12px auto 22px auto; max-width: ${HERO_CONTENT_WIDTH}px; table-layout: fixed;">
               <tr>
                 <!-- Vertical padding matches the header's 22px, and there is no
                      side padding so the date, time and address line up with the
@@ -593,7 +593,7 @@ export function buildEblastHtml(
                     extraStyle: "letter-spacing: 1px;",
                     marginBottom: 8,
                   })}
-                  ${addressLine ? (() => { const src = flyer.heroAddress ?? addressLine; const fit = fitOneLine(src, fontBody, 17, CONTENT_WIDTH, 1); return `<p data-field="heroAddress"${lockClass(src, fontBody, 17, CONTENT_WIDTH, 1)} style="font-family: ${fontBody}; font-size: ${fit.size}px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;">${flyer.heroAddress ? renderInlineField(scaleInlineSizes(flyer.heroAddress, fit.factor)) : escapeHtml(addressLine)}</p>`; })() : ""}
+                  ${addressLine ? (() => { const src = flyer.heroAddress ?? addressLine; const fit = fitOneLine(src, fontBody, 17, CONTENT_WIDTH, 1); return `<p data-field="heroAddress"${lockClass(src, fontBody, 17, CONTENT_WIDTH, 1)} style="font-family: ${fontBody}; font-size: ${fit.size}px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(scaleInlineSizes(flyer.heroAddress, fit.factor)) : escapeHtml(addressLine)}</span></p>`; })() : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -756,7 +756,7 @@ export function buildEblastHtml(
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=600">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Stops iOS turning phone numbers, dates and addresses into its own blue
      underlined links — which is what put a blue number inside the call button. -->
 <meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
@@ -798,6 +798,13 @@ export function buildEblastHtml(
     The global break-word rule above has to be undone here, or a long single
     word would still split.
   */
+  .glm-lock {
+    /* Last line of defence: whatever happens inside, a section can never make
+       the email wider than its column. */
+    overflow: hidden !important;
+    max-width: 100% !important;
+  }
+
   .glm-nowrap {
     white-space: nowrap !important;
     word-break: normal !important;

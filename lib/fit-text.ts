@@ -37,11 +37,15 @@ const TABLES: Record<FitFace, WidthTable> = { serif: GEORGIA, sans: ARIAL, scrip
 const UNKNOWN = 60;
 
 /**
- * A little room to spare. Summing advance widths ignores kerning, and Outlook
- * measures through Word rather than a browser, so fitting to the exact pixel
- * would be fitting to the wrong number.
+ * Room to spare, and a deliberately generous amount of it.
+ *
+ * Summing advance widths ignores kerning; Outlook measures through Word rather
+ * than a browser; and Android has neither Arial nor Helvetica, so it lands on
+ * Roboto, which these tables do not describe. A line that overruns cannot wrap
+ * — it pushes out of the frame — so the cost of fitting too tightly is far
+ * higher than the cost of text being a point smaller than it strictly needs.
  */
-const SAFETY = 1.03;
+const SAFETY = 1.08;
 
 /** Width of `text` at `size` px in the given face, in px. */
 export function measureLine(text: string, face: FitFace, size: number): number {

@@ -186,18 +186,38 @@ const ASPECT = { hero: 600 / 340, secondary: 528 / 300, gallery: 4 / 3 } as cons
  * The server route stays for anything that can't do it locally, and the
  * geometry is shared, so both produce the same framing.
  */
-async function cropImage(imageUrl: string, ratio: number, x = 50, y = 50): Promise<string> {
-  if (canCropInBrowser()) {
+async function cropImage(
+  imageUrl: string,
+  ratio: number,
+  x = 50,
+  y = 50,
+  /** Where this photo is stored, when it is — see the comment above. */
+  source?: { draftId: string | null; idx: number | null },
+): Promise<string> {
+  const named = source?.draftId != null && source?.idx != null;
+
+  // Nothing to name: the photo exists only in this browser (just uploaded from
+  // a device, or a draft that hasn't been saved yet). Those are ordinary RGB
+  // photos, so cropping here is colour-safe, and it sidesteps the 4.5 MB
+  // request limit that a big one would breach.
+  if (!named && canCropInBrowser()) {
     try {
       return await cropInBrowser(imageUrl, ratio, x, y);
     } catch (e) {
       console.warn("[cropImage] cropping in the browser failed, asking the server:", e);
     }
   }
+
   const res = await fetch("/api/crop-image", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ imageUrl, targetRatio: ratio, x, y }),
+    // Naming it keeps the request small. Sending the bytes is the last resort
+    // and is what fails on a large photo.
+    body: JSON.stringify(
+      named
+        ? { draftId: source!.draftId, imageIdx: source!.idx, targetRatio: ratio, x, y }
+        : { imageUrl, targetRatio: ratio, x, y },
+    ),
   });
   const data = await res.json();
   if (!data.ok) throw new Error(data.error ?? "Crop failed");
@@ -214,6 +234,8 @@ export interface DraftContextValue {
   fields: ExtractedFlyer | null;
   images: DraftImages;
   imageBank: string[];
+  /** Stored row index for each imageBank entry, positionally. */
+  imageBankIdx: number[];
   draftId: string | null;
   isSaved: boolean;
   saveNotice: string | null;
@@ -247,8 +269,8 @@ export interface DraftContextValue {
   cancelGenerate: () => void;
   setField: <K extends keyof ExtractedFlyer>(key: K, value: ExtractedFlyer[K]) => void;
   setFields: (patch: Partial<ExtractedFlyer>) => void;
-  assignImage: (slot: "hero" | "secondary", imageUrl: string) => Promise<void>;
-  assignGalleryImage: (idx: number, imageUrl: string) => Promise<void>;
+  assignImage: (slot: "hero" | "secondary", imageUrl: string, bankIdx?: number) => Promise<void>;
+  assignGalleryImage: (idx: number, imageUrl: string, bankIdx?: number) => Promise<void>;
   removeImage: (slot: "hero" | "secondary" | "gallery", galleryIdx?: number) => void;
   repositionImage: (slot: "hero" | "secondary" | "gallery", x: number, y: number, galleryIdx?: number) => Promise<void>;
   refine: (instruction: string) => Promise<void>;
@@ -363,6 +385,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const [fields, setFields_] = useState<ExtractedFlyer | null>(null);
   const [images, setImages] = useState<DraftImages>(EMPTY_IMAGES);
   const [imageBank, setImageBank] = useState<string[]>([]);
+  /** Stored row index for each entry of imageBank, positionally. */
+  const [imageBankIdx, setImageBankIdx] = useState<number[]>([]);
   // Reopening a saved draft pulls its photos in over several requests (see
   // lib/image-bank). `imagesLoading` drives the placeholders; `imagesReadyRef`
   // is what save/push/approval await so nothing is ever sent or stored from a
@@ -469,6 +493,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   const fieldsRef = useRef<ExtractedFlyer | null>(null);
   const imagesRef = useRef<DraftImages>(EMPTY_IMAGES);
   const imageBankRef = useRef<string[]>([]);
+  const draftIdRef = useRef<string | null>(null);
   const communityRef = useRef<ClientCommunity | null>(null);
 
   // Keep refs in sync
@@ -477,6 +502,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { undoStackRef.current = undoStack; }, [undoStack]);
   useEffect(() => { redoStackRef.current = redoStack; }, [redoStack]);
   useEffect(() => { imageBankRef.current = imageBank; }, [imageBank]);
+  useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
 
   // Derived community object
   const community = communities.find((c) => c.slug === selectedCommunitySlug) ?? null;
@@ -576,11 +602,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, [requestCopyPrompt]);
 
   // ─── Image management ──────────────────────────────────────────────────────
-  const assignImage = useCallback(async (slot: "hero" | "secondary", imageUrl: string) => {
+  const assignImage = useCallback(async (slot: "hero" | "secondary", imageUrl: string, bankIdx?: number) => {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     try {
       const ratio = ASPECT[slot];
-      const croppedUrl = await cropImage(imageUrl, ratio);
+      const croppedUrl = await cropImage(imageUrl, ratio, 50, 50, {
+        draftId: draftIdRef.current,
+        idx: bankIdx ?? null,
+      });
       setImages((prev) => ({ ...prev, [slot]: { url: croppedUrl, originalUrl: imageUrl } }));
       setIsSaved(false);
     } catch (e: any) {
@@ -588,11 +617,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     }
   }, [requestCopyPrompt]);
 
-  const assignGalleryImage = useCallback(async (idx: number, imageUrl: string) => {
+  const assignGalleryImage = useCallback(async (idx: number, imageUrl: string, bankIdx?: number) => {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     let croppedUrl: string;
     try {
-      croppedUrl = await cropImage(imageUrl, ASPECT.gallery);
+      croppedUrl = await cropImage(imageUrl, ASPECT.gallery, 50, 50, {
+        draftId: draftIdRef.current,
+        idx: bankIdx ?? null,
+      });
     } catch (e: any) {
       setSaveError(`Couldn't add that photo: ${e?.message ?? String(e)}`);
       return;
@@ -639,9 +671,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       originalUrl = img.originalUrl;
       ratio = ASPECT[slot];
     }
+    const originalIdx =
+      slot === "hero" ? -2 : slot === "secondary" ? -4 : -(11 + (galleryIdx ?? 0) * 2);
     let croppedUrl: string;
     try {
-      croppedUrl = await cropImage(originalUrl, ratio, x, y);
+      croppedUrl = await cropImage(originalUrl, ratio, x, y, {
+        draftId: draftIdRef.current,
+        idx: originalIdx,
+      });
     } catch (e: any) {
       setSaveError(`Couldn't reposition that photo: ${e?.message ?? String(e)}`);
       return;
@@ -1129,8 +1166,12 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const compactBank = bank.filter(Boolean);
-      if (compactBank.length) setImageBank(compactBank);
+      const compactBank: string[] = [];
+      const compactIdx: number[] = [];
+      bank.forEach((url, i) => {
+        if (url) { compactBank.push(url); compactIdx.push(i); }
+      });
+      if (compactBank.length) { setImageBank(compactBank); setImageBankIdx(compactIdx); }
 
       setImages((prev) => {
         const next = { ...prev };
@@ -1446,6 +1487,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     imagesError,
     waitingForImages,
     imageBank,
+    imageBankIdx,
     draftId,
     isSaved,
     saveNotice,

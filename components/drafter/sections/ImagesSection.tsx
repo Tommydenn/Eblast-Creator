@@ -131,15 +131,18 @@ function RepositionModal({
 
 function BankPicker({
   imageBank,
+  bankIdx,
   bankLoading,
   onPick,
   onClose,
   onUpload,
 }: {
   imageBank: string[];
+  /** Stored row index for each entry, so a crop can name the photo. */
+  bankIdx?: number[];
   /** The unplaced flyer photos are still arriving. */
   bankLoading?: boolean;
-  onPick: (url: string) => void;
+  onPick: (url: string, bankIdx?: number) => void;
   onClose: () => void;
   onUpload: (url: string) => void;
 }) {
@@ -187,7 +190,7 @@ function BankPicker({
               {imageBank.map((url, i) => (
                 <button
                   key={i}
-                  onClick={() => onPick(url)}
+                  onClick={() => onPick(url, bankIdx?.[i])}
                   className="aspect-video rounded-lg overflow-hidden border-2 border-transparent hover:border-[#1F4538] transition-colors"
                 >
                   <img src={url} alt={`Image ${i + 1}`} className="w-full h-full object-cover" />
@@ -229,17 +232,17 @@ type ActivePicker = { slot: "hero" | "secondary" | "gallery"; galleryIdx?: numbe
 type ActiveReposition = { slot: "hero" | "secondary" | "gallery"; galleryIdx?: number; originalUrl: string } | null;
 
 export default function ImagesSection() {
-  const { images, imageBank, imagesLoading, imageBankLoading, originalsLoading, imagesError, assignImage, assignGalleryImage, removeImage, repositionImage, addToImageBank, fields, setField } = useDraft();
+  const { images, imageBank, imageBankIdx, imagesLoading, imageBankLoading, originalsLoading, imagesError, assignImage, assignGalleryImage, removeImage, repositionImage, addToImageBank, fields, setField } = useDraft();
   const [picker, setPicker] = React.useState<ActivePicker>(null);
   const [reposition, setReposition] = React.useState<ActiveReposition>(null);
 
-  async function handlePick(url: string) {
+  async function handlePick(url: string, bankIdx?: number) {
     if (!picker) return;
     setPicker(null);
     if (picker.slot === "hero" || picker.slot === "secondary") {
-      await assignImage(picker.slot, url);
+      await assignImage(picker.slot, url, bankIdx);
     } else {
-      await assignGalleryImage(picker.galleryIdx ?? images.gallery.length, url);
+      await assignGalleryImage(picker.galleryIdx ?? images.gallery.length, url, bankIdx);
     }
   }
 
@@ -337,6 +340,7 @@ export default function ImagesSection() {
       {picker && (
         <BankPicker
           imageBank={imageBank}
+          bankIdx={imageBankIdx}
           bankLoading={imageBankLoading}
           onPick={handlePick}
           onClose={() => setPicker(null)}

@@ -8,6 +8,7 @@ function SlotCard({
   label,
   url,
   loading,
+  repositionState,
   onAssign,
   onRemove,
   onReposition,
@@ -16,6 +17,8 @@ function SlotCard({
   url?: string | null;
   /** This slot holds a photo that is still downloading. */
   loading?: boolean;
+  /** Whether the full-size original this would re-crop from is available. */
+  repositionState?: RepositionState;
   onAssign: () => void;
   onRemove?: () => void;
   onReposition?: () => void;
@@ -27,8 +30,10 @@ function SlotCard({
         <div className="flex items-center gap-2">
           {url && onReposition && (
             <button
-              onClick={onReposition}
-              className="text-xs text-[#7a8c85] hover:text-[#1F4538] transition-colors"
+              onClick={repositionState === "ready" ? onReposition : undefined}
+              disabled={repositionState !== "ready"}
+              title={repositionExplanation(repositionState)}
+              className="text-xs text-[#7a8c85] hover:text-[#1F4538] transition-colors disabled:text-[#c9c0b8] disabled:cursor-default disabled:hover:text-[#c9c0b8]"
             >
               Reposition
             </button>
@@ -196,11 +201,35 @@ function BankPicker({
   );
 }
 
+/**
+ * Whether a photo can be repositioned, and if not, why.
+ *
+ * "waiting" is temporary: the full-size originals are the largest files and
+ * arrive after the photos you can see, so for a few seconds after opening a
+ * draft there is nothing to re-crop from. "missing" is permanent — the original
+ * was never stored, which is true of some older drafts.
+ */
+type RepositionState = "ready" | "waiting" | "missing";
+
+function repositionState(
+  img: { url: string; originalUrl: string } | null | undefined,
+  stillLoading: boolean,
+): RepositionState {
+  if (img?.originalUrl) return "ready";
+  return stillLoading ? "waiting" : "missing";
+}
+
+function repositionExplanation(state?: RepositionState): string {
+  if (state === "waiting") return "Waiting for the full-size photo to finish loading";
+  if (state === "missing") return "The full-size photo wasn't saved with this draft, so it can't be re-cropped";
+  return "Choose which part of the photo to show";
+}
+
 type ActivePicker = { slot: "hero" | "secondary" | "gallery"; galleryIdx?: number } | null;
 type ActiveReposition = { slot: "hero" | "secondary" | "gallery"; galleryIdx?: number; originalUrl: string } | null;
 
 export default function ImagesSection() {
-  const { images, imageBank, imagesLoading, imageBankLoading, imagesError, assignImage, assignGalleryImage, removeImage, repositionImage, addToImageBank, fields, setField } = useDraft();
+  const { images, imageBank, imagesLoading, imageBankLoading, originalsLoading, imagesError, assignImage, assignGalleryImage, removeImage, repositionImage, addToImageBank, fields, setField } = useDraft();
   const [picker, setPicker] = React.useState<ActivePicker>(null);
   const [reposition, setReposition] = React.useState<ActiveReposition>(null);
 
@@ -235,6 +264,7 @@ export default function ImagesSection() {
         label="Hero Image"
         url={images.hero?.url}
         loading={imagesLoading && !!images.hero && !images.hero.url}
+        repositionState={repositionState(images.hero, originalsLoading)}
         onAssign={() => setPicker({ slot: "hero" })}
         onRemove={images.hero ? () => removeImage("hero") : undefined}
         onReposition={images.hero ? () => setReposition({ slot: "hero", originalUrl: images.hero!.originalUrl }) : undefined}
@@ -244,6 +274,7 @@ export default function ImagesSection() {
         label="Secondary Image"
         url={images.secondary?.url}
         loading={imagesLoading && !!images.secondary && !images.secondary.url}
+        repositionState={repositionState(images.secondary, originalsLoading)}
         onAssign={() => setPicker({ slot: "secondary" })}
         onRemove={images.secondary ? () => removeImage("secondary") : undefined}
         onReposition={images.secondary ? () => setReposition({ slot: "secondary", originalUrl: images.secondary!.originalUrl }) : undefined}
@@ -279,8 +310,14 @@ export default function ImagesSection() {
                 )}
                 <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors flex items-center justify-center gap-2 opacity-0 hover:opacity-100">
                   <button
-                    onClick={() => setReposition({ slot: "gallery", galleryIdx: i, originalUrl: img.originalUrl })}
-                    className="text-white text-xs bg-black/60 rounded px-2 py-1"
+                    onClick={
+                      repositionState(img, originalsLoading) === "ready"
+                        ? () => setReposition({ slot: "gallery", galleryIdx: i, originalUrl: img.originalUrl })
+                        : undefined
+                    }
+                    disabled={repositionState(img, originalsLoading) !== "ready"}
+                    title={repositionExplanation(repositionState(img, originalsLoading))}
+                    className="text-white text-xs bg-black/60 rounded px-2 py-1 disabled:opacity-40 disabled:cursor-default"
                   >
                     Reposition
                   </button>

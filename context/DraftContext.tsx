@@ -246,6 +246,8 @@ export interface DraftContextValue {
   imagesLoading: boolean;
   /** The unplaced flyer photos behind the picker are still arriving. */
   imageBankLoading: boolean;
+  /** The full-size originals Reposition needs are still arriving. */
+  originalsLoading: boolean;
   /** Set when the photos could not be loaded, so nothing should be saved or sent. */
   imagesError: string | null;
   /** A save or send is holding until the photos are in. */
@@ -347,6 +349,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // keeps a failed load from being written back as "no photos".
   const [imagesLoading, setImagesLoading] = useState(false);
   const [imageBankLoading, setImageBankLoading] = useState(false);
+  /** The full-size originals Reposition re-crops from are still arriving. */
+  const [originalsLoading, setOriginalsLoading] = useState(false);
   const [imagesError, setImagesError] = useState<string | null>(null);
   // Set while a save or send is holding for the photos, so the button can say
   // so rather than appearing to hang.
@@ -371,6 +375,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     shownReadyRef.current = null;
     setImagesLoading(false);
     setImageBankLoading(false);
+    setOriginalsLoading(false);
     setImagesError(null);
     setWaitingForImages(false);
   }, []);
@@ -1044,6 +1049,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     imagesLoadedRef.current = false;
     setImagesLoading(true);
     setImageBankLoading(true);
+    setOriginalsLoading(true);
     setImagesError(null);
 
     const received: ImageRow[] = [];
@@ -1123,7 +1129,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           // rows; the pointer always names a row from this phase or an
           // earlier one, so everything received so far resolves it.
           received.push(...resolveImageRefs(data.images ?? [], received));
-          if (phase === "originals") originalsIn = true;
+          if (phase === "originals") { originalsIn = true; setOriginalsLoading(false); }
           applyReceived();
           if (phase === "shown") {
             shownLoadedRef.current = true;
@@ -1139,6 +1145,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       } finally {
         setImagesLoading(false);
         setImageBankLoading(false);
+        setOriginalsLoading(false);
         // Always release, so a save or send reports the failure rather than
         // waiting on a phase that is never going to arrive.
         releaseShown();
@@ -1390,6 +1397,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     images,
     imagesLoading,
     imageBankLoading,
+    originalsLoading,
     imagesError,
     waitingForImages,
     imageBank,

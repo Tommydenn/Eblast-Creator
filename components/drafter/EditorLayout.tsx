@@ -391,7 +391,10 @@ export default function EditorLayout() {
           {/* Preview, with the flyer alongside it when asked for */}
           <div className="flex-1 flex overflow-hidden">
             <div className="flex-1 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
-              <div className="w-full max-w-[640px] mx-auto shadow-xl rounded-lg overflow-hidden">
+              {/* Exactly the email s width. It was 640 for a 600px email, and
+                  the email sits at the left of its box, so the leftover 40px
+                  showed as a grey strip down the right-hand side. */}
+              <div className="w-full max-w-[600px] mx-auto shadow-xl rounded-lg overflow-hidden">
                 <PreviewPanel layoutSignal={flyerOpen ? "flyer" : "no-flyer"} />
               </div>
             </div>

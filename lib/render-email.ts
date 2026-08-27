@@ -111,6 +111,24 @@ function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
  */
 const HERO_ADDRESS_COLOR = "#E8DDC4";
 
+/**
+ * Sizes that used to be chosen from how much text a field contained.
+ *
+ * They shrank as you typed and grew as you deleted, which meant the size was
+ * never yours and the toolbar's number was a guess — the toolbar reads a fixed
+ * list, so on a short subheadline it showed 40 while the email rendered 48, and
+ * nudging down "one point" dropped it nine. One fixed size per field fixes both
+ * halves of that: nothing moves on its own, and the number in the toolbar is
+ * the truth.
+ *
+ * These MUST stay equal to FIELD_FONT_SIZES in components/drafter/RichEditor.tsx.
+ * Long text wraps instead of shrinking, which the pinned 600px shell and the
+ * wrapping rules already handle.
+ */
+const SCRIPT_SUBHEADLINE_SIZE = 40;
+const CTA_DATE_SIZE = 32;
+const CALL_BUTTON_SIZE = 18;
+
 /** Character between the event date and time. Must match DateTimeField's. */
 const SEPARATOR = "·";
 
@@ -288,9 +306,7 @@ export function buildEblastHtml(
   // The date box no longer adds side padding of its own, so its content spans
   // the same column as every other section and lines up with the header.
   const HERO_CONTENT_WIDTH = CONTENT_WIDTH;
-  const fitsUnwrapped = (text: string, px: number) => text.length * px * 0.53 <= CONTENT_WIDTH;
-  const ctaDatePlain = stripHtml(ctaDateLine);
-  const ctaDateFontSize = [32, 26, 22].find((px) => fitsUnwrapped(ctaDatePlain, px)) ?? 22;
+  const ctaDateFontSize = CTA_DATE_SIZE;
 
   // Header color rule: the header must ALWAYS be a light, non-gray surface —
   // white (matching the story section's white body), or the community's own
@@ -380,9 +396,8 @@ export function buildEblastHtml(
       : rawLabelHtml;
     const displayText = stripHtml(reconciledLabelHtml);
     const displayHtml = renderInlineField(reconciledLabelHtml);
-    // Two font sizes only. Long labels wrap to a second line rather than shrinking.
-    const fontSize = displayText.length <= 32 ? 18 : 17;
-    const letterSpacing = fontSize >= 18 ? "2.5px" : "2px";
+    const fontSize = CALL_BUTTON_SIZE;
+    const letterSpacing = "2.5px";
     // Explicit pixel width for CTA button tables. Outlook/Word auto-sizes tables
     // with no width attribute, and white-space:nowrap causes the cell to grow
     // wider on each forward/reply cycle. A fixed width prevents this accumulation.
@@ -436,11 +451,7 @@ export function buildEblastHtml(
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
             ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${brand.fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
             <p data-field="headline" style="font-family: ${brand.fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
-            ${flyer.scriptSubheadline ? (() => {
-              const plainLen = stripHtml(flyer.scriptSubheadline).length;
-              const fontSize = plainLen <= 18 ? 48 : plainLen <= 28 ? 40 : plainLen <= 38 ? 32 : 26;
-              return `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${fontSize}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>`;
-            })() : ""}
+            ${flyer.scriptSubheadline ? `<p data-field="scriptSubheadline" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>` : ""}
             ${eventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
                  A date line longer than the column made it wider than the

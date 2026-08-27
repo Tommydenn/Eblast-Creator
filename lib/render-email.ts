@@ -141,7 +141,6 @@ function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
  * and the CTA. Shared as a constant so the RSVP label can't drift away from
  * the address again.
  */
-import { faceFor, fitFontSize, needsShortening } from "@/lib/fit-text";
 
 const HERO_ADDRESS_COLOR = "#E8DDC4";
 
@@ -372,64 +371,6 @@ export function buildEblastHtml(
    * A size the user set by hand on the text itself wins over the template's
    * default, so what they picked is what gets fitted.
    */
-  const spacingRoom = (html: string, letterSpacing: number, width: number) =>
-    width - stripHtml(html ?? "").trim().length * letterSpacing;
-
-  const fitOneLine = (
-    html: string,
-    fontStack: string,
-    preferred: number,
-    width = CONTENT_WIDTH,
-    letterSpacing = 0,
-  ) => {
-    const chosen = userChosenSize(html) ?? preferred;
-    const room = spacingRoom(html, letterSpacing, width);
-    const size = fitFontSize(html, faceFor(fontStack), chosen, room);
-    return { size, factor: chosen > 0 ? size / chosen : 1 };
-  };
-
-  /**
-   * Whether a line can be held on one line at all.
-   *
-   * When even the smallest allowed size can't fit it, locking it would push the
-   * text outside the email — worse than the wrap we're trying to prevent. Such
-   * a line is allowed to wrap, and the editor flags it so the words can be
-   * shortened. Nothing ever spills out of the frame.
-   */
-  const lockClass = (
-    html: string,
-    fontStack: string,
-    preferred: number,
-    width = CONTENT_WIDTH,
-    letterSpacing = 0,
-  ) =>
-    needsShortening(
-      html,
-      faceFor(fontStack),
-      userChosenSize(html) ?? preferred,
-      spacingRoom(html, letterSpacing, width),
-    )
-      ? ""
-      : ' class="glm-nowrap"';
-  const ctaDateFontSize = CTA_DATE_SIZE;
-  // Measured exactly as it will render. The renderer inserts the separator
-  // when the stored time does not already carry one, and those two extra
-  // characters were enough to push a fitted line over the edge.
-  const dateTimeAsRendered = (date?: string, time?: string) => {
-    const d = (date ?? "").trim();
-    const t = (time ?? "").trim();
-    if (!t) return d;
-    const plain = stripHtml(t).trim();
-    const withSep = plain.startsWith(SEPARATOR) ? t : `${SEPARATOR} ${t}`;
-    return d ? `${d} ${withSep}` : withSep;
-  };
-  const heroDateText = dateTimeAsRendered(flyer.eventDate, flyer.eventTime);
-  const ctaDateText = dateTimeAsRendered(ctaDate, ctaTime);
-  // 1px of letter-spacing on the hero date; the footer date has none.
-  const heroDateFit = fitOneLine(heroDateText, fontHeadline, 26, CONTENT_WIDTH, 1);
-  const heroDateLocked = lockClass(heroDateText, fontHeadline, 26, CONTENT_WIDTH, 1).includes("glm-nowrap");
-  const ctaDateFit = fitOneLine(ctaDateText, fontHeadline, ctaDateFontSize);
-  const ctaDateLocked = lockClass(ctaDateText, fontHeadline, ctaDateFontSize).includes("glm-nowrap");
 
   // Header color rule: the header must ALWAYS be a light, non-gray surface —
   // white (matching the story section's white body), or the community's own
@@ -573,8 +514,8 @@ export function buildEblastHtml(
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
             ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
-            ${(() => { const fit = fitOneLine(flyer.headline ?? "", fontHeadline, 40, CONTENT_WIDTH, 0.5); return `<p data-field="headline"${lockClass(flyer.headline ?? "", fontHeadline, 40, CONTENT_WIDTH, 0.5)} style="font-family: ${fontHeadline}; font-size: ${fit.size}px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(scaleInlineSizes(flyer.headline ?? "", fit.factor))}</p>`; })()}
-            ${flyer.scriptSubheadline ? (() => { const fit = fitOneLine(flyer.scriptSubheadline!, "cursive", SCRIPT_SUBHEADLINE_SIZE); return `<p data-field="scriptSubheadline"${lockClass(flyer.scriptSubheadline!, "cursive", SCRIPT_SUBHEADLINE_SIZE)} style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${fit.size}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(scaleInlineSizes(flyer.scriptSubheadline!, fit.factor))}</p>`; })() : ""}
+            <p data-field="headline" class="glm-nowrap" style="font-family: ${fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
+            ${flyer.scriptSubheadline ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>` : ""}
             ${eventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
                  A date line longer than the column made it wider than the
@@ -594,13 +535,11 @@ export function buildEblastHtml(
                     timeField: "eventTime",
                     timeStartsWithSeparator: stripHtml(flyer.eventTime ?? "").trim().startsWith("·"),
                     fontFamily: fontHeadline,
-                    fontSize: heroDateFit.size,
-                    sizeFactor: heroDateFit.factor,
-                    lock: heroDateLocked,
+                    fontSize: 26,
                     extraStyle: "letter-spacing: 1px;",
                     marginBottom: 8,
                   })}
-                  ${addressLine ? (() => { const src = flyer.heroAddress ?? addressLine; const fit = fitOneLine(src, fontBody, 17, CONTENT_WIDTH, 1); return `<p data-field="heroAddress"${lockClass(src, fontBody, 17, CONTENT_WIDTH, 1)} style="font-family: ${fontBody}; font-size: ${fit.size}px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(scaleInlineSizes(flyer.heroAddress, fit.factor)) : escapeHtml(addressLine)}</span></p>`; })() : ""}
+                  ${addressLine ? `<p data-field="heroAddress" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -622,8 +561,8 @@ export function buildEblastHtml(
   ${flyer.storySectionHidden ? "" : `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 44px 36px 12px 36px;">
-      ${(() => { const w = CONTENT_WIDTH - stripHtml(flyer.storyEyebrow ?? "").length * 3; const fit = fitOneLine(flyer.storyEyebrow ?? "", fontBody, 15, CONTENT_WIDTH, 3); return `<p data-field="storyEyebrow"${lockClass(flyer.storyEyebrow ?? "", fontBody, 15, CONTENT_WIDTH, 3)} style="font-family: ${fontBody}; font-size: ${fit.size}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(scaleInlineSizes(flyer.storyEyebrow ?? "", fit.factor))}</p>`; })()}
-      ${flyer.storyScriptTitle ? (() => { const fit = fitOneLine(flyer.storyScriptTitle!, "cursive", 42); return `<p data-field="storyScriptTitle"${lockClass(flyer.storyScriptTitle!, "cursive", 42)} style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${fit.size}px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(scaleInlineSizes(flyer.storyScriptTitle!, fit.factor))}</p>`; })() : ""}
+      <p data-field="storyEyebrow" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(flyer.storyEyebrow)}</p>
+      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
   <tr data-section="Story" data-deletefield="storySectionHidden">
@@ -703,9 +642,7 @@ export function buildEblastHtml(
               timeField: "ctaEventTime",
               timeStartsWithSeparator: stripHtml(ctaTime ?? "").trim().startsWith("·"),
               fontFamily: fontHeadline,
-              fontSize: ctaDateFit.size,
-              sizeFactor: ctaDateFit.factor,
-              lock: ctaDateLocked,
+              fontSize: CTA_DATE_SIZE,
               extraStyle: "line-height: 1.2;",
               marginBottom: 22,
             }) : ""}

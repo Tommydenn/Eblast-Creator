@@ -108,10 +108,20 @@ export interface SendApprovalEmailParams {
   token: string;
   /** Optional personal note from the marketing team, shown above the preview. */
   note?: string | null;
+  /**
+   * Test sends get a time-stamped subject so each lands in its own Gmail
+   * conversation. The Gmail app reuses a conversation's zoom state, so when
+   * every test shared one subject, one bad zoom made every later test look
+   * broken regardless of what changed. Real approvals keep the plain subject.
+   */
+  isTest?: boolean;
 }
 
 export async function sendApprovalEmail(params: SendApprovalEmailParams) {
-  const { to, recipientName, communityName, draftSubject, draftHtml, token, note } = params;
+  const { to, recipientName, communityName, draftSubject, draftHtml, token, note, isTest } = params;
+  const testStamp = isTest
+    ? ` [test ${new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" })}]`
+    : "";
   const approveUrl = `${APP_URL}/api/quick-approve/${token}`;
   const editsUrl = `${APP_URL}/approve/${token}/edits`;
   const greeting = firstName(recipientName);
@@ -142,7 +152,7 @@ ${eblastStyleBlock}
 <!-- Header / intro -->
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-shell" bgcolor="#f5f4f1">
   <tr>
-    <td align="center" style="padding:32px 16px 0;">
+    <td align="center" style="padding:32px 0 0;">
       <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-card" bgcolor="#ffffff"
              style="background:#ffffff;border-radius:8px 8px 0 0;padding:40px 48px 32px;border:1px solid #e0ddd7;border-bottom:none;">
         <tr>
@@ -223,7 +233,7 @@ ${eblastStyleBlock}
 <!-- Divider label -->
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
-    <td align="center" style="padding:0 16px;">
+    <td align="center" style="padding:0;">
       <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-divider" bgcolor="#f0ece4"
              style="background:#f0ece4;border-left:1px solid #e0ddd7;border-right:1px solid #e0ddd7;padding:10px 48px;">
         <tr>
@@ -242,7 +252,7 @@ ${eblastStyleBlock}
 <!-- Eblast content -->
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
-    <td align="center" style="padding:0 16px 32px;">
+    <td align="center" style="padding:0 0 32px;">
       <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-card" bgcolor="#ffffff"
              style="background:#ffffff;border:1px solid #e0ddd7;border-top:none;
                     border-radius:0 0 8px 8px;padding:0;">
@@ -261,7 +271,7 @@ ${eblastStyleBlock}
 
   return sendMail({
     to,
-    subject: `Draft review: ${draftSubject} — ${communityName}`,
+    subject: `Draft review${testStamp}: ${draftSubject} — ${communityName}`,
     html,
   });
 }

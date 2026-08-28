@@ -186,6 +186,7 @@ export async function POST(req: NextRequest) {
       draftHtml: emailHtml,
       token,
       note,
+      isTest: !!isTest,
     });
   } catch (e: any) {
     await db.delete(savedDraftApprovals).where(eq(savedDraftApprovals.token, token));

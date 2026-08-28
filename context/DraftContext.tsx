@@ -90,10 +90,34 @@ export interface ClientCommunity {
   templates?: string[];
 }
 
+/**
+ * A photo in one of the eblast slots.
+ *
+ * originalIdx says where the uncropped original can be found, which is what
+ * repositioning re-crops from:
+ *
+ *   undefined — it is the draft's own stored original for this slot, so the
+ *               slot's fixed row (-2 hero, -4 secondary, -(11+i*2) gallery)
+ *               is correct.
+ *   a number  — it was swapped in from the photo pool and lives in that pool
+ *               row. The slot's stored row still holds the PREVIOUS photo
+ *               until the draft is saved, so repositioning had to be told
+ *               where the new one is or it would re-crop the old one and put
+ *               it back.
+ *   null      — it came straight off a device and exists only in this
+ *               browser, so it has to be cropped here from the bytes in
+ *               memory. Those are ordinary RGB photos, so that is safe.
+ */
+export interface SlotImage {
+  url: string;
+  originalUrl: string;
+  originalIdx?: number | null;
+}
+
 export interface DraftImages {
-  hero: { url: string; originalUrl: string } | null;
-  secondary: { url: string; originalUrl: string } | null;
-  gallery: Array<{ url: string; originalUrl: string }>;
+  hero: SlotImage | null;
+  secondary: SlotImage | null;
+  gallery: SlotImage[];
 }
 
 export interface PastSendForContext { subject: string; openRate?: number; clickRate?: number; sentAt?: string }
@@ -610,7 +634,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         draftId: draftIdRef.current,
         idx: bankIdx ?? null,
       });
-      setImages((prev) => ({ ...prev, [slot]: { url: croppedUrl, originalUrl: imageUrl } }));
+      setImages((prev) => ({ ...prev, [slot]: { url: croppedUrl, originalUrl: imageUrl, originalIdx: bankIdx ?? null } }));
       setIsSaved(false);
     } catch (e: any) {
       setSaveError(`Couldn't add that photo: ${e?.message ?? String(e)}`);
@@ -632,7 +656,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setImages((prev) => {
       const gallery = [...prev.gallery];
       while (gallery.length <= idx) gallery.push({ url: "", originalUrl: "" });
-      gallery[idx] = { url: croppedUrl, originalUrl: imageUrl };
+      gallery[idx] = { url: croppedUrl, originalUrl: imageUrl, originalIdx: bankIdx ?? null };
       return { ...prev, gallery };
     });
     setIsSaved(false);
@@ -642,7 +666,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     setImages((prev) => {
       if (slot === "gallery") {
-        const gallery = prev.gallery.filter((_, i) => i !== galleryIdx);
+        // Removing one shifts every photo after it up a place, so the fixed
+        // row each of those would otherwise be repositioned from no longer
+        // matches the photo on screen. Pin each to the row it is stored in
+        // now, before the shift happens.
+        const gallery = prev.gallery
+          .map((g, i) => (g.originalIdx === undefined ? { ...g, originalIdx: -(11 + i * 2) } : g))
+          .filter((_, i) => i !== galleryIdx);
         return { ...prev, gallery };
       }
       return { ...prev, [slot]: null };
@@ -660,19 +690,26 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const imgs = imagesRef.current;
     let originalUrl: string;
     let ratio: number;
+    let trackedIdx: number | null | undefined;
     if (slot === "gallery") {
       const g = imgs.gallery[galleryIdx ?? 0];
       if (!g) return;
       originalUrl = g.originalUrl;
+      trackedIdx = g.originalIdx;
       ratio = ASPECT.gallery;
     } else {
       const img = imgs[slot];
       if (!img) return;
       originalUrl = img.originalUrl;
+      trackedIdx = img.originalIdx;
       ratio = ASPECT[slot];
     }
-    const originalIdx =
+    // Where to re-crop from. A photo swapped in this session is not yet in
+    // the slot's stored row — that still holds the one it replaced — so
+    // using the fixed row here is what silently brought the old photo back.
+    const slotOriginalIdx =
       slot === "hero" ? -2 : slot === "secondary" ? -4 : -(11 + (galleryIdx ?? 0) * 2);
+    const originalIdx = trackedIdx === undefined ? slotOriginalIdx : trackedIdx;
     let croppedUrl: string;
     try {
       croppedUrl = await cropImage(originalUrl, ratio, x, y, {
@@ -690,7 +727,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
         );
         return { ...prev, gallery };
       }
-      return { ...prev, [slot]: { url: croppedUrl, originalUrl } };
+      return { ...prev, [slot]: { ...prev[slot], url: croppedUrl, originalUrl } };
     });
   }, [requestCopyPrompt]);
 

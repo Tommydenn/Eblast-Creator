@@ -15,10 +15,10 @@
  * approval request supersedes it — see approvalBlockedReason. Those are why an
  * old link can already be dead well inside its lifetime.
  */
-export const APPROVAL_LINK_TTL_HOURS = 24;
+export const APPROVAL_LINK_TTL_HOURS = 14 * 24;
 
 /** How that lifetime is written in anything a reviewer reads. */
-export const APPROVAL_LINK_TTL_LABEL = "24 hours";
+export const APPROVAL_LINK_TTL_LABEL = "14 days";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 

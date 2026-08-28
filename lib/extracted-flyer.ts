@@ -64,10 +64,10 @@ export interface ExtractedFlyer {
   heroAddress?: string;
   /** Override for the "Thank You!" text in the email footer. */
   thankYouText?: string;
-  /** Override for the "Visit Website" button URL in the footer. */
+  /** Override for the "Visit Our Website" button URL in the footer. */
   footerWebsiteUrl?: string;
-  /** Editable label text on the footer "Visit Website" button (the URL always
-   *  comes from the community's configured website). Default: "Visit Website". */
+  /** Editable label text on the footer "Visit Our Website" button (the URL always
+   *  comes from the community's configured website). Default: "Visit Our Website". */
   footerButtonLabel?: string;
 
   /**
@@ -135,7 +135,7 @@ export interface ExtractedFlyer {
    * assignment, community website, etc.) — it's purely a display flag, so
    * turning it back off restores exactly what was there before. Header and
    * Footer themselves are never hideable (logo/branding and required sender
-   * contact info), but the Footer's own "Visit Website" button is.
+   * contact info), but the Footer's own "Visit Our Website" button is.
    */
   heroSectionHidden?: boolean;
   storySectionHidden?: boolean;

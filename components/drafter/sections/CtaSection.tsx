@@ -57,7 +57,7 @@ export default function CtaSection() {
         <HiddenBanner label="The bottom call button" onRestore={() => setField("finalCtaButtonHidden", undefined)} />
       )}
       {fields.footerButtonHidden && (
-        <HiddenBanner label="The Visit Website button" onRestore={() => setField("footerButtonHidden", undefined)} />
+        <HiddenBanner label="The Visit Our Website button" onRestore={() => setField("footerButtonHidden", undefined)} />
       )}
 
       {/* One box, two underlying fields — see DateTimeField. */}
@@ -99,11 +99,11 @@ export default function CtaSection() {
         />
       </Field>
 
-      <Field label="Visit Website Button" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
+      <Field label="Visit Our Website Button" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
         <RichInput
-          value={fields.footerButtonLabel ?? "Visit Website"}
+          value={fields.footerButtonLabel ?? "Visit Our Website"}
           onValueChange={(html) => setField("footerButtonLabel", html || undefined)}
-          placeholder="Visit Website"
+          placeholder="Visit Our Website"
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}

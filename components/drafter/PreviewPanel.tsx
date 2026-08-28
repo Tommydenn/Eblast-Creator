@@ -180,7 +180,7 @@ const BG_FIELD_LABELS: Record<BgFieldKey, string> = {
   footerBgColor: "Footer Background",
   ctaButtonBgColor: "Call Button Color",
   finalCtaButtonBgColor: "Call Button Color",
-  footerButtonBgColor: "Visit Website Button Color",
+  footerButtonBgColor: "Visit Our Website Button Color",
 };
 
 function defaultForBgField(key: BgFieldKey, community: any): string {
@@ -210,7 +210,7 @@ const DELETE_FIELD_LABELS: Record<DeleteFieldKey, string> = {
   finalCtaSectionHidden: "the Call-to-Action section",
   ctaButtonHidden: "the hero's call button",
   finalCtaButtonHidden: "the bottom call button",
-  footerButtonHidden: "the Visit Website button",
+  footerButtonHidden: "the Visit Our Website button",
 };
 
 // Photo click-through links. galleryImageLinks is positional (index i is the

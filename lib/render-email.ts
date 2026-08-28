@@ -634,7 +634,7 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${ctaRsvpLabel ? `<p style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: ${HERO_ADDRESS_COLOR}; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
+            ${ctaRsvpLabel ? `<p style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? dateTimeRow({
               dateHtml: renderInlineField(ctaDate ?? ""),
               dateField: "ctaEventDate",
@@ -681,7 +681,7 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
           <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg};" data-bgfield="footerButtonBgColor" data-deletefield="footerButtonHidden">
-            <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:17px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Website"}</a>
+            <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:17px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Our Website"}</a>
           </td>
         </tr>
       </table>` : ""}

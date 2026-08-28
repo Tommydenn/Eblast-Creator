@@ -84,13 +84,24 @@ export async function GET(req: NextRequest) {
             taskTitle: plannerTasks.title,
             dueAt: plannerTasks.dueAt,
             assigneePriority: plannerTasks.assigneePriority,
-            flyerName: draftFlyers.fileName,
           })
           .from(plannerTasks)
-          .leftJoin(draftFlyers, eq(draftFlyers.draftId, plannerTasks.savedDraftId))
           .where(inArray(plannerTasks.savedDraftId, rawRows.map((r) => r.id)))
       : [];
     const taskByDraft = new Map(taskRows.filter((t) => t.savedDraftId).map((t) => [t.savedDraftId!, t]));
+
+    // Flyers are looked up per draft rather than through the Planner task.
+    // A draft written by hand from a flyer keeps that flyer too, but has no
+    // task, so reaching the flyer through plannerTasks meant only scheduled
+    // drafts ever reported one — the link never appeared in Saved Drafts even
+    // when the PDF was sitting in the database.
+    const flyerRows = rawRows.length
+      ? await db
+          .select({ draftId: draftFlyers.draftId, fileName: draftFlyers.fileName })
+          .from(draftFlyers)
+          .where(inArray(draftFlyers.draftId, rawRows.map((r) => r.id)))
+      : [];
+    const flyerByDraft = new Map(flyerRows.map((f) => [f.draftId, f.fileName]));
 
     let rows = rawRows.map(({ data, ...meta }) => {
       const task = taskByDraft.get(meta.id);
@@ -103,8 +114,8 @@ export async function GET(req: NextRequest) {
         dueAt: task?.dueAt ?? null,
         assigneePriority: task?.assigneePriority ?? null,
         /** Whether the flyer it was generated from can be opened alongside it. */
-        hasFlyer: !!task?.flyerName,
-        flyerName: task?.flyerName ?? null,
+        hasFlyer: flyerByDraft.has(meta.id),
+        flyerName: flyerByDraft.get(meta.id) ?? null,
       };
     });
 

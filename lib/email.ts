@@ -122,7 +122,27 @@ export async function sendApprovalEmail(params: SendApprovalEmailParams) {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- This wrapper carries a fixed 600px eblast inside 16px of padding each
+     side, so the page it makes is 632px wide and cannot be narrower. Declaring
+     device-width told phones to lay all of that out in about 375px, which is
+     what squeezed the eblast and moved text onto extra lines — the squeezed,
+     narrow rendering reported in the Gmail app.
+
+     Stating the real width instead lets the phone scale the whole thing down to
+     fit, so the eblast lays out at the 600px it was designed for and a reviewer
+     sees the same lines a recipient will. Keep this in step with the 600px
+     tables and 16px padding below. -->
+<!-- No viewport tag, and no side padding below, on purpose.
+
+     This email shows a reviewer what a recipient will get, so it has to be the
+     same shape as the eblast it carries: exactly 600px, and no viewport tag,
+     which is what the eblast itself does. It used to declare device-width and
+     add 16px either side, making a 632px page around a 600px design — on a
+     phone that squeezes the eblast and moves text onto extra lines, which is
+     what reviewers were seeing and senders were not.
+
+     Keep this in step with render-email.ts. If the eblast's width changes, or
+     it ever gains a viewport tag, this has to match. -->
 <meta name="color-scheme" content="light only">
 <meta name="supported-color-schemes" content="light only">
 <title>Draft Review: ${draftSubject}</title>
@@ -142,7 +162,7 @@ ${eblastStyleBlock}
 <!-- Header / intro -->
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-shell" bgcolor="#f5f4f1">
   <tr>
-    <td align="center" style="padding:32px 16px 0;">
+    <td align="center" style="padding:32px 0 0;">
       <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-card" bgcolor="#ffffff"
              style="background:#ffffff;border-radius:8px 8px 0 0;padding:40px 48px 32px;border:1px solid #e0ddd7;border-bottom:none;">
         <tr>
@@ -223,7 +243,7 @@ ${eblastStyleBlock}
 <!-- Divider label -->
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
-    <td align="center" style="padding:0 16px;">
+    <td align="center" style="padding:0;">
       <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-divider" bgcolor="#f0ece4"
              style="background:#f0ece4;border-left:1px solid #e0ddd7;border-right:1px solid #e0ddd7;padding:10px 48px;">
         <tr>
@@ -242,7 +262,7 @@ ${eblastStyleBlock}
 <!-- Eblast content -->
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
   <tr>
-    <td align="center" style="padding:0 16px 32px;">
+    <td align="center" style="padding:0 0 32px;">
       <table width="600" cellpadding="0" cellspacing="0" role="presentation" class="wrap-bg-card" bgcolor="#ffffff"
              style="background:#ffffff;border:1px solid #e0ddd7;border-top:none;
                     border-radius:0 0 8px 8px;padding:0;">

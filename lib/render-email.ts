@@ -145,6 +145,19 @@ function buttonTextColor(sectionTextHex: string, buttonBgHex: string): string {
 const HERO_ADDRESS_COLOR = "#E8DDC4";
 
 /**
+ * Stops phones enlarging text on their own. Repeated inline because Gmail
+ * discards the <style> block for non-Gmail accounts, and text growing is what
+ * makes a line that fitted stop fitting.
+ */
+const NO_TEXT_INFLATE = "-webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; text-size-adjust:100%;";
+
+/** Long words break at a space rather than being split down the middle. */
+const KEEP_WORDS_WHOLE = "word-break:normal; overflow-wrap:normal;";
+
+/** Ordinary copy may break anywhere rather than run past the edge. */
+const ALLOW_BREAKS = "overflow-wrap:break-word; word-wrap:break-word;";
+
+/**
  * Sizes that used to be chosen from how much text a field contained.
  *
  * They shrank as you typed and grew as you deleted, which meant the size was
@@ -268,7 +281,7 @@ function dateTimeRow(opts: {
     fontFamily, fontSize, extraStyle, marginBottom, sizeFactor = 1, lock = true,
   } = opts;
 
-  const style = `font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0 0 ${marginBottom}px 0;`;
+  const style = `font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0 0 ${marginBottom}px 0; ${NO_TEXT_INFLATE} ${KEEP_WORDS_WHOLE}`;
   // The separator lives INSIDE the time field, never between the two spans as
   // bare text. Outside, it inherits nothing and keeps the base size while the
   // date and time restyle around it. The stored time normally already starts
@@ -514,8 +527,8 @@ export function buildEblastHtml(
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
             ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
-            <p data-field="headline" class="glm-nowrap" style="font-family: ${fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
-            ${flyer.scriptSubheadline ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>` : ""}
+            <p data-field="headline" class="glm-nowrap" style="${NO_TEXT_INFLATE} ${KEEP_WORDS_WHOLE} font-family: ${fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
+            ${flyer.scriptSubheadline ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="${NO_TEXT_INFLATE} ${KEEP_WORDS_WHOLE} font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>` : ""}
             ${eventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
                  A date line longer than the column made it wider than the
@@ -539,7 +552,7 @@ export function buildEblastHtml(
                     extraStyle: "letter-spacing: 1px;",
                     marginBottom: 8,
                   })}
-                  ${addressLine ? `<p data-field="heroAddress" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
+                  ${addressLine ? `<p data-field="heroAddress" class="glm-nowrap" style="${NO_TEXT_INFLATE} ${KEEP_WORDS_WHOLE} font-family: ${fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -561,13 +574,13 @@ export function buildEblastHtml(
   ${flyer.storySectionHidden ? "" : `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 44px 36px 12px 36px;">
-      <p data-field="storyEyebrow" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(flyer.storyEyebrow)}</p>
-      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(flyer.storyScriptTitle)}</p>` : ""}
+      <p data-field="storyEyebrow" class="glm-nowrap" style="${NO_TEXT_INFLATE} ${KEEP_WORDS_WHOLE} font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(flyer.storyEyebrow)}</p>
+      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="${NO_TEXT_INFLATE} ${KEEP_WORDS_WHOLE} font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(flyer.storyScriptTitle)}</p>` : ""}
     </td>
   </tr>
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 0 36px 28px 36px;">
-      <p data-field="bodyParagraphs" style="font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => renderBodyParagraph(p)).join("<br><br>")}</p>
+      <p data-field="bodyParagraphs" style="${ALLOW_BREAKS} font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => renderBodyParagraph(p)).join("<br><br>")}</p>
     </td>
   </tr>`}
   ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
@@ -696,28 +709,13 @@ export function buildEblastHtml(
     </td>
   </tr>`;
 
-  // No viewport tag, and this has now been tested rather than assumed.
-  //
-  // Gmail on a phone renders this correctly with no tag, but its zoom sticks
-  // after the phone is rotated: turn to landscape and back and the email stays
-  // at the landscape scale, which reads as a narrow column.
-  //
-  // Declaring the width was the one lever the HTML had over that. Tried live in
-  // August 2026 via test sends: width=600 made Gmail narrow ALL of the time,
-  // not just after a rotation, so it is strictly worse. width=device-width had
-  // already been seen doing the same. Apple Mail was unaffected either way,
-  // which also clears this tag of the Apple Mail breakage it was blamed for in
-  // 8cd3be0 — that was the white-space:nowrap in the same commit.
-  //
-  // Reading of it: Gmail only scales the email to fit when no viewport tag is
-  // present, and any tag switches that off. The shell is already the standard
-  // full-width wrapper around a fixed 600px table, so there is nothing else in
-  // the HTML to reach for. The stuck zoom is Gmail's own and cannot be fixed
-  // from here. Do not re-add a viewport tag.
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- No viewport tag on purpose: this is a fixed 600px design, and clients
+     zoom it to fit. Setting width=device-width made Gmail squeeze and reflow
+     it; setting width=600 fixed Gmail and broke Apple Mail. -->
 <!-- Stops iOS turning phone numbers, dates and addresses into its own blue
      underlined links — which is what put a blue number inside the call button. -->
 <meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
@@ -815,7 +813,7 @@ export function buildEblastHtml(
   [data-ogsc] .glm-bg-footer, [data-ogsb] .glm-bg-footer { background-color: ${footerBg} !important; }
 </style>
 </head>
-<body class="glm-bg-outer" style="margin:0; padding:0; background:#f5f5f5;" bgcolor="#f5f5f5">
+<body class="glm-bg-outer" style="margin:0; padding:0; background:#f5f5f5; ${NO_TEXT_INFLATE}" bgcolor="#f5f5f5">
 <span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(flyer.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-outer" bgcolor="#f5f5f5" style="background:#f5f5f5;">
   <tr><td align="center" style="padding:32px 0;">

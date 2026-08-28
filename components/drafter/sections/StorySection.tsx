@@ -90,7 +90,7 @@ export default function StorySection() {
       >
         <RichInput
           value={fields.galleryLabel ?? galleryDefault}
-          onValueChange={(html) => setField("galleryLabel", html || undefined)}
+          onValueChange={(html) => setField("galleryLabel", html)}
           placeholder="e.g. A Look Around Our Community"
           className={baseInput}
           activeEditorRef={activeEditorRef}

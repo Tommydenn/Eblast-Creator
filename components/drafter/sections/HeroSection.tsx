@@ -94,7 +94,7 @@ export default function HeroSection() {
       <Field label="Address Line" hint="Shown beneath the event date in the hero section. Defaults to the community name and address.">
         <RichInput
           value={fields.heroAddress ?? communityAddressLine}
-          onValueChange={(html) => setField("heroAddress", html || undefined)}
+          onValueChange={(html) => setField("heroAddress", html)}
           placeholder="e.g. Arbor Crossing, 1234 Oak St, Green Bay, WI 54301"
           className={baseInput}
           activeEditorRef={activeEditorRef}

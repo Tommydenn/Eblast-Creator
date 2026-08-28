@@ -82,6 +82,42 @@ function stripHtml(s: string): string {
   return s.replace(/<[^>]+>/g, "");
 }
 
+/**
+ * Whether a field would actually show a reader anything.
+ *
+ * Tags, entities and whitespace do not count. A field the editor left as an
+ * empty paragraph, a stray line break or a non-breaking space reads as empty
+ * here, because that is how it looks in the email.
+ */
+function hasText(value?: string | string[] | null): boolean {
+  if (value == null) return false;
+  const html = Array.isArray(value) ? value.join("") : value;
+  return (
+    html
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;|&zwnj;|&#8203;|&#xfeff;/gi, " ")
+      .replace(/[\s\u00a0\u200b\ufeff]+/g, "").length > 0
+  );
+}
+
+/**
+ * A line that can be removed simply by clearing its text.
+ *
+ * A field nobody has touched is undefined, and shows whatever the template
+ * would otherwise supply. A field someone emptied is an empty string, and
+ * renders nothing at all, so the line and the space it held both go rather
+ * than leaving a blank paragraph propping a gap open.
+ */
+function deletableLine(
+  value: string | null | undefined,
+  fallbackHtml: string | null,
+  wrap: (innerHtml: string) => string,
+): string {
+  if (value === undefined || value === null) return fallbackHtml ? wrap(fallbackHtml) : "";
+  if (!hasText(value)) return "";
+  return wrap(renderInlineField(value));
+}
+
 // Relative luminance (0 = black, 1 = white). Returns null for malformed hex.
 function relLuminance(hex: string): number | null {
   const h = hex.replace("#", "");
@@ -513,9 +549,9 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
-            ${rsvpLabel ? `<p data-field="rsvpLabel" style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
-            <p data-field="headline" class="glm-nowrap" style="font-family: ${fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>
-            ${flyer.scriptSubheadline ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline)}</p>` : ""}
+            ${hasText(rsvpLabel) ? `<p data-field="rsvpLabel" style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            ${hasText(flyer.headline) ? `<p data-field="headline" class="glm-nowrap" style="font-family: ${fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
+            ${hasText(flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}
             ${eventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
                  A date line longer than the column made it wider than the
@@ -537,9 +573,10 @@ export function buildEblastHtml(
                     fontFamily: fontHeadline,
                     fontSize: 26,
                     extraStyle: "letter-spacing: 1px;",
-                    marginBottom: 8,
+                    // No address beneath it means no space needed under the date.
+                    marginBottom: hasText(addressLine) ? 8 : 0,
                   })}
-                  ${addressLine ? `<p data-field="heroAddress" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
+                  ${hasText(addressLine) ? `<p data-field="heroAddress" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -557,19 +594,35 @@ export function buildEblastHtml(
     </td>
   </tr>`;
 
+  // Each of these lines disappears when its text is cleared, and the row that
+  // held it goes with it. An empty row would otherwise keep its 44px of top
+  // padding and leave a gap exactly where the text used to be. When the
+  // eyebrow and title are both gone, the body row takes over that top padding
+  // so the section still sits properly below the one before it.
+  const storyEyebrowHtml = hasText(flyer.storyEyebrow) ? renderInlineField(flyer.storyEyebrow) : "";
+  const storyTitleHtml = hasText(flyer.storyScriptTitle) ? renderInlineField(flyer.storyScriptTitle!) : "";
+  const storyHeadShown = !!(storyEyebrowHtml || storyTitleHtml);
+  // A blank entry inside the body is kept, since someone may have left one
+  // there deliberately for spacing. Only an entirely empty body drops the row.
+  const storyBodyHtml = hasText(flyer.bodyParagraphs)
+    ? flyer.bodyParagraphs.map((p) => renderBodyParagraph(p)).join("<br><br>")
+    : "";
+
   const story = `
   ${flyer.storySectionHidden ? "" : `
+  ${storyHeadShown ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 44px 36px 12px 36px;">
-      <p data-field="storyEyebrow" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${renderInlineField(flyer.storyEyebrow)}</p>
-      ${flyer.storyScriptTitle ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${renderInlineField(flyer.storyScriptTitle)}</p>` : ""}
+      ${storyEyebrowHtml ? `<p data-field="storyEyebrow" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
+      ${storyTitleHtml ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
     </td>
-  </tr>
+  </tr>` : ""}
+  ${storyBodyHtml ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
-    <td style="padding: 0 36px 28px 36px;">
-      <p data-field="bodyParagraphs" style="font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${flyer.bodyParagraphs.map(p => renderBodyParagraph(p)).join("<br><br>")}</p>
+    <td style="padding: ${storyHeadShown ? "0" : "44px"} 36px 28px 36px;">
+      <p data-field="bodyParagraphs" style="font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${storyBodyHtml}</p>
     </td>
-  </tr>`}
+  </tr>` : ""}`}
   ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
   <tr data-section="Secondary Image" data-deletefield="secondaryImageSectionHidden">
     <td style="padding: 0 36px 28px 36px;">
@@ -599,14 +652,24 @@ export function buildEblastHtml(
       rows.push(tiles.slice(i, i + cols));
     }
 
+    // Never set shows the default label; cleared shows nothing and drops the
+    // row, handing its top padding to the photos below.
+    const galleryLabelHtml =
+      flyer.galleryLabel === undefined || flyer.galleryLabel === null
+        ? escapeHtml(`A Look Around ${community.shortName}`)
+        : hasText(flyer.galleryLabel)
+          ? renderInlineField(flyer.galleryLabel)
+          : "";
+
     return `
+  ${galleryLabelHtml ? `
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
     <td style="padding: 44px 36px 12px 36px;" align="center">
-      <p data-field="galleryLabel" style="font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${flyer.galleryLabel ? renderInlineField(flyer.galleryLabel) : escapeHtml(`A Look Around ${community.shortName}`)}</p>
+      <p data-field="galleryLabel" style="font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
     </td>
-  </tr>
+  </tr>` : ""}
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
-    <td style="padding: 16px 36px 32px 36px;">
+    <td style="padding: ${galleryLabelHtml ? "16px" : "44px"} 36px 32px 36px;">
       <table role="presentation" cellpadding="0" cellspacing="6" border="0" width="100%" style="border-collapse:separate; border-spacing:6px;">
         ${rows
           .map(
@@ -634,7 +697,7 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${ctaRsvpLabel ? `<p style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
+            ${hasText(ctaRsvpLabel) ? `<p style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? dateTimeRow({
               dateHtml: renderInlineField(ctaDate ?? ""),
               dateField: "ctaEventDate",
@@ -685,10 +748,10 @@ export function buildEblastHtml(
           </td>
         </tr>
       </table>` : ""}
-      <p data-field="thankYouText" style="font-family: ${fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${flyer.thankYouText ? renderInlineField(flyer.thankYouText) : "Thank You!"}</p>
-      ${primarySender?.name ? `<p data-field="footerSenderName" style="font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${flyer.footerSenderName ? renderInlineField(flyer.footerSenderName) : escapeHtml(primarySender.name)}</p>` : ""}
-      <p data-field="footerName" style="font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${renderInlineField(flyer.footerName ?? community.displayName)}</p>
-      ${primarySender?.email ? `<a href="mailto:${escapeHtml(primarySender.email)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${flyer.footerSenderEmail ? renderInlineField(flyer.footerSenderEmail) : escapeHtml(primarySender.email)}</a>` : ""}
+      ${deletableLine(flyer.thankYouText, "Thank You!", (inner) => `<p data-field="thankYouText" style="font-family: ${fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}
+      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}
+      ${deletableLine(flyer.footerName, escapeHtml(community.displayName), (inner) => `<p data-field="footerName" style="font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}
+      ${primarySender?.email ? deletableLine(flyer.footerSenderEmail, escapeHtml(primarySender.email), (inner) => `<a href="mailto:${escapeHtml(primarySender.email)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`) : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
         .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)

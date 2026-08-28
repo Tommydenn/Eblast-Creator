@@ -77,7 +77,7 @@ export default function CtaSection() {
       <Field label="RSVP Label" hint="Edit to differ from the Hero section">
         <RichInput
           value={fields.ctaRsvpLabel ?? fields.rsvpLabel ?? ""}
-          onValueChange={(html) => setField("ctaRsvpLabel", html || undefined)}
+          onValueChange={(html) => setField("ctaRsvpLabel", html)}
           placeholder="e.g. RSVP Required"
           className={baseInput}
           activeEditorRef={activeEditorRef}
@@ -115,7 +115,7 @@ export default function CtaSection() {
       <Field label="Thank You Text" hint="Closing salutation displayed in the email footer.">
         <RichInput
           value={fields.thankYouText ?? "Thank You!"}
-          onValueChange={(html) => setField("thankYouText", html || undefined)}
+          onValueChange={(html) => setField("thankYouText", html)}
           placeholder="Thank You!"
           className={baseInput}
           activeEditorRef={activeEditorRef}
@@ -128,7 +128,7 @@ export default function CtaSection() {
       <Field label="Footer Signature" hint="Name appearing below 'Thank You!' in the email footer.">
         <RichInput
           value={fields.footerName ?? community?.displayName ?? ""}
-          onValueChange={(html) => setField("footerName", html || undefined)}
+          onValueChange={(html) => setField("footerName", html)}
           placeholder="Community name"
           className={baseInput}
           activeEditorRef={activeEditorRef}
@@ -141,7 +141,7 @@ export default function CtaSection() {
       <Field label="Salesperson Name" hint="The community's primary sender, set on the Community page. Select text to format it — the name itself can't be changed here.">
         <SenderNameField
           value={fields.footerSenderName ?? ""}
-          onValueChange={(html) => setField("footerSenderName", html || undefined)}
+          onValueChange={(html) => setField("footerSenderName", html)}
           fieldName="footerSenderName"
           className={baseInput}
           activeEditorRef={activeEditorRef}
@@ -153,7 +153,7 @@ export default function CtaSection() {
       <Field label="Salesperson Email" hint="The community's primary sender, set on the Community page. Select text to format it — the address itself can't be changed here.">
         <EmailButtonField
           value={fields.footerSenderEmail ?? ""}
-          onValueChange={(html) => setField("footerSenderEmail", html || undefined)}
+          onValueChange={(html) => setField("footerSenderEmail", html)}
           fieldName="footerSenderEmail"
           className={baseInput}
           activeEditorRef={activeEditorRef}

@@ -9,32 +9,37 @@ import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 /**
  * How big to draw a community's logo in the header.
  *
- * Every logo used to be forced to 88px tall. That made a wide wordmark read
- * large and a square mark read tiny — Caretta's came out 87px wide beside
- * Amira's at 213px — because height alone says nothing about how much of the
- * header a logo occupies. Sizing to a fixed visual AREA gives every logo the
- * same weight: compact logos grow, the widest shrink a little.
+ * The reference is the Amira wordmark, which renders 203px wide by 84px tall
+ * and was judged right. Every other logo is drawn to that same width, so the
+ * wordmarks line up across communities. A logo that would come out shorter
+ * than the reference at that width — the very wide ones — is drawn at the
+ * reference height instead, and one that would come out much taller — the
+ * square marks — is capped. So each logo shares either the reference's width
+ * or its height, whichever its shape allows.
  *
- * The height is kept within a floor and ceiling so nothing gets absurdly tall
- * or thin, and the width never exceeds the header's content column. Email
- * clients need the size written on the tag — Outlook otherwise shows the file
- * at its natural size, thousands of pixels wide — so the dimensions come from
+ * Sizing by equal area was tried first and read wrong: a detailed line drawing
+ * such as Seven Hills has far less ink in its box than a dense wordmark, so at
+ * the same area it looked smaller.
+ *
+ * Email clients need the size written on the tag — Outlook otherwise shows the
+ * file at natural size, thousands of pixels wide — and the renderer also runs
+ * in the browser, where it cannot read files. The sizes come from
  * lib/logo-dimensions.json, produced by scripts/measure-logos.mjs. A logo not
- * in that file (one added without re-running the script) falls back to the
- * old fixed 88px, which is safe rather than broken.
+ * in that file falls back to the old fixed 88px, safe rather than broken.
  */
-const LOGO_TARGET_AREA = 17_000; // px², roughly a 130x130 square or 84x203 wordmark
-const LOGO_MIN_HEIGHT = 84; // Amira lands here on its own; the wider wordmarks take the same small trim
-const LOGO_MAX_HEIGHT = 120;
-const LOGO_MAX_WIDTH = 300;
+const LOGO_REFERENCE_WIDTH = 203; // the Amira wordmark's width at its reference height
+const LOGO_REFERENCE_HEIGHT = 84; // never shorter than this
+const LOGO_MAX_HEIGHT = 126; // square marks stop here
+const LOGO_MAX_WIDTH = 300; // the header's content column
 
 function logoRenderSize(url: string): { width: number; height: number } | null {
   const d = (logoDimensions as Record<string, { width: number; height: number }>)[url];
   if (!d || !d.width || !d.height) return null;
   const ratio = d.width / d.height;
-  let height = Math.sqrt(LOGO_TARGET_AREA / ratio);
-  height = Math.min(LOGO_MAX_HEIGHT, Math.max(LOGO_MIN_HEIGHT, height));
-  let width = height * ratio;
+  let width = LOGO_REFERENCE_WIDTH;
+  let height = width / ratio;
+  if (height < LOGO_REFERENCE_HEIGHT) { height = LOGO_REFERENCE_HEIGHT; width = height * ratio; }
+  if (height > LOGO_MAX_HEIGHT) { height = LOGO_MAX_HEIGHT; width = height * ratio; }
   if (width > LOGO_MAX_WIDTH) { width = LOGO_MAX_WIDTH; height = width / ratio; }
   return { width: Math.round(width), height: Math.round(height) };
 }

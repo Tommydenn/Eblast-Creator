@@ -14,7 +14,6 @@
 //   4. fromName contains a community displayName.
 // If all four miss, the past-send is stored unmapped (communityId = null).
 
-import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { communities, communitySenders, pastSends } from "@/lib/db/schema";
 import {

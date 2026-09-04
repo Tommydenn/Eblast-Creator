@@ -25,38 +25,6 @@ function renderBodyParagraph(p: string): string {
     .replace(/\son\w+='[^']*'/gi, "");
 }
 
-/**
- * Scale every size set inside a field by the same factor.
- *
- * A size chosen in the toolbar is written onto the text itself as an inline
- * style, and an inline size beats the paragraph's. So shrinking the paragraph
- * alone changed nothing for exactly the fields someone had sized by hand —
- * measured, 14 lines across 60 real drafts still overflowed. Scaling the inner
- * sizes by the same factor shrinks the whole line while keeping any deliberate
- * size differences within it.
- */
-function scaleInlineSizes(html: string, factor: number): string {
-  if (!html || factor >= 1) return html;
-  return html.replace(/font-size:\s*(\d+(?:\.\d+)?)px/gi, (_m, px) => {
-    const scaled = Math.max(8, Math.round(Number(px) * factor));
-    return `font-size: ${scaled}px`;
-  });
-}
-
-/**
- * A size the user set on this field in the editor, if they set one.
- *
- * The toolbar writes the size onto the text as an inline style, so it lives in
- * the field's own markup. Fitting has to start from that rather than from the
- * template default, or a size someone deliberately chose would be ignored.
- */
-function userChosenSize(html: string): number | undefined {
-  const m = /font-size:\s*(\d+(?:\.\d+)?)px/i.exec(html ?? "");
-  if (!m) return undefined;
-  const px = Number(m[1]);
-  return Number.isFinite(px) && px > 0 ? Math.round(px) : undefined;
-}
-
 // Inline field: sanitize rich HTML from single-line contentEditable fields.
 // Strips div wrappers, dangerous elements, and event handlers — preserves
 // inline formatting (bold, italic, color spans, font spans).
@@ -292,16 +260,12 @@ function dateTimeRow(opts: {
   timeStartsWithSeparator: boolean;
   fontFamily: string;
   fontSize: number;
-  /** How much the fitted size shrank the line, for sizes set inside it. */
-  sizeFactor?: number;
-  /** False when the line can't be held on one line and must be free to wrap. */
-  lock?: boolean;
   extraStyle: string;
   marginBottom: number;
 }): string {
   const {
     dateHtml, dateField, timeHtml, timeField, timeStartsWithSeparator,
-    fontFamily, fontSize, extraStyle, marginBottom, sizeFactor = 1, lock = true,
+    fontFamily, fontSize, extraStyle, marginBottom,
   } = opts;
 
   const style = `font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0 0 ${marginBottom}px 0;`;
@@ -309,13 +273,12 @@ function dateTimeRow(opts: {
   // bare text. Outside, it inherits nothing and keeps the base size while the
   // date and time restyle around it. The stored time normally already starts
   // with it; this only adds one for older values that don't.
-  const scaledTime = scaleInlineSizes(timeHtml, sizeFactor);
-  const timeContent = timeStartsWithSeparator ? scaledTime : `${SEPARATOR} ${scaledTime}`;
+  const timeContent = timeStartsWithSeparator ? timeHtml : `${SEPARATOR} ${timeHtml}`;
   const timePart = timeHtml ? `&nbsp;<span data-field="${timeField}" style="color:#FFFFFF; text-decoration:none;">${timeContent}</span>` : "";
 
   // Both date lines — hero and footer — must hold one line, so the paragraph
   // carries the no-wrap class and the space before the time is non-breaking.
-  return `<p${lock ? ' class="glm-nowrap"' : ""} style="${style}"><span data-field="${dateField}" style="color:#FFFFFF; text-decoration:none;">${scaleInlineSizes(dateHtml, sizeFactor)}</span>${timePart}</p>`;
+  return `<p class="glm-nowrap" style="${style}"><span data-field="${dateField}" style="color:#FFFFFF; text-decoration:none;">${dateHtml}</span>${timePart}</p>`;
 }
 
 export interface RenderOptions {
@@ -354,34 +317,8 @@ export function buildEblastHtml(
   const ctaDate = flyer.ctaEventDate ?? flyer.eventDate;
   const ctaTime = flyer.ctaEventTime ?? flyer.eventTime;
   const ctaDateLine = [ctaDate, ctaTime].filter(Boolean).join(" · ");
-  // This line is a single no-wrap row at a large display size. A long combined
-  // date+time string can force it wider than the 600px template, which grows
-  // the whole table and leaves a gap beside the fixed-width hero/secondary/
-  // gallery images (measured: a 38-char line rendered ~540px against a 528px
-  // budget). Shrink with a small safety margin below that measured failure
-  // point — short lines (the normal case) keep the original 28px unchanged.
-  /**
-   * Pick the largest size at which a single unwrapped line still fits the
-   * content column, instead of guessing from character count.
-   *
-   * The old character-count thresholds were calibrated for the pre-bump sizes
-   * and silently broke the layout afterwards: "Thursday, August 6 · 1:30-3:30
-   * PM" is 33 characters, so it took the LARGE size, which at 32px measured
-   * 555px. Add the section's 36px side padding and the row needed 627px inside
-   * a 600px frame, so the whole email was forced 27px wider than the images in
-   * it and every photo ended up with an uneven sliver of background beside it.
-   *
-   * CONTENT_WIDTH is the real budget: the 600px shell minus 36px of padding on
-   * each side. The 0.53 factor is the measured average glyph width relative to
-   * font size for these headline faces (33 chars at 32px measured 555px, which
-   * is 0.526), with a little headroom.
-   */
   /** 600px shell minus a section's 36px side padding. */
   const CONTENT_WIDTH = 600 - 36 * 2;
-  /** Inside the hero's date box, which adds 26px of its own padding each side. */
-  // The date box no longer adds side padding of its own, so its content spans
-  // the same column as every other section and lines up with the header.
-  const HERO_CONTENT_WIDTH = CONTENT_WIDTH;
 
   // The brand font, exactly as the Community page has it, with nothing added.
   //
@@ -389,24 +326,8 @@ export function buildEblastHtml(
   // every recipient without the brand font gets the SAME substitute we picked,
   // where before each client chose its own. The preference is for the
   // recipient s own system to choose, so nothing is appended.
-  //
-  // The cost is that line widths are no longer predictable, which is why the
-  // fitting below measures against the widest common substitute rather than
-  // any particular one.
   const fontHeadline = brand.fontHeadline;
   const fontBody = brand.fontBody;
-
-  /**
-   * The size to render a never-wrap line at.
-   *
-   * These lines carry white-space:nowrap, so text too wide for the column would
-   * spill out of the email rather than break. This returns the chosen size when
-   * it fits and the largest smaller size when it doesn't. Measured against the
-   * BACKUP font, since the brand face is almost never installed.
-   *
-   * A size the user set by hand on the text itself wins over the template's
-   * default, so what they picked is what gets fitted.
-   */
 
   // Header color rule: the header must ALWAYS be a light, non-gray surface —
   // white (matching the story section's white body), or the community's own
@@ -558,12 +479,12 @@ export function buildEblastHtml(
                  600px frame, which is what stretched the email (and, once the
                  frame was pinned, spilled off the edge instead). Constrained
                  to the hero's content width so the text wraps inside it. -->
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${HERO_CONTENT_WIDTH}" style="width: ${HERO_CONTENT_WIDTH}px; margin: 12px auto 22px auto; max-width: ${HERO_CONTENT_WIDTH}px; table-layout: fixed;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${CONTENT_WIDTH}" style="width: ${CONTENT_WIDTH}px; margin: 12px auto 22px auto; max-width: ${CONTENT_WIDTH}px; table-layout: fixed;">
               <tr>
                 <!-- Vertical padding matches the header's 22px, and there is no
                      side padding so the date, time and address line up with the
                      header rather than sitting 26px further in. -->
-                <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 22px 0; max-width: ${HERO_CONTENT_WIDTH}px;" align="center">
+                <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 22px 0; max-width: ${CONTENT_WIDTH}px;" align="center">
                   ${dateTimeRow({
                     dateHtml: renderInlineField(flyer.eventDate ?? ""),
                     dateField: "eventDate",
@@ -810,32 +731,12 @@ export function buildEblastHtml(
   }
 
   /*
-    The seven lines that must never wrap. Their size is fitted before sending so
-    the text is known to fit; these rules stop a client breaking them anyway.
-    The global break-word rule above has to be undone here, or a long single
-    word would still split.
-  */
-  .glm-lock {
-    /* Last line of defence: whatever happens inside, a section can never make
-       the email wider than its column. */
-    overflow: hidden !important;
-    max-width: 100% !important;
-  }
-
-  /*
-    The seven lines that should hold one line. Their size is fitted before
-    sending so the text is known to fit the column.
-    
-    Deliberately NOT white-space:nowrap. Nowrap guarantees no wrap, but the
-    moment a recipient s font is wider than predicted the text is pushed out of
-    the frame instead — which is what put the hero section past the edge in both
-    Gmail and Apple Mail. There is no way to know a recipient s exact font
-    metrics, so that failure cannot be designed out. Sizing to fit does the work;
-    if a client still surprises us the line wraps, which is contained and
-    recoverable, rather than breaking the layout.
-    
-    The global break-word rule is still undone here, so a long word breaks at a
-    space rather than being split down the middle.
+    The headline, script subheadline, address, story eyebrow and title, and
+    both date lines. The global break-word rule above is undone here so a long
+    word in one of them breaks at a space rather than being split down the
+    middle. Deliberately not white-space:nowrap — that pushed the hero past the
+    edge in Gmail and Apple Mail whenever a recipient's font ran wider than
+    expected.
   */
   .glm-nowrap {
     word-break: normal !important;

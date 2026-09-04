@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { savedDrafts, savedDraftApprovals } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 
 // GET /api/saved-drafts/[id]  — returns the full draft including image data,

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { listCommunities } from "@/data/communities";
 import { db } from "@/lib/db";
 import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";

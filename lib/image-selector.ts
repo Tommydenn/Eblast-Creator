@@ -124,9 +124,3 @@ Reply with ONLY a JSON array, one label per image. Example for 4 images: ["exter
   }
 }
 
-/** @deprecated Use classifyImagesForSlots instead. Kept for any callers not yet migrated. */
-export async function rankImagesByRelevance(
-  images: ExtractedImage[],
-): Promise<ExtractedImage[]> {
-  return classifyImagesForSlots(images);
-}

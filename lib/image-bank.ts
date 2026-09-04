@@ -49,19 +49,9 @@ export function imagePhase(idx: number): 0 | 1 | 2 {
 export type ImagePhaseName = "shown" | "originals" | "pool";
 
 const PHASE_ORDER: ImagePhaseName[] = ["shown", "originals", "pool"];
-const PHASE_INDEX: Record<ImagePhaseName, 0 | 1 | 2> = { shown: 0, originals: 1, pool: 2 };
-
-export function imagePhaseName(idx: number): ImagePhaseName {
-  return PHASE_ORDER[imagePhase(idx)];
-}
 
 export function isImagePhaseName(v: unknown): v is ImagePhaseName {
   return typeof v === "string" && (PHASE_ORDER as string[]).includes(v);
-}
-
-/** True when this row belongs to the named phase. */
-export function rowInPhase(idx: number, phase: ImagePhaseName): boolean {
-  return imagePhase(idx) === PHASE_INDEX[phase];
 }
 
 /**

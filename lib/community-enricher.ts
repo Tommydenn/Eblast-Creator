@@ -10,7 +10,7 @@
 // nuanced extraction (which phone is the tracking phone vs the sales line vs
 // a partner phone) we delegate to Claude — see `enrichCommunityWithClaude`.
 
-import { eq, sql, and, isNull } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { communities, communitySenders, pastSends } from "@/lib/db/schema";
 import { getMarketingEmail } from "@/lib/hubspot";

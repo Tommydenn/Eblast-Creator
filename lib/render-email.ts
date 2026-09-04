@@ -3,7 +3,41 @@
 // One template, every community gets it with their own brand variables.
 
 import type { Community } from "@/data/communities";
+import logoDimensions from "@/lib/logo-dimensions.json";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
+
+/**
+ * How big to draw a community's logo in the header.
+ *
+ * Every logo used to be forced to 88px tall. That made a wide wordmark read
+ * large and a square mark read tiny — Caretta's came out 87px wide beside
+ * Amira's at 213px — because height alone says nothing about how much of the
+ * header a logo occupies. Sizing to a fixed visual AREA gives every logo the
+ * same weight: compact logos grow, the widest shrink a little.
+ *
+ * The height is kept within a floor and ceiling so nothing gets absurdly tall
+ * or thin, and the width never exceeds the header's content column. Email
+ * clients need the size written on the tag — Outlook otherwise shows the file
+ * at its natural size, thousands of pixels wide — so the dimensions come from
+ * lib/logo-dimensions.json, produced by scripts/measure-logos.mjs. A logo not
+ * in that file (one added without re-running the script) falls back to the
+ * old fixed 88px, which is safe rather than broken.
+ */
+const LOGO_TARGET_AREA = 17_000; // px², roughly a 130x130 square or 84x203 wordmark
+const LOGO_MIN_HEIGHT = 84; // Amira lands here on its own; the wider wordmarks take the same small trim
+const LOGO_MAX_HEIGHT = 120;
+const LOGO_MAX_WIDTH = 300;
+
+function logoRenderSize(url: string): { width: number; height: number } | null {
+  const d = (logoDimensions as Record<string, { width: number; height: number }>)[url];
+  if (!d || !d.width || !d.height) return null;
+  const ratio = d.width / d.height;
+  let height = Math.sqrt(LOGO_TARGET_AREA / ratio);
+  height = Math.min(LOGO_MAX_HEIGHT, Math.max(LOGO_MIN_HEIGHT, height));
+  let width = height * ratio;
+  if (width > LOGO_MAX_WIDTH) { width = LOGO_MAX_WIDTH; height = width / ratio; }
+  return { width: Math.round(width), height: Math.round(height) };
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -379,7 +413,12 @@ export function buildEblastHtml(
   // and any other context without depending on env-var URL construction.
   const logoSrc = chosenLogo?.url ?? null;
   const logoContent = logoSrc
-    ? `<img src="${logoSrc}" alt="${escapeHtml(community.displayName)}" height="88" style="display:block; height:88px; width:auto; max-width:300px; border:0; margin:0 auto;">`
+    ? (() => {
+        const size = logoRenderSize(logoSrc);
+        return size
+          ? `<img src="${logoSrc}" alt="${escapeHtml(community.displayName)}" width="${size.width}" height="${size.height}" style="display:block; width:${size.width}px; height:${size.height}px; border:0; margin:0 auto;">`
+          : `<img src="${logoSrc}" alt="${escapeHtml(community.displayName)}" height="88" style="display:block; height:88px; width:auto; max-width:300px; border:0; margin:0 auto;">`;
+      })()
     : textFallback;
 
   // Always use the community's CallRail tracking number for the CTA phone.
@@ -453,7 +492,7 @@ export function buildEblastHtml(
 
   const header = `
   <tr data-section="Header">
-    <td class="glm-bg-header" bgcolor="${headerBg}" style="padding: 22px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center" data-bgfield="headerBgColor">
+    <td class="glm-bg-header" bgcolor="${headerBg}" style="padding: 26px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center" data-bgfield="headerBgColor">
       ${logoContent}
     </td>
   </tr>`;

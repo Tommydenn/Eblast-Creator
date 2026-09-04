@@ -47,7 +47,7 @@ Postgres is the source of truth for the community registry and the drafting/appr
 
 Reads through `lib/db/queries.ts`. Legacy import path `@/data/communities` is a 10-line re-export shim — new code should import `lib/db/queries` directly.
 
-Scripts: `npm run db:push`, `npm run db:generate`, `npx tsx lib/db/apply-migrations.ts`, `npm run db:seed`, `npm run db:studio`, `npx tsx scripts/sync-past-sends.ts`, `npx tsx scripts/enrich-communities.ts`, `npx tsx scripts/extract-brand-guide.ts <slug> <pdf>`.
+Scripts: `npm run db:push`, `npm run db:generate`, `npx tsx lib/db/apply-migrations.ts`, `npm run db:seed`, `npm run db:studio`, `node scripts/measure-logos.mjs` (after adding or replacing a logo), `npx tsx scripts/sync-past-sends.ts`, `npx tsx scripts/enrich-communities.ts`, `npx tsx scripts/extract-brand-guide.ts <slug> <pdf>`.
 
 Required env vars: see `.env.example` (`DATABASE_URL`, `ANTHROPIC_API_KEY`, `HUBSPOT_PRIVATE_APP_TOKEN`, `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `MAIL_FROM`, `NEXT_PUBLIC_APP_URL`).
 

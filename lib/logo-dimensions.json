@@ -1,0 +1,218 @@
+{
+  "/logos/amira-bloomington/knockout.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-bloomington/primary.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-choice-arvada/knockout.png": {
+    "width": 1920,
+    "height": 1259
+  },
+  "/logos/amira-choice-arvada/primary.png": {
+    "width": 1920,
+    "height": 1259
+  },
+  "/logos/amira-choice-bloomington/knockout.png": {
+    "width": 1208,
+    "height": 861
+  },
+  "/logos/amira-choice-bloomington/primary.png": {
+    "width": 1208,
+    "height": 861
+  },
+  "/logos/amira-corcoran/knockout.png": {
+    "width": 1998,
+    "height": 822
+  },
+  "/logos/amira-corcoran/primary.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-lake-elmo/knockout.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-lake-elmo/primary.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-lowry/knockout.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-lowry/primary.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-minnetonka/knockout.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-minnetonka/primary.png": {
+    "width": 1998,
+    "height": 824
+  },
+  "/logos/amira-roseville/knockout.png": {
+    "width": 1998,
+    "height": 818
+  },
+  "/logos/amira-roseville/primary.png": {
+    "width": 1998,
+    "height": 818
+  },
+  "/logos/amira-villas-minnetonka/knockout.png": {
+    "width": 4173,
+    "height": 2614
+  },
+  "/logos/amira-villas-minnetonka/primary.png": {
+    "width": 4173,
+    "height": 2614
+  },
+  "/logos/broadwell/knockout.png": {
+    "width": 2632,
+    "height": 1262
+  },
+  "/logos/broadwell/primary.png": {
+    "width": 2632,
+    "height": 1262
+  },
+  "/logos/caretta-bellevue/knockout.png": {
+    "width": 2635,
+    "height": 2658
+  },
+  "/logos/caretta-bellevue/primary.png": {
+    "width": 2636,
+    "height": 2658
+  },
+  "/logos/caretta-eau-claire/knockout.png": {
+    "width": 2635,
+    "height": 2651
+  },
+  "/logos/caretta-eau-claire/primary.png": {
+    "width": 2636,
+    "height": 2651
+  },
+  "/logos/caretta-holmen/knockout.png": {
+    "width": 2636,
+    "height": 2658
+  },
+  "/logos/caretta-holmen/primary.png": {
+    "width": 2636,
+    "height": 2658
+  },
+  "/logos/caretta-maplewood/knockout.png": {
+    "width": 2635,
+    "height": 2654
+  },
+  "/logos/caretta-maplewood/primary.png": {
+    "width": 2636,
+    "height": 2654
+  },
+  "/logos/cottagewood-mankato/knockout.png": {
+    "width": 1998,
+    "height": 637
+  },
+  "/logos/cottagewood-mankato/primary.png": {
+    "width": 1998,
+    "height": 637
+  },
+  "/logos/cottagewood-rochester/knockout.png": {
+    "width": 1998,
+    "height": 637
+  },
+  "/logos/cottagewood-rochester/primary.png": {
+    "width": 1998,
+    "height": 637
+  },
+  "/logos/global-pointe/knockout.png": {
+    "width": 1489,
+    "height": 820
+  },
+  "/logos/global-pointe/primary.png": {
+    "width": 1501,
+    "height": 843
+  },
+  "/logos/hayden-grove-bloomington/knockout.png": {
+    "width": 610,
+    "height": 391
+  },
+  "/logos/hayden-grove-bloomington/primary.png": {
+    "width": 609,
+    "height": 393
+  },
+  "/logos/hayden-grove-st-anthony/knockout.png": {
+    "width": 610,
+    "height": 391
+  },
+  "/logos/hayden-grove-st-anthony/primary.png": {
+    "width": 609,
+    "height": 393
+  },
+  "/logos/orchards-of-minnetonka/primary.png": {
+    "width": 1380,
+    "height": 1107
+  },
+  "/logos/seven-hills/primary.png": {
+    "width": 3300,
+    "height": 2053
+  },
+  "/logos/talamore-st-cloud/knockout.png": {
+    "width": 3566,
+    "height": 1339
+  },
+  "/logos/talamore-st-cloud/primary.png": {
+    "width": 3566,
+    "height": 1339
+  },
+  "/logos/talamore-sun-prairie/knockout.png": {
+    "width": 3566,
+    "height": 1339
+  },
+  "/logos/talamore-sun-prairie/primary.png": {
+    "width": 3566,
+    "height": 1339
+  },
+  "/logos/talamore-woodbury/knockout.png": {
+    "width": 3566,
+    "height": 1338
+  },
+  "/logos/talamore-woodbury/primary.png": {
+    "width": 3566,
+    "height": 1338
+  },
+  "/logos/the-glenn-buffalo/primary.png": {
+    "width": 348,
+    "height": 192
+  },
+  "/logos/the-glenn-hopkins/primary.png": {
+    "width": 2225,
+    "height": 1245
+  },
+  "/logos/the-glenn-minnetonka/primary.png": {
+    "width": 2225,
+    "height": 1245
+  },
+  "/logos/the-glenn-w-st-paul/knockout.png": {
+    "width": 1366,
+    "height": 768
+  },
+  "/logos/the-glenn-w-st-paul/primary.png": {
+    "width": 1366,
+    "height": 768
+  },
+  "/logos/the-pillars-of-grand-rapids/primary.png": {
+    "width": 1144,
+    "height": 648
+  },
+  "/logos/the-preserve-of-roseville/knockout.png": {
+    "width": 1998,
+    "height": 600
+  },
+  "/logos/the-preserve-of-roseville/primary.png": {
+    "width": 1998,
+    "height": 600
+  }
+}

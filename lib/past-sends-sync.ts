@@ -202,10 +202,11 @@ export async function syncPastSends(opts: {
     displayName: c.displayName,
     city: ((c.address as any) ?? {}).city ?? null,
   }));
-  const sendForMap: SenderForMap[] = sendersRows.map((s) => ({
-    email: s.email,
-    communityId: s.communityId,
-  }));
+  // Senders with no address on file cannot be matched to a past send by
+  // address, so they are simply left out of this map.
+  const sendForMap: SenderForMap[] = sendersRows.flatMap((s) =>
+    s.email ? [{ email: s.email, communityId: s.communityId }] : [],
+  );
 
   log(`Loaded ${commForMap.length} communities + ${sendForMap.length} senders for mapping.`);
 

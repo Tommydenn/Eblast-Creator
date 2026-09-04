@@ -196,7 +196,8 @@ export const communitySenders = pgTable("community_senders", {
     .notNull()
     .references(() => communities.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  email: text("email").notNull(),
+  /** Optional: a sender can be recorded by name alone, with no address on file. */
+  email: text("email"),
   title: text("title"),
   /** The default sender for this community (one per community max — enforced in app code). */
   isPrimary: boolean("is_primary").notNull().default(false),

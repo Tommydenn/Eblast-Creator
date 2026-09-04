@@ -30,7 +30,7 @@ export function SendersPanel({ slug, initialSenders }: Props) {
 
   function startEdit(s: CommunitySender) {
     setEditingId(s.id);
-    setForm({ name: s.name, email: s.email, title: s.title ?? "", isPrimary: s.isPrimary });
+    setForm({ name: s.name, email: s.email ?? "", title: s.title ?? "", isPrimary: s.isPrimary });
     setError(null);
   }
 
@@ -41,8 +41,8 @@ export function SendersPanel({ slug, initialSenders }: Props) {
   }
 
   async function save() {
-    if (!form.name.trim() || !form.email.trim()) {
-      setError("Name and email are required.");
+    if (!form.name.trim()) {
+      setError("A name is required.");
       return;
     }
     setBusy(true);
@@ -169,10 +169,16 @@ export function SendersPanel({ slug, initialSenders }: Props) {
               <div className={`flex items-center justify-between gap-3 rounded-lg border border-sand-200/60 bg-white px-3 py-2.5 shadow-sm transition-colors hover:bg-sand-50/30${s.isPrimary ? " ring-1 ring-forest-200/60" : ""}`}>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-sand-900">{s.name}</p>
-                  <p className="truncate text-xs text-sand-500">
-                    {s.email}
-                    {s.title && <span className="ml-2 text-sand-400">· {s.title}</span>}
-                  </p>
+                  {(s.email || s.title) && (
+                    <p className="truncate text-xs text-sand-500">
+                      {s.email}
+                      {s.title && (
+                        <span className={s.email ? "ml-2 text-sand-400" : "text-sand-400"}>
+                          {s.email ? "· " : ""}{s.title}
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {s.isPrimary ? (
@@ -255,7 +261,7 @@ function SenderForm({
           />
         </div>
         <div>
-          <label className="block text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500 mb-1">Email</label>
+          <label className="block text-[10.5px] font-medium uppercase tracking-[0.12em] text-sand-500 mb-1">Email (optional)</label>
           <input
             type="email"
             value={form.email}

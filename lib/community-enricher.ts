@@ -249,7 +249,7 @@ export async function enrichCommunity(opts: {
   // Past sends store from.fromName + from.replyTo. Add any new sender that
   // isn't already in community_senders.
   const existingSenders = await db.select().from(communitySenders).where(eq(communitySenders.communityId, community.id));
-  const existingEmails = new Set(existingSenders.map((s) => s.email.toLowerCase()));
+  const existingEmails = new Set(existingSenders.flatMap((s) => (s.email ? [s.email.toLowerCase()] : [])));
 
   const newSenders: Array<{ name: string; email: string }> = [];
   for (const send of sends) {

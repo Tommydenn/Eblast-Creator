@@ -733,9 +733,11 @@ export function buildEblastHtml(
   // Salesperson addresses read as contact text, not as a bright accent link,
   // so they take the darkest color in the brand palette rather than the accent.
   const senderEmailColor = darkestBrandColor(brand);
+  // A sender can be recorded by name alone, in which case the footer shows the
+  // name and simply has no address line under it.
+  const primarySenderEmail = primarySender?.email?.trim() ?? "";
   const secondarySenderEmails = (community.senders ?? [])
-    .filter((s) => s !== primarySender && s.email?.trim())
-    .map((s) => s.email.trim());
+    .flatMap((s) => (s !== primarySender && s.email?.trim() ? [s.email.trim()] : []));
 
   const footer = `
   <tr data-section="Footer">
@@ -751,7 +753,7 @@ export function buildEblastHtml(
       ${deletableLine(flyer.thankYouText, "Thank You!", (inner) => `<p data-field="thankYouText" style="font-family: ${fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}
       ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}
       ${deletableLine(flyer.footerName, escapeHtml(community.displayName), (inner) => `<p data-field="footerName" style="font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}
-      ${primarySender?.email ? deletableLine(flyer.footerSenderEmail, escapeHtml(primarySender.email), (inner) => `<a href="mailto:${escapeHtml(primarySender.email)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`) : ""}
+      ${primarySenderEmail ? deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`) : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
         .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)

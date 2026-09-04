@@ -421,7 +421,7 @@ export async function POST(
       name: approval.isTest ? `[TEST] ${baseName}` : baseName,
       subject,
       fromName: community.senders[0]?.name ?? community.displayName,
-      replyTo: community.senders[0]?.email ?? "",
+      replyTo: community.senders.find((s) => s.email?.trim())?.email ?? "",
       templatePath: hubspotPath,
       account: hubspotAccount,
       ...segments,

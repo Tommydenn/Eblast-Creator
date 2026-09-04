@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
     subject: body.subject,
     previewText: body.previewText,
     fromName: community.senders[0]?.name ?? community.displayName,
-    replyTo: community.senders[0]?.email ?? "",
+    replyTo: community.senders.find((s) => s.email?.trim())?.email ?? "",
     templatePath: hubspotPath,
     account: hubspotAccount,
     ...segmentsPayload,

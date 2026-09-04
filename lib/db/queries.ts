@@ -39,7 +39,8 @@ export interface Community extends Omit<CommunityRow, "address" | "brand" | "soc
 export interface CommunitySender {
   id: string;
   name: string;
-  email: string;
+  /** Null when only the name is on file. */
+  email: string | null;
   title: string | null;
   isPrimary: boolean;
 }
@@ -111,14 +112,14 @@ export async function listCommunities(): Promise<Community[]> {
 
 export async function addSender(
   communityId: string,
-  data: { name: string; email: string; title?: string; isPrimary: boolean }
+  data: { name: string; email?: string | null; title?: string; isPrimary: boolean }
 ): Promise<CommunitySender> {
   if (data.isPrimary) {
     await db.update(communitySenders).set({ isPrimary: false }).where(eq(communitySenders.communityId, communityId));
   }
   const [row] = await db
     .insert(communitySenders)
-    .values({ communityId, name: data.name, email: data.email, title: data.title ?? null, isPrimary: data.isPrimary })
+    .values({ communityId, name: data.name, email: data.email?.trim() || null, title: data.title ?? null, isPrimary: data.isPrimary })
     .returning();
   return rowToSender(row);
 }
@@ -126,14 +127,15 @@ export async function addSender(
 export async function updateSender(
   id: string,
   communityId: string,
-  data: { name?: string; email?: string; title?: string | null; isPrimary?: boolean }
+  data: { name?: string; email?: string | null; title?: string | null; isPrimary?: boolean }
 ): Promise<CommunitySender | null> {
   if (data.isPrimary) {
     await db.update(communitySenders).set({ isPrimary: false }).where(eq(communitySenders.communityId, communityId));
   }
   const patch: Partial<typeof communitySenders.$inferInsert> = {};
   if (data.name !== undefined) patch.name = data.name;
-  if (data.email !== undefined) patch.email = data.email;
+  // An address cleared in the form arrives as "", which means remove it.
+  if (data.email !== undefined) patch.email = data.email?.trim() || null;
   if (data.title !== undefined) patch.title = data.title;
   if (data.isPrimary !== undefined) patch.isPrimary = data.isPrimary;
   const [row] = await db.update(communitySenders).set(patch).where(eq(communitySenders.id, id)).returning();

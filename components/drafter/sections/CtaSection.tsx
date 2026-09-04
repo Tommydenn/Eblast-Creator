@@ -30,8 +30,7 @@ export default function CtaSection() {
   // the primary sender is the only name on the eblast, and their email stays above).
   const primarySender = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
   const secondarySenderEmails = (community?.senders ?? [])
-    .filter((s) => s !== primarySender && s.email?.trim())
-    .map((s) => s.email.trim());
+    .flatMap((s) => (s !== primarySender && s.email?.trim() ? [s.email.trim()] : []));
 
   const additionalEmails = fields.additionalFooterEmails ?? secondarySenderEmails;
   function updateAdditionalEmail(idx: number, html: string) {

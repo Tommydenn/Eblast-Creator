@@ -22,8 +22,14 @@ export default function ApprovalModal({ onClose, mode = "real" }: Props) {
   // A test defaults to you rather than the salesperson — the address is still
   // editable so a test can be sent to a colleague to check rendering.
   const primarySender = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
+  // A sender may be on the record by name alone. The reviewer has to be an
+  // address, so fall back to the first sender who has one.
+  const firstSenderEmail =
+    primarySender?.email?.trim() ||
+    community?.senders?.find((s) => s.email?.trim())?.email?.trim() ||
+    "";
   const [recipientEmail, setRecipientEmail] = useState(
-    isTest ? "jwalls@greatlakesmc.com" : primarySender?.email ?? "jwalls@greatlakesmc.com",
+    isTest ? "jwalls@greatlakesmc.com" : firstSenderEmail || "jwalls@greatlakesmc.com",
   );
   const [notifyEmail, setNotifyEmail] = useState("jwalls@greatlakesmc.com");
   const [note, setNote] = useState("");

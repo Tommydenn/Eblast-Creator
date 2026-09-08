@@ -223,17 +223,37 @@ function runsToHtml(runs: Run[]): string {
     .join("");
 }
 
-function trimEnds(runs: Run[]): Run[] {
+/**
+ * Trim the whitespace at either end of a line's runs.
+ *
+ * `breaks` decides what happens to a line break sitting at the very end:
+ *
+ *   "content"      keep it — someone put the caret on a new line and that
+ *                  line is real. This is what a stored value means.
+ *   "caret-holder" keep them, but drop exactly one. A live editor needs this:
+ *                  insertLineBreak leaves a spare break behind so the caret
+ *                  has a visible line to sit on, and that one is an artifact.
+ *   "strip"        remove them all.
+ */
+function trimEnds(runs: Run[], breaks: "strip" | "content" | "caret-holder" = "strip"): Run[] {
   if (runs.length === 0) return runs;
-  runs[0] = { ...runs[0], text: runs[0].text.replace(/^\s+/, "") };
+  const keep = breaks !== "strip";
+  runs[0] = { ...runs[0], text: runs[0].text.replace(keep ? /^[^\S\n]+/ : /^\s+/, "") };
   const li = runs.length - 1;
-  runs[li] = { ...runs[li], text: runs[li].text.replace(/\s+$/, "") };
+  let tail = runs[li].text.replace(keep ? /[^\S\n]+$/ : /\s+$/, "");
+  if (breaks === "caret-holder") tail = tail.replace(/\n$/, "");
+  runs[li] = { ...runs[li], text: tail };
   return runs.filter((r) => r.text !== "");
 }
 
-/** Serialize a single-line field to clean inline HTML. Never mutates the DOM. */
+/**
+ * Serialize a single-line field from its live editor. Never mutates the DOM.
+ *
+ * The last break is the caret's placeholder rather than content, so it is
+ * dropped here and added back by inlineHtmlForEditing on the way in.
+ */
 export function serializeInline(root: Element): string {
-  return runsToHtml(trimEnds(collectRuns(root, root)));
+  return runsToHtml(trimEnds(collectRuns(root, root), "caret-holder"));
 }
 
 /**
@@ -254,7 +274,7 @@ export function serializeInline(root: Element): string {
 export function serializeBlocks(root: Element): string[] {
   const hasDiv = Array.from(root.children).some((c) => c.tagName === "DIV");
   if (!hasDiv) {
-    const only = serializeInline(root);
+    const only = runsToHtml(trimEnds(collectRuns(root, root), "content"));
     return [only === "<br>" ? "" : only];
   }
 
@@ -262,7 +282,7 @@ export function serializeBlocks(root: Element): string[] {
   let looseRuns: Run[] = [];
   const flushLoose = () => {
     if (looseRuns.length) {
-      blocks.push(runsToHtml(trimEnds(looseRuns)));
+      blocks.push(runsToHtml(trimEnds(looseRuns, "content")));
       looseRuns = [];
     }
   };
@@ -277,7 +297,7 @@ export function serializeBlocks(root: Element): string[] {
     if (child.nodeType === Node.ELEMENT_NODE && (child as Element).tagName === "DIV") {
       flushLoose();
       const d = child as HTMLElement;
-      blocks.push(runsToHtml(trimEnds(collectRuns(d, d))));
+      blocks.push(runsToHtml(trimEnds(collectRuns(d, d), "content")));
     } else if (child.nodeType === Node.TEXT_NODE) {
       const text = (child.nodeValue || "").replace(/ /g, " ");
       if (text !== "") pushRun({ text, style: effectiveFormat(child, root) });
@@ -296,11 +316,28 @@ export function serializeBlocks(root: Element): string[] {
   return lines.some((b) => b !== "") ? lines : [""];
 }
 
-/** Normalize arbitrary/legacy HTML into canonical inline HTML (flat spans). */
+/**
+ * Normalize arbitrary/legacy HTML into canonical inline HTML (flat spans).
+ *
+ * This reads a stored value rather than a live editor, so there is no caret
+ * placeholder to discard: every break in it is a line someone asked for.
+ */
 export function normalizeInlineHtml(html: string): string {
   const d = document.createElement("div");
   d.innerHTML = html ?? "";
-  return serializeInline(d);
+  return runsToHtml(trimEnds(collectRuns(d, d), "content"));
+}
+
+/**
+ * A stored value prepared for a contentEditable.
+ *
+ * A break at the very end is invisible in contentEditable — the caret has no
+ * line to sit on — so one spare is added purely to give it one. serializeInline
+ * drops that spare again on the way back out, so it never reaches storage.
+ */
+export function inlineHtmlForEditing(html: string): string {
+  const normalized = normalizeInlineHtml(html);
+  return /<br\s*\/?>$/i.test(normalized) ? `${normalized}<br>` : normalized;
 }
 
 /** Build the multi-paragraph editor's initial HTML from paragraph strings. */

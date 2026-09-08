@@ -56,12 +56,17 @@ function escapeHtml(s: string): string {
 // Body paragraph content may include editor-generated formatting (strong, em, span color,
 // underline). Strip only dangerous constructs; leave safe inline HTML intact.
 function renderBodyParagraph(p: string): string {
-  return p
+  const clean = p
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
     .replace(/\son\w+="[^"]*"/gi, "")
     .replace(/\son\w+='[^']*'/gi, "");
+  // A line with nothing on it takes up no space at all — measured, a break
+  // with nothing after it adds 0px. A non-breaking space gives the empty line
+  // something to hold, which is what makes it visible. Between two lines this
+  // is identical to what came before: both measure 94.0px.
+  return hasText(clean) ? clean : "&nbsp;";
 }
 
 // Inline field: sanitize rich HTML from single-line contentEditable fields.
@@ -69,18 +74,19 @@ function renderBodyParagraph(p: string): string {
 // inline formatting (bold, italic, color spans, font spans).
 function renderInlineField(s: string): string {
   if (!s) return "";
-  return s
+  // A break at the end is kept: the editor already discards the spare one it
+  // uses to park the caret, so anything left is a line someone asked for.
+  const clean = s
     .replace(/^<div>([\s\S]*)<\/div>$/i, "$1")
-    // Trailing breaks are an editing artifact, not content: a break typed at
-    // the very end of a field leaves a spare <br> behind so the caret has a
-    // visible line to sit on. Drop the whole run so the email has no stray gap.
-    .replace(/(?:<br\s*\/?>|\s)+$/i, "")
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
     .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
     .replace(/\son\w+="[^"]*"/gi, "")
     .replace(/\son\w+='[^']*'/gi, "")
     .trim();
+  // Same reason as renderBodyParagraph: the last line needs something on it or
+  // it occupies no height and the break appears to have done nothing.
+  return /<br\s*\/?>$/i.test(clean) ? `${clean}&nbsp;` : clean;
 }
 
 // Strip all HTML tags to get plain text — used for fields that feed into

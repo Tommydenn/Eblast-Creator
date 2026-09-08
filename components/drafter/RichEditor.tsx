@@ -8,6 +8,7 @@ import {
   serializeInline,
   serializeBlocks,
   normalizeInlineHtml,
+  inlineHtmlForEditing,
   blocksToHtml,
   setPendingToggle,
   getPending,
@@ -226,7 +227,7 @@ export function RichInput({
   // Initial content.
   useEffect(() => {
     if (ref.current) {
-      ref.current.innerHTML = normalizeInlineHtml(value ?? "");
+      ref.current.innerHTML = inlineHtmlForEditing(value ?? "");
       lastGoodHtml.current = ref.current.innerHTML;
       lastEmitted.current = serializeInline(ref.current);
     }
@@ -238,7 +239,7 @@ export function RichInput({
   useEffect(() => {
     if (isFocused.current || !ref.current) return;
     if (value === lastEmitted.current) return;
-    ref.current.innerHTML = normalizeInlineHtml(value ?? "");
+    ref.current.innerHTML = inlineHtmlForEditing(value ?? "");
     lastGoodHtml.current = ref.current.innerHTML;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);

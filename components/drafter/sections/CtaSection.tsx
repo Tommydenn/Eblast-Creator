@@ -5,17 +5,7 @@ import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField, EmailButtonField, SenderNameField } from "@/components/drafter/RichEditor";
 import { DateTimeField } from "@/components/drafter/DateTimeField";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
-import { FOOTER_SLOTS, type FooterSlot } from "@/lib/extracted-flyer";
-
-/** Where each added line sits, in the words the footer reads in. */
-const SLOT_LABELS: Record<FooterSlot, string> = {
-  top: "above the button",
-  button: "under the button",
-  thankYou: "under Thank You",
-  senderName: "under the name",
-  footerName: "under the community",
-  senderEmail: "under the email",
-};
+import { type FooterSlot, type FooterCustomLine } from "@/lib/extracted-flyer";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -28,6 +18,70 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
+
+/**
+ * The added lines sitting in one gap of the footer, and the control that
+ * adds another there.
+ *
+ * The gaps are the footer's own, laid out here in the order the email reads,
+ * so the place a line is added is the place it appears. Adding used to be
+ * done from the preview; it lives here instead, next to everything else the
+ * footer is made of.
+ */
+function FooterGap({ slot }: { slot: FooterSlot }) {
+  const { fields, setField, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
+  const all = fields?.footerCustomLines ?? [];
+  const mine = all.filter((l) => l.after === slot);
+  const write = (next: FooterCustomLine[]) =>
+    setField("footerCustomLines", next.length ? next : undefined);
+  return (
+    <div className="space-y-2">
+      {mine.map((line) => (
+        <div key={line.id} className="flex items-start gap-2">
+          <div className="flex-1">
+            <RichInput
+              value={line.text}
+              onValueChange={(html) =>
+                write(all.map((l) => (l.id === line.id ? { ...l, text: html } : l)))
+              }
+              placeholder="Extra line"
+              className={baseInput}
+              activeEditorRef={activeEditorRef}
+              activeEditorCallback={activeEditorCallback}
+              activeFieldNameRef={activeFieldNameRef}
+              fieldName={`footerCustomLine:${line.id}`}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => write(all.filter((l) => l.id !== line.id))}
+            className="mt-1.5 px-1 text-sm leading-none text-[#b9a89a] hover:text-[#a4552f] transition-colors"
+            title="Remove this line"
+          >
+            &times;
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() =>
+          write([
+            ...all,
+            {
+              id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+              text: "",
+              after: slot,
+            },
+          ])
+        }
+        className="w-full py-0.5 text-[11px] text-[#d5cec5] hover:text-[#1F4538] transition-colors"
+        title="Add a line of text here"
+      >
+        + line
+      </button>
+    </div>
+  );
+}
 
 export default function CtaSection() {
   const { fields, setField, setFields, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
@@ -70,6 +124,19 @@ export default function CtaSection() {
         <HiddenBanner label="The Visit Our Website button" onRestore={() => setField("footerButtonHidden", undefined)} />
       )}
 
+      <Field label="RSVP Label" hint="Edit to differ from the Hero section">
+        <RichInput
+          value={fields.ctaRsvpLabel ?? fields.rsvpLabel ?? ""}
+          onValueChange={(html) => setField("ctaRsvpLabel", html)}
+          placeholder="e.g. RSVP Required"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="ctaRsvpLabel"
+        />
+      </Field>
+
       {/* One box, two underlying fields — see DateTimeField. */}
       <DateTimeField
         label="Event Date & Time"
@@ -84,19 +151,6 @@ export default function CtaSection() {
         activeFieldNameRef={activeFieldNameRef}
       />
 
-      <Field label="RSVP Label" hint="Edit to differ from the Hero section">
-        <RichInput
-          value={fields.ctaRsvpLabel ?? fields.rsvpLabel ?? ""}
-          onValueChange={(html) => setField("ctaRsvpLabel", html)}
-          placeholder="e.g. RSVP Required"
-          className={baseInput}
-          activeEditorRef={activeEditorRef}
-          activeEditorCallback={activeEditorCallback}
-          activeFieldNameRef={activeFieldNameRef}
-          fieldName="ctaRsvpLabel"
-        />
-      </Field>
-
       <Field label="Call Button Label" hint="The action button at the bottom of the email. Generates the same as the Hero's button, but is independently editable/formattable from here on — the number stays locked.">
         <CallButtonField
           value={fields.finalCtaButtonLabel ?? fields.ctaButtonLabel ?? ""}
@@ -108,6 +162,8 @@ export default function CtaSection() {
           activeFieldNameRef={activeFieldNameRef}
         />
       </Field>
+
+      <FooterGap slot="top" />
 
       <Field label="Visit Our Website Button" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
         <RichInput
@@ -122,6 +178,8 @@ export default function CtaSection() {
         />
       </Field>
 
+      <FooterGap slot="button" />
+
       <Field label="Thank You Text" hint="Closing salutation displayed in the email footer.">
         <RichInput
           value={fields.thankYouText ?? "Thank You!"}
@@ -134,6 +192,22 @@ export default function CtaSection() {
           fieldName="thankYouText"
         />
       </Field>
+
+      <FooterGap slot="thankYou" />
+
+      <Field label="Salesperson Name" hint="The community's primary sender, set on the Community page. Select text to format it — the name itself can't be changed here.">
+        <SenderNameField
+          value={fields.footerSenderName ?? ""}
+          onValueChange={(html) => setField("footerSenderName", html)}
+          fieldName="footerSenderName"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+        />
+      </Field>
+
+      <FooterGap slot="senderName" />
 
       <Field label="Footer Signature" hint="Name appearing below 'Thank You!' in the email footer.">
         <RichInput
@@ -148,17 +222,7 @@ export default function CtaSection() {
         />
       </Field>
 
-      <Field label="Salesperson Name" hint="The community's primary sender, set on the Community page. Select text to format it — the name itself can't be changed here.">
-        <SenderNameField
-          value={fields.footerSenderName ?? ""}
-          onValueChange={(html) => setField("footerSenderName", html)}
-          fieldName="footerSenderName"
-          className={baseInput}
-          activeEditorRef={activeEditorRef}
-          activeEditorCallback={activeEditorCallback}
-          activeFieldNameRef={activeFieldNameRef}
-        />
-      </Field>
+      <FooterGap slot="footerName" />
 
       <Field label="Salesperson Email" hint="The community's primary sender, set on the Community page. Select text to format it — the address itself can't be changed here.">
         <EmailButtonField
@@ -172,51 +236,7 @@ export default function CtaSection() {
         />
       </Field>
 
-      {(fields.footerCustomLines ?? []).length > 0 && (
-        <Field label="Added Footer Lines" hint="Added from the preview — hover the footer there to place another, or to remove one.">
-          <div className="space-y-2">
-            {[...(fields.footerCustomLines ?? [])]
-              .sort((a, b) => FOOTER_SLOTS.indexOf(a.after) - FOOTER_SLOTS.indexOf(b.after))
-              .map((line) => (
-                <div key={line.id} className="flex items-start gap-2">
-                  <div className="flex-1">
-                    <RichInput
-                      value={line.text}
-                      onValueChange={(html) =>
-                        setField(
-                          "footerCustomLines",
-                          (fields.footerCustomLines ?? []).map((l) =>
-                            l.id === line.id ? { ...l, text: html } : l,
-                          ),
-                        )
-                      }
-                      placeholder="Extra line"
-                      className={baseInput}
-                      activeEditorRef={activeEditorRef}
-                      activeEditorCallback={activeEditorCallback}
-                      activeFieldNameRef={activeFieldNameRef}
-                      fieldName={`footerCustomLine:${line.id}`}
-                    />
-                    <p className="mt-1 text-[11px] text-[#9aaba4]">{SLOT_LABELS[line.after]}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setField(
-                        "footerCustomLines",
-                        (fields.footerCustomLines ?? []).filter((l) => l.id !== line.id),
-                      )
-                    }
-                    className="mt-1.5 text-[#b9a89a] hover:text-[#a4552f] transition-colors text-sm leading-none px-1"
-                    title="Remove this line"
-                  >
-                    &times;
-                  </button>
-                </div>
-              ))}
-          </div>
-        </Field>
-      )}
+      <FooterGap slot="senderEmail" />
 
       <div>
         <div className="flex items-center justify-between mb-1.5">

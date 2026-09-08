@@ -39,6 +39,19 @@ export default function HeroSection() {
         <HiddenBanner label="The hero's call button" onRestore={() => setField("ctaButtonHidden", undefined)} />
       )}
 
+      <Field label="RSVP Label" hint="Shown at the top of the hero and CTA sections. Leave blank if no RSVP required.">
+        <RichInput
+          value={fields.rsvpLabel ?? ""}
+          onValueChange={(html) => setField("rsvpLabel", html || undefined)}
+          placeholder="e.g. RSVP Required"
+          className={baseInput}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="rsvpLabel"
+        />
+      </Field>
+
       <Field label="Headline">
         <RichInput
           value={fields.headline}
@@ -77,19 +90,6 @@ export default function HeroSection() {
         activeEditorCallback={activeEditorCallback}
         activeFieldNameRef={activeFieldNameRef}
       />
-
-      <Field label="RSVP Label" hint="Shown at the top of the hero and CTA sections. Leave blank if no RSVP required.">
-        <RichInput
-          value={fields.rsvpLabel ?? ""}
-          onValueChange={(html) => setField("rsvpLabel", html || undefined)}
-          placeholder="e.g. RSVP Required"
-          className={baseInput}
-          activeEditorRef={activeEditorRef}
-          activeEditorCallback={activeEditorCallback}
-          activeFieldNameRef={activeFieldNameRef}
-          fieldName="rsvpLabel"
-        />
-      </Field>
 
       <Field label="Address Line" hint="Shown beneath the event date in the hero section. Defaults to the community name and address.">
         <RichInput

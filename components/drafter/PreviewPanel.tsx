@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
-import { FOOTER_SLOTS, type FooterSlot, type FooterCustomLine } from "@/lib/extracted-flyer";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { buildEblastHtml } from "@/lib/render-email";
 import { IMAGE_LOADING_PLACEHOLDER } from "@/lib/image-bank";
@@ -84,12 +83,6 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
       s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
     });
     if(found.deletefield){ showDelBtnFor(found.deletefield); } else { scheduleHideDelBtn(); }
-    // The add-a-line markers sit in the footer's gaps and stay out of the way
-    // until the pointer is actually in the footer.
-    var inFooter = !!(found.section && found.section.dataset.section==='Footer');
-    document.querySelectorAll('[data-addline]').forEach(function(m){
-      m.style.display = inFooter ? 'flex' : 'none';
-    });
     if(found.linkfield){
       found.linkfield.style.outline='2px dashed rgba(31,69,56,0.55)';
       found.linkfield.style.outlineOffset='-2px';
@@ -126,13 +119,6 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
       var r=delTarget.getBoundingClientRect();
       window.parent.postMessage({type:'delete-click',field:delTarget.dataset.deletefield,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
       hideDelBtn();
-      return;
-    }
-    var addTarget = e.target && e.target.closest ? e.target.closest('[data-addline]') : null;
-    if(addTarget){
-      e.preventDefault();
-      e.stopPropagation();
-      window.parent.postMessage({type:'add-footer-line',slot:addTarget.dataset.addline},'*');
       return;
     }
     var found=findAncestors(e.target,['bgfield','section','linkfield']);
@@ -326,30 +312,6 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
   const [bgPopover, setBgPopover] = useState<{ field: BgFieldKey; left: number; top: number } | null>(null);
   const [deletePopover, setDeletePopover] = useState<{ field: string; left: number; top: number } | null>(null);
 
-  /**
-   * Add an empty line in one of the footer's gaps, and open the footer's
-   * editor at the same time.
-   *
-   * Typing happens in the sidebar, so opening it is what makes a new line
-   * usable rather than leaving an empty one with nowhere obvious to fill in.
-   */
-  const addFooterLine = useCallback(
-    (slot: FooterSlot) => {
-      if (!FOOTER_SLOTS.includes(slot)) return;
-      const line: FooterCustomLine = {
-        id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        text: "",
-        after: slot,
-      };
-      setField("footerCustomLines", [...(fieldsRef.current?.footerCustomLines ?? []), line]);
-      setActiveSection("cta");
-    },
-    [setField, setActiveSection],
-  );
-
-  // Read inside the callback so the message listener never needs rebinding.
-  const fieldsRef = useRef(fields);
-  fieldsRef.current = fields;
   // Scale the fixed-width email down when the column is narrower than it,
   // instead of letting the container clip it.
   const [linkPopover, setLinkPopover] = useState<
@@ -363,8 +325,6 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
     // Preview only — a send always waits for the real photos.
     const stand = (url?: string) => (!url && imagesLoading ? IMAGE_LOADING_PLACEHOLDER : url);
     return buildEblastHtml(fields, community as any, {
-      // The editor's preview alone; a real send never carries them.
-      showAddLineMarkers: true,
       heroImageUrl: stand(images.hero?.url),
       secondaryImageUrl: stand(images.secondary?.url),
       galleryImageUrls: images.gallery.map((g) => stand(g.url) ?? ""),
@@ -445,10 +405,6 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
         });
         return;
       }
-      if (e.data.type === "add-footer-line") {
-        addFooterLine(e.data.slot as FooterSlot);
-        return;
-      }
       if (e.data.type === "delete-click") {
         const iframeRect = iframeRef.current?.getBoundingClientRect();
         const containerRect = containerRef.current?.getBoundingClientRect();
@@ -462,7 +418,7 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
     }
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [setActiveSection, addFooterLine]);
+  }, [setActiveSection]);
 
   function handleLoad() {
     const iframe = iframeRef.current;

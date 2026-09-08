@@ -305,15 +305,17 @@ function dateTimeRow(opts: {
   timeStartsWithSeparator: boolean;
   fontFamily: string;
   fontSize: number;
+  /** Alignment chosen for either half of the line, already resolved. */
+  align?: string;
   extraStyle: string;
   marginBottom: number;
 }): string {
   const {
     dateHtml, dateField, timeHtml, timeField, timeStartsWithSeparator,
-    fontFamily, fontSize, extraStyle, marginBottom,
+    fontFamily, fontSize, extraStyle, marginBottom, align,
   } = opts;
 
-  const style = `font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0 0 ${marginBottom}px 0;`;
+  const style = `${align ? `text-align: ${align}; ` : ""}font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0 0 ${marginBottom}px 0;`;
   // The separator lives INSIDE the time field, never between the two spans as
   // bare text. Outside, it inherits nothing and keeps the base size while the
   // date and time restyle around it. The stored time normally already starts
@@ -344,6 +346,22 @@ export function buildEblastHtml(
   const heroImg = options.heroImageUrl;
   const secondaryImg = options.secondaryImageUrl;
   const galleryImgs = (options.galleryImageUrls ?? []).slice(0, 4);
+
+  /**
+   * The alignment someone chose for a field, as a style fragment.
+   *
+   * Empty unless they chose one, so every section keeps the alignment the
+   * template gives it and only a deliberate choice overrides that.
+   */
+  const alignStyleFor = (field: string) => {
+    const value = flyer.textAlign?.[field];
+    return value ? `text-align: ${value}; ` : "";
+  };
+  /** Wrap something inline, like the footer's email link, so it can be aligned. */
+  const alignWrap = (field: string, html: string) => {
+    const value = flyer.textAlign?.[field];
+    return value ? `<div style="text-align: ${value};">${html}</div>` : html;
+  };
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
@@ -520,9 +538,9 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
-            ${hasText(rsvpLabel) ? `<p data-field="rsvpLabel" style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
-            ${hasText(flyer.headline) ? `<p data-field="headline" class="glm-nowrap" style="font-family: ${fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
-            ${hasText(flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}
+            ${hasText(rsvpLabel) ? `<p data-field="rsvpLabel" style="${alignStyleFor("rsvpLabel")}font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            ${hasText(flyer.headline) ? `<p data-field="headline" class="glm-nowrap" style="${alignStyleFor("headline")}font-family: ${fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
+            ${hasText(flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="${alignStyleFor("scriptSubheadline")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}
             ${eventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
                  A date line longer than the column made it wider than the
@@ -543,11 +561,12 @@ export function buildEblastHtml(
                     timeStartsWithSeparator: stripHtml(flyer.eventTime ?? "").trim().startsWith("·"),
                     fontFamily: fontHeadline,
                     fontSize: 26,
+                    align: flyer.textAlign?.eventDate ?? flyer.textAlign?.eventTime,
                     extraStyle: "letter-spacing: 1px;",
                     // No address beneath it means no space needed under the date.
                     marginBottom: hasText(addressLine) ? 8 : 0,
                   })}
-                  ${hasText(addressLine) ? `<p data-field="heroAddress" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
+                  ${hasText(addressLine) ? `<p data-field="heroAddress" class="glm-nowrap" style="${alignStyleFor("heroAddress")}font-family: ${fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -587,14 +606,14 @@ export function buildEblastHtml(
   ${storyHeadShown ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: 44px 36px 12px 36px;">
-      ${storyEyebrowHtml ? `<p data-field="storyEyebrow" class="glm-nowrap" style="font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
-      ${storyTitleHtml ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
+      ${storyEyebrowHtml ? `<p data-field="storyEyebrow" class="glm-nowrap" style="${alignStyleFor("storyEyebrow")}font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
+      ${storyTitleHtml ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="${alignStyleFor("storyScriptTitle")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
     </td>
   </tr>` : ""}
   ${storyBodyHtml ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td style="padding: ${storyHeadShown ? "0" : "44px"} 36px 28px 36px;">
-      <p data-field="bodyParagraphs" style="font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${storyBodyHtml}</p>
+      <p data-field="bodyParagraphs" style="${alignStyleFor("bodyParagraphs")}font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${storyBodyHtml}</p>
     </td>
   </tr>` : ""}`}
   ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
@@ -639,7 +658,7 @@ export function buildEblastHtml(
   ${galleryLabelHtml ? `
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
     <td style="padding: 44px 36px 12px 36px;" align="center">
-      <p data-field="galleryLabel" style="font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
+      <p data-field="galleryLabel" style="${alignStyleFor("galleryLabel")}font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
     </td>
   </tr>` : ""}
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
@@ -724,10 +743,10 @@ export function buildEblastHtml(
           </td>
         </tr>
       </table>` : ""}
-      ${deletableLine(flyer.thankYouText, "Thank You!", (inner) => `<p data-field="thankYouText" style="font-family: ${fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}
-      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}
-      ${deletableLine(flyer.footerName, escapeHtml(community.displayName), (inner) => `<p data-field="footerName" style="font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}
-      ${primarySenderEmail ? deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`) : ""}
+      ${deletableLine(flyer.thankYouText, "Thank You!", (inner) => `<p data-field="thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}
+      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}
+      ${deletableLine(flyer.footerName, escapeHtml(community.displayName), (inner) => `<p data-field="footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}
+      ${primarySenderEmail ? alignWrap("footerSenderEmail", deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`)) : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
         .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)

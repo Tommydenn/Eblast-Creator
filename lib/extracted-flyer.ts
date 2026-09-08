@@ -27,6 +27,14 @@ export interface ExtractedFlyer {
   storyScriptTitle?: string;
   /** 2–4 paragraphs of body copy. Plain text, no HTML. */
   bodyParagraphs: string[];
+  /**
+   * Text alignment chosen per field, keyed by the field's name.
+   *
+   * Absent means the template decides, which is what every eblast written so
+   * far relies on: the hero and footer centre their contents while the story
+   * body runs left. Only a deliberate choice from the toolbar lands here.
+   */
+  textAlign?: Record<string, "left" | "center" | "right">;
 
   /** True if the flyer explicitly requires or requests RSVP. */
   rsvpRequired?: boolean;

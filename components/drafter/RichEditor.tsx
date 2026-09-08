@@ -636,6 +636,26 @@ const EMPTY_STATE: FormatState = {
   fontSize: null,
 };
 
+/** Four stacked rules, ragged on whichever edge the alignment leaves free. */
+function AlignIcon({ kind }: { kind: "left" | "center" | "right" }) {
+  const widths = [11, 7, 10, 6];
+  return (
+    <svg width="13" height="12" viewBox="0 0 13 12" aria-hidden="true">
+      {widths.map((w, i) => (
+        <rect
+          key={i}
+          x={kind === "left" ? 1 : kind === "right" ? 12 - w : (13 - w) / 2}
+          y={i * 3 + 0.5}
+          width={w}
+          height="1.6"
+          rx="0.8"
+          fill="currentColor"
+        />
+      ))}
+    </svg>
+  );
+}
+
 export function FormatToolbar({
   editorRef,
   brandColors,
@@ -650,6 +670,10 @@ export function FormatToolbar({
   const [hexInput, setHexInput] = useState("");
   const [fontSizeInput, setFontSizeInput] = useState("");
   const [state, setState] = useState<FormatState>(EMPTY_STATE);
+  // Which field the caret is in. Alignment belongs to the whole line rather
+  // than to a selection, so the buttons act on the field, not the words.
+  const [activeField, setActiveField] = useState<string | null>(null);
+  const { fields, setField } = useDraft();
   const colorPanelRef = useRef<HTMLDivElement>(null);
   const fontPanelRef = useRef<HTMLDivElement>(null);
   const fontSizeInputRef = useRef<HTMLInputElement>(null);
@@ -684,6 +708,7 @@ export function FormatToolbar({
       const st = queryFormatState(el, getPending(el), fieldDefaults());
       setState(st);
       const fieldName = activeFieldNameRef?.current;
+      setActiveField(fieldName ?? null);
       // What the box shows, in order of authority: the size set on the
       // selection itself, then the size this field is actually rendered at in
       // the email, then the table.
@@ -724,6 +749,24 @@ export function FormatToolbar({
     const fieldName = activeFieldNameRef?.current;
     return fieldName ? FIELD_DEFAULTS[fieldName] : undefined;
   }
+
+  /**
+   * Set, or clear, the alignment of the field being edited.
+   *
+   * Pressing the button a field already uses clears it, which hands the line
+   * back to the template's own alignment rather than pinning it to a value
+   * that happens to match today.
+   */
+  function setAlign(value: "left" | "center" | "right") {
+    const field = activeFieldNameRef?.current;
+    if (!field) return;
+    const next = { ...(fields?.textAlign ?? {}) };
+    if (next[field] === value) delete next[field];
+    else next[field] = value;
+    setField("textAlign", Object.keys(next).length ? next : undefined);
+  }
+
+  const currentAlign = activeField ? fields?.textAlign?.[activeField] : undefined;
 
   function run(cmd: FormatCommand, savedRange?: Range | null) {
     const el = editorRef.current;
@@ -850,6 +893,20 @@ export function FormatToolbar({
         className={btn(state.underline, "underline")}
         title="Underline"
       >U</button>
+
+      <div className="w-px h-4 bg-[#ddd8d0] mx-0.5" />
+
+      {(["left", "center", "right"] as const).map((kind) => (
+        <button
+          key={kind}
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); setAlign(kind); }}
+          className={`${btn(currentAlign === kind)} flex items-center justify-center`}
+          title={`Align ${kind}${activeField ? "" : " — click into some text first"}`}
+        >
+          <AlignIcon kind={kind} />
+        </button>
+      ))}
 
       <div className="w-px h-4 bg-[#ddd8d0] mx-0.5" />
 

@@ -7,6 +7,7 @@ import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import { cropDataUriToFocusAndRatio } from "@/lib/pdf-images";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
+import { withParagraphSpacing } from "@/lib/extracted-flyer";
 
 // Order-independent deep stringify, so a true no-op is detected even for fields
 // getChangedFields doesn't enumerate (event details, footer overrides, alt text…).
@@ -110,6 +111,12 @@ export async function POST(req: NextRequest) {
     // (the model is told to return the full object and to set "" to clear a
     // field, so explicit clears still work; omissions never silently drop data).
     const mergedExtracted: ExtractedFlyer = { ...body.current, ...result.flyer };
+    // The model returns paragraphs with no blank line between them. Put the
+    // spacing back only when it actually rewrote the body — a body it left
+    // alone keeps whatever spacing the writer gave it.
+    if (result.flyer.bodyParagraphs) {
+      mergedExtracted.bodyParagraphs = withParagraphSpacing(result.flyer.bodyParagraphs);
+    }
 
     // Resolve the image arrangement. Default: keep exactly what the client sent.
     let nextHero = body.heroImageUrl;

@@ -254,8 +254,8 @@ export function serializeInline(root: Element): string {
 export function serializeBlocks(root: Element): string[] {
   const hasDiv = Array.from(root.children).some((c) => c.tagName === "DIV");
   if (!hasDiv) {
-    const nonEmpty = [serializeInline(root)].filter((b) => b !== "" && b !== "<br>");
-    return nonEmpty.length ? nonEmpty : [""];
+    const only = serializeInline(root);
+    return [only === "<br>" ? "" : only];
   }
 
   const blocks: string[] = [];
@@ -287,8 +287,13 @@ export function serializeBlocks(root: Element): string[] {
   }
   flushLoose();
 
-  const nonEmpty = blocks.filter((b) => b !== "" && b !== "<br>");
-  return nonEmpty.length ? nonEmpty : [""];
+  // A blank line is real content. Pressing Enter on a line with nothing after
+  // it is how one gets made, exactly as in a word processor, and dropping the
+  // empty blocks meant such a line never reached the email — the caret moved
+  // but the preview did not change. A body that is blank throughout still
+  // collapses to one empty line, which hasText() reads as no body at all.
+  const lines = blocks.map((b) => (b === "<br>" ? "" : b));
+  return lines.some((b) => b !== "") ? lines : [""];
 }
 
 /** Normalize arbitrary/legacy HTML into canonical inline HTML (flat spans). */

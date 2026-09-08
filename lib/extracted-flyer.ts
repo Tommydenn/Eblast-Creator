@@ -190,3 +190,34 @@ export interface ExtractedFlyer {
   secondaryImageLink?: string;
   galleryImageLinks?: string[];
 }
+
+/** True when a body line carries no visible text — a blank line. */
+function isBlankLine(p: string): boolean {
+  return (
+    (p ?? "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;|&zwnj;|&#8203;|&#xfeff;/gi, " ")
+      .replace(/[\s\u00a0\u200b\ufeff]+/g, "") === ""
+  );
+}
+
+/**
+ * Put a blank line between consecutive written paragraphs.
+ *
+ * The body is a list of lines and the email renders it literally — one line
+ * break per entry — so a blank entry is a blank line. The model writes two or
+ * three paragraphs with nothing between them, which would run them together.
+ * This restores the spacing the body copy has always been written with.
+ *
+ * Idempotent: a body that already has its blank lines comes back unchanged, so
+ * it is safe to apply to a body that has been edited by hand.
+ */
+export function withParagraphSpacing(paras: string[]): string[] {
+  const out: string[] = [];
+  for (const p of paras) {
+    const prev = out[out.length - 1];
+    if (out.length && !isBlankLine(p) && !isBlankLine(prev)) out.push("");
+    out.push(p);
+  }
+  return out;
+}

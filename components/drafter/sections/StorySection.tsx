@@ -72,7 +72,7 @@ export default function StorySection() {
 
       <Field
         label="Body Copy"
-        hint="Press Enter for a new paragraph. Select text, then use the formatting toolbar above the preview to apply bold, color, or font."
+        hint="Press Enter for a new line, twice to leave a blank line. Select text, then use the formatting toolbar above the preview to apply bold, color, or font."
       >
         <RichBodyEditor
           paragraphs={fields.bodyParagraphs}

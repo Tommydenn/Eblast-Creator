@@ -24,6 +24,7 @@ import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
 import type { Community } from "@/lib/db/queries";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
+import { withParagraphSpacing } from "@/lib/extracted-flyer";
 
 export interface GeneratedDraft {
   extracted: ExtractedFlyer;
@@ -127,7 +128,10 @@ export async function generateDraft(opts: {
     throw new Error(message);
   }
 
-  const extracted = loop.finalDraft;
+  const extracted: ExtractedFlyer = {
+    ...loop.finalDraft,
+    bodyParagraphs: withParagraphSpacing(loop.finalDraft.bodyParagraphs ?? []),
+  };
   const rawHero = loop.finalImages.heroDataUri;
   const rawSecondary = loop.finalImages.secondaryDataUri;
   const rawGallery = loop.finalImages.galleryDataUris ?? [];

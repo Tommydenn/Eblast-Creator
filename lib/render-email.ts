@@ -567,10 +567,13 @@ export function buildEblastHtml(
   const storyEyebrowHtml = hasText(flyer.storyEyebrow) ? renderInlineField(flyer.storyEyebrow) : "";
   const storyTitleHtml = hasText(flyer.storyScriptTitle) ? renderInlineField(flyer.storyScriptTitle!) : "";
   const storyHeadShown = !!(storyEyebrowHtml || storyTitleHtml);
-  // A blank entry inside the body is kept, since someone may have left one
-  // there deliberately for spacing. Only an entirely empty body drops the row.
+  // The body is a list of lines, rendered literally: one line break between
+  // each, so a blank entry is a blank line and Enter in the editor moves down
+  // exactly one line. Joining with two breaks instead meant every Enter opened
+  // a blank line the writer never asked for. Only an entirely empty body drops
+  // the row.
   const storyBodyHtml = hasText(flyer.bodyParagraphs)
-    ? flyer.bodyParagraphs.map((p) => renderBodyParagraph(p)).join("<br><br>")
+    ? flyer.bodyParagraphs.map((p) => renderBodyParagraph(p)).join("<br>")
     : "";
 
   const story = `

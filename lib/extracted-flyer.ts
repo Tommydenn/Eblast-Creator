@@ -35,6 +35,8 @@ export interface ExtractedFlyer {
    * body runs left. Only a deliberate choice from the toolbar lands here.
    */
   textAlign?: Record<string, "left" | "center" | "right">;
+  /** Extra lines someone added to the footer, in the order they were added. */
+  footerCustomLines?: FooterCustomLine[];
 
   /** True if the flyer explicitly requires or requests RSVP. */
   rsvpRequired?: boolean;
@@ -228,4 +230,21 @@ export function withParagraphSpacing(paras: string[]): string[] {
     out.push(p);
   }
   return out;
+}
+
+/**
+ * The gaps in the footer an added line can sit in, each named for the thing
+ * it follows. "top" is above the website button.
+ */
+export const FOOTER_SLOTS = ["top", "button", "thankYou", "senderName", "footerName", "senderEmail"] as const;
+export type FooterSlot = (typeof FOOTER_SLOTS)[number];
+
+/** A line someone added to the footer. */
+export interface FooterCustomLine {
+  /** Stable across edits, so alignment and deletion can refer to it. */
+  id: string;
+  /** Rich inline HTML, the same as any other single-line field. */
+  text: string;
+  /** Which gap it sits in. */
+  after: FooterSlot;
 }

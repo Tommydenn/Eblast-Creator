@@ -3,6 +3,7 @@
 // One template, every community gets it with their own brand variables.
 
 import type { Community } from "@/data/communities";
+import { type FooterSlot } from "@/lib/extracted-flyer";
 import logoDimensions from "@/lib/logo-dimensions.json";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 
@@ -335,6 +336,13 @@ export interface RenderOptions {
   secondaryImageUrl?: string;
   /** Additional images for the gallery section near the bottom. Up to 4 used. */
   galleryImageUrls?: string[];
+  /**
+   * Draw the "add a line" markers in the footer.
+   *
+   * The editor's preview only. They are left out of a real send entirely
+   * rather than hidden, so nothing a recipient receives carries them.
+   */
+  showAddLineMarkers?: boolean;
 }
 
 export function buildEblastHtml(
@@ -357,6 +365,32 @@ export function buildEblastHtml(
     const value = flyer.textAlign?.[field];
     return value ? `text-align: ${value}; ` : "";
   };
+  /**
+   * The lines someone added in a given gap of the footer.
+   *
+   * Each is a field in its own right, so it formats and aligns like any
+   * other. Deliberately quieter than the sign-off above it — smaller and a
+   * touch lighter — so adding one does not compete with the community name.
+   */
+  const footerLinesAfter = (slot: FooterSlot) =>
+    (flyer.footerCustomLines ?? [])
+      .filter((line) => line.after === slot)
+      .map((line) => {
+        const field = `footerCustomLine:${line.id}`;
+        return `<p data-field="${field}" data-deletefield="${field}" style="${alignStyleFor(field)}font-family: ${fontBody}; font-size: 15px; color: #4A4A4A; margin: 0 0 6px 0;">${hasText(line.text) ? renderInlineField(line.text) : "&nbsp;"}</p>`;
+      })
+      .join("");
+
+  /** The hover affordance that adds a line in a gap. Preview only. */
+  const addLineMarker = (slot: FooterSlot) => {
+    if (!options.showAddLineMarkers) return "";
+    const rule = "flex:1; height:1px; background:repeating-linear-gradient(90deg, rgba(31,69,56,.45) 0 4px, transparent 4px 8px);";
+    return `<div data-addline="${slot}" style="display:none; align-items:center; gap:6px; cursor:pointer; padding:3px 0;"><span style="${rule}"></span><span style="font:600 11px/1 Arial, sans-serif; color:#1F4538; border:1px solid rgba(31,69,56,.45); border-radius:9px; padding:3px 7px; background:#fff; white-space:nowrap;">+ text</span><span style="${rule}"></span></div>`;
+  };
+
+  /** A footer gap: its add-a-line marker, then whatever sits in it. */
+  const footerGap = (slot: FooterSlot) => `${addLineMarker(slot)}${footerLinesAfter(slot)}`;
+
   /** Wrap something inline, like the footer's email link, so it can be aligned. */
   const alignWrap = (field: string, html: string) => {
     const value = flyer.textAlign?.[field];
@@ -734,7 +768,7 @@ export function buildEblastHtml(
 
   const footer = `
   <tr data-section="Footer">
-    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center" data-bgfield="footerBgColor">
+    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center" data-bgfield="footerBgColor">${footerGap("top")}
       ${(websiteHref && !flyer.footerButtonHidden) ? `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
@@ -742,15 +776,15 @@ export function buildEblastHtml(
             <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:17px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Our Website"}</a>
           </td>
         </tr>
-      </table>` : ""}
-      ${deletableLine(flyer.thankYouText, "Thank You!", (inner) => `<p data-field="thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}
-      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}
-      ${deletableLine(flyer.footerName, escapeHtml(community.displayName), (inner) => `<p data-field="footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}
+      </table>` : ""}${footerGap("button")}
+      ${deletableLine(flyer.thankYouText, "Thank You!", (inner) => `<p data-field="thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}${footerGap("thankYou")}
+      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}${footerGap("senderName")}
+      ${deletableLine(flyer.footerName, escapeHtml(community.displayName), (inner) => `<p data-field="footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}${footerGap("footerName")}
       ${primarySenderEmail ? alignWrap("footerSenderEmail", deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`)) : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
         .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)
-        .join("")}
+        .join("")}${footerGap("senderEmail")}
     </td>
   </tr>`;
 

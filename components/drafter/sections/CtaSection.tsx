@@ -5,6 +5,17 @@ import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField, EmailButtonField, SenderNameField } from "@/components/drafter/RichEditor";
 import { DateTimeField } from "@/components/drafter/DateTimeField";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
+import { FOOTER_SLOTS, type FooterSlot } from "@/lib/extracted-flyer";
+
+/** Where each added line sits, in the words the footer reads in. */
+const SLOT_LABELS: Record<FooterSlot, string> = {
+  top: "above the button",
+  button: "under the button",
+  thankYou: "under Thank You",
+  senderName: "under the name",
+  footerName: "under the community",
+  senderEmail: "under the email",
+};
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -160,6 +171,52 @@ export default function CtaSection() {
           activeFieldNameRef={activeFieldNameRef}
         />
       </Field>
+
+      {(fields.footerCustomLines ?? []).length > 0 && (
+        <Field label="Added Footer Lines" hint="Added from the preview — hover the footer there to place another, or to remove one.">
+          <div className="space-y-2">
+            {[...(fields.footerCustomLines ?? [])]
+              .sort((a, b) => FOOTER_SLOTS.indexOf(a.after) - FOOTER_SLOTS.indexOf(b.after))
+              .map((line) => (
+                <div key={line.id} className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <RichInput
+                      value={line.text}
+                      onValueChange={(html) =>
+                        setField(
+                          "footerCustomLines",
+                          (fields.footerCustomLines ?? []).map((l) =>
+                            l.id === line.id ? { ...l, text: html } : l,
+                          ),
+                        )
+                      }
+                      placeholder="Extra line"
+                      className={baseInput}
+                      activeEditorRef={activeEditorRef}
+                      activeEditorCallback={activeEditorCallback}
+                      activeFieldNameRef={activeFieldNameRef}
+                      fieldName={`footerCustomLine:${line.id}`}
+                    />
+                    <p className="mt-1 text-[11px] text-[#9aaba4]">{SLOT_LABELS[line.after]}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setField(
+                        "footerCustomLines",
+                        (fields.footerCustomLines ?? []).filter((l) => l.id !== line.id),
+                      )
+                    }
+                    className="mt-1.5 text-[#b9a89a] hover:text-[#a4552f] transition-colors text-sm leading-none px-1"
+                    title="Remove this line"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+          </div>
+        </Field>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-1.5">

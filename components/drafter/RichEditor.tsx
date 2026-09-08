@@ -7,7 +7,6 @@ import {
   queryFormatState,
   serializeInline,
   serializeBlocks,
-  normalizeInlineHtml,
   inlineHtmlForEditing,
   blocksToHtml,
   setPendingToggle,

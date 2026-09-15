@@ -16,7 +16,7 @@
  */
 import { buildDraft } from "@/lib/build-draft";
 import { extractFlyerContent } from "@/lib/anthropic";
-import { extractImagesFromPdf, cropDataUriToAspectRatio } from "@/lib/pdf-images";
+import { extractImagesFromPdf, cropDataUriToAspectRatio, downscaleForStorage } from "@/lib/pdf-images";
 import { classifyImagesForSlots } from "@/lib/image-selector";
 import { buildEblastHtml } from "@/lib/render-email";
 import { inlineRelativeImages } from "@/lib/inline-images";
@@ -132,17 +132,38 @@ export async function generateDraft(opts: {
     ...loop.finalDraft,
     bodyParagraphs: withParagraphSpacing(loop.finalDraft.bodyParagraphs ?? []),
   };
-  const rawHero = loop.finalImages.heroDataUri;
-  const rawSecondary = loop.finalImages.secondaryDataUri;
-  const rawGallery = loop.finalImages.galleryDataUris ?? [];
+  // Shrink first, then crop from the shrunk copy.
+  //
+  // The shrunk copy is what gets stored and what repositioning later re-crops
+  // from, so cropping from the same copy keeps the first crop and every later
+  // one identical in quality. Full-size flyer photos run to several megabytes
+  // each, which is more than a save request can carry.
+  const [rawHero, rawSecondary, ...rawGallery] = await Promise.all([
+    loop.finalImages.heroDataUri
+      ? downscaleForStorage(loop.finalImages.heroDataUri)
+      : Promise.resolve(undefined as string | undefined),
+    loop.finalImages.secondaryDataUri
+      ? downscaleForStorage(loop.finalImages.secondaryDataUri)
+      : Promise.resolve(undefined as string | undefined),
+    ...(loop.finalImages.galleryDataUris ?? []).map((uri) => downscaleForStorage(uri)),
+  ]);
 
   // Crop to the ratios the email's slots actually use, so the grid reads as
   // deliberate: hero and secondary 16:9, gallery tiles 4:3.
   const [heroImageUrl, secondaryImageUrl, ...galleryImageUrls] = await Promise.all([
     rawHero ? cropDataUriToAspectRatio(rawHero, 16 / 9) : Promise.resolve(undefined as string | undefined),
     rawSecondary ? cropDataUriToAspectRatio(rawSecondary, 16 / 9) : Promise.resolve(undefined as string | undefined),
-    ...rawGallery.map((uri) => cropDataUriToAspectRatio(uri, 4 / 3)),
+    ...(rawGallery as string[]).map((uri) => cropDataUriToAspectRatio(uri, 4 / 3)),
   ]);
+
+  // The flyer photos someone can still choose from are stored too, so they are
+  // shrunk on the same terms as the ones already placed.
+  const pooledImageUrls = await Promise.all(
+    rankedImages
+      .map((img) => img.dataUri)
+      .filter((u): u is string => !!u)
+      .map((u) => downscaleForStorage(u)),
+  );
 
   const galleryCount = (galleryImageUrls as Array<string | undefined>).filter(Boolean).length;
   const html = await inlineRelativeImages(
@@ -162,8 +183,8 @@ export async function generateDraft(opts: {
     galleryImageUrls: galleryImageUrls as Array<string | undefined>,
     heroOriginalUrl: rawHero,
     secondaryOriginalUrl: rawSecondary,
-    galleryOriginalUrls: rawGallery,
-    allExtractedImageUrls: rankedImages.map((img) => img.dataUri).filter((u): u is string => !!u),
+    galleryOriginalUrls: rawGallery as string[],
+    allExtractedImageUrls: pooledImageUrls,
     imageCount: imageRun.images.length,
     imageDiagnostic: imageRun.diagnostic,
     pastSendsContext: pastSends,

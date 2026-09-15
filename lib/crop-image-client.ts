@@ -73,3 +73,35 @@ export async function cropInBrowser(
 
   return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
 }
+
+/**
+ * Shrink a photo from someone's device before it goes anywhere near a draft.
+ *
+ * A photo straight off a phone or camera is routinely several megabytes, and
+ * a save request cannot carry that, so it used to be dropped without a word
+ * and the photo would quietly vanish on the next reload.
+ *
+ * Safe to do here: a device photo is ordinary RGB. Flyer photos are CMYK and
+ * are shrunk on the server instead, where Sharp converts them properly.
+ */
+export async function downscaleInBrowser(
+  imageUrl: string,
+  maxEdge = 1600,
+  maxChars = 1_500_000,
+): Promise<string> {
+  const img = await loadImage(imageUrl);
+  const width = img.naturalWidth;
+  const height = img.naturalHeight;
+  if (!width || !height) return imageUrl;
+  const longest = Math.max(width, height);
+  if (longest <= maxEdge && imageUrl.length <= maxChars) return imageUrl;
+
+  const scale = Math.min(1, maxEdge / longest);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return imageUrl;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+}

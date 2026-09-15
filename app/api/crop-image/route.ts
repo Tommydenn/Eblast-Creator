@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { draftImageBank } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { resolveImageRefs } from "@/lib/image-bank";
+import { resolveImageRefs, isOriginalIdx } from "@/lib/image-bank";
 import { cropDataUriToXY, cropDataUriToFocusAndRatio } from "@/lib/pdf-images";
 
 export const runtime = "nodejs";
@@ -53,10 +53,27 @@ export async function POST(req: NextRequest) {
         .from(draftImageBank)
         .where(eq(draftImageBank.draftId, body.draftId));
       // A repeated photo is stored once and pointed at from its other rows.
-      const found = resolveImageRefs(rows).find((r) => r.idx === body.imageIdx);
+      const resolved = resolveImageRefs(rows);
+      let found = resolved.find((r) => r.idx === body.imageIdx);
+
+      // Drafts saved before photos were shrunk can be missing an original:
+      // it was larger than a save request could carry and was dropped without
+      // a word. Fall back to the cropped copy of the same slot so the photo
+      // still comes back and the edit goes through, rather than failing and
+      // leaving the slot looking broken. There is less room to move around
+      // inside a copy that is already cropped, which is the honest cost of
+      // the original being gone.
+      const wantedIdx = body.imageIdx;
+      if (!found && isOriginalIdx(wantedIdx)) {
+        found = resolved.find((r) => r.idx === wantedIdx + 1);
+      }
+
       if (!found) {
         return NextResponse.json(
-          { ok: false, error: "That photo is no longer stored with this draft" },
+          {
+            ok: false,
+            error: "That photo is not stored with this draft any more. Pick it again to replace it.",
+          },
           { status: 404 },
         );
       }

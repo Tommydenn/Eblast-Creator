@@ -387,16 +387,38 @@ async function postImageBatches(draftId: string, rows: Array<{ idx: number; url:
     batch = [];
     batchChars = 0;
   };
+  // A photo too big to send is recorded rather than quietly dropped, and any
+  // pointer aimed at it is dropped along with it. Writing the pointer on its
+  // own is what left drafts naming a photo that had never been stored — the
+  // "no longer stored with this draft" failure on repositioning and on
+  // picking a flyer photo.
+  const unsent: number[] = [];
+  const missing = new Set<number>();
   for (const item of items) {
     if (item.url.length > IMAGE_BATCH_MAX_CHARS) {
-      console.warn(`[postImageBatches] skipping oversized image at idx ${item.idx} (${item.url.length} chars)`);
+      unsent.push(item.idx);
+      missing.add(item.idx);
       continue;
+    }
+    if (item.url.startsWith(IMAGE_REF_PREFIX)) {
+      const target = Number(item.url.slice(IMAGE_REF_PREFIX.length));
+      if (missing.has(target)) {
+        missing.add(item.idx);
+        continue;
+      }
     }
     if (batchChars + item.url.length > IMAGE_BATCH_MAX_CHARS) await flush();
     batch.push(item);
     batchChars += item.url.length;
   }
   await flush();
+  if (unsent.length > 0) {
+    throw new Error(
+      unsent.length === 1
+        ? "One photo was too large to save. Replace it with a smaller one."
+        : `${unsent.length} photos were too large to save. Replace them with smaller ones.`,
+    );
+  }
 }
 
 export function DraftProvider({ children }: { children: React.ReactNode }) {
@@ -1072,7 +1094,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       setTimeout(() => setSaveNotice(null), 3000);
       try { localStorage.setItem("eblast_lastDraftId", id); } catch {};
       // Save all images separately to avoid 4.5 MB payload limit
-      saveImagesForDraft(id).catch(() => null);
+      saveImagesForDraft(id).catch((e) => setSaveError(e?.message ?? "Couldn't save the photos"));
     } catch (e: any) {
       setSaveError(e.message ?? "Save failed");
     } finally {
@@ -1109,7 +1131,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       // Remember last draft ID so GenerateView can offer "Resume" on next visit
       try { localStorage.setItem("eblast_lastDraftId", id); } catch {}
       // Save all images separately to avoid 4.5 MB payload limit
-      saveImagesForDraft(id).catch(() => null);
+      saveImagesForDraft(id).catch((e) => setSaveError(e?.message ?? "Couldn't save the photos"));
     } catch {
       // silent failure
     }
@@ -1478,7 +1500,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       try { localStorage.setItem("eblast_lastDraftId", newId); } catch {}
       setSaveNotice("Created a copy — you're now editing it");
       setTimeout(() => setSaveNotice(null), 4000);
-      saveImagesForDraft(newId).catch(() => null);
+      saveImagesForDraft(newId).catch((e) => setSaveError(e?.message ?? "Couldn't save the photos"));
       return newId;
     } catch (e: any) {
       setSaveError(e.message ?? "Failed to create copy");

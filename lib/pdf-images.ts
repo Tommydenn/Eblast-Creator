@@ -423,6 +423,57 @@ export async function cropDataUriToFocusAndRatio(
 }
 
 /**
+ * The largest a stored photo ever needs to be.
+ *
+ * The widest slot in the email is the hero at 600px, and repositioning
+ * re-crops from the stored copy, so it only has to be big enough to pan
+ * around inside at twice the size it is ever shown at.
+ */
+export const STORED_IMAGE_MAX_EDGE = 1600;
+
+/** Above this, a photo is re-encoded even if its dimensions are already small. */
+const STORED_IMAGE_MAX_CHARS = 1_500_000;
+
+/**
+ * Shrink a photo to the largest size the eblast can actually use.
+ *
+ * Flyer photos arrive far larger than anything the email shows — measured,
+ * up to 11.6 MB as base64 for a single one. A browser cannot send that back
+ * to be saved, so it was quietly dropped on save and the draft was left
+ * pointing at a photo that had never been stored: the "no longer stored with
+ * this draft" failure when repositioning or picking a flyer photo.
+ *
+ * Done here with Sharp rather than in the browser because flyer photos are
+ * CMYK and a browser converts CMYK to RGB far more crudely — measured at 26%
+ * more saturation and 17% more contrast.
+ *
+ * Returns the photo untouched on any failure, which is never worse than not
+ * trying.
+ */
+export async function downscaleForStorage(
+  dataUri: string,
+  maxEdge = STORED_IMAGE_MAX_EDGE,
+): Promise<string> {
+  try {
+    const commaIdx = dataUri.indexOf(",");
+    if (commaIdx === -1) return dataUri;
+    const buffer = Buffer.from(dataUri.slice(commaIdx + 1), "base64");
+    const meta = await sharp(buffer, { failOn: "none" }).metadata();
+    if (!meta.width || !meta.height) return dataUri;
+    const oversized =
+      Math.max(meta.width, meta.height) > maxEdge || dataUri.length > STORED_IMAGE_MAX_CHARS;
+    if (!oversized) return dataUri;
+    const out = await sharp(buffer, { failOn: "none" })
+      .resize({ width: maxEdge, height: maxEdge, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 86 })
+      .toBuffer();
+    return `data:image/jpeg;base64,${out.toString("base64")}`;
+  } catch {
+    return dataUri;
+  }
+}
+
+/**
  * Crop a data-URI image to a target aspect ratio (width/height) via Sharp.
  * Uses Sharp's attention-based strategy to keep faces and salient subjects in frame.
  * Returns the original data URI on error.

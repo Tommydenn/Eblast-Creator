@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef } from "react";
+import { downscaleInBrowser } from "@/lib/crop-image-client";
 import { useDraft } from "@/context/DraftContext";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 
@@ -151,9 +152,14 @@ function BankPicker({
   function handleFile(f: File | null) {
     if (!f) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const url = e.target?.result as string;
-      if (url) { onUpload(url); onPick(url); }
+      if (!url) return;
+      // Shrink before it goes in, or a full-size camera photo is too big to
+      // save and would disappear again on the next reload.
+      const sized = await downscaleInBrowser(url).catch(() => url);
+      onUpload(sized);
+      onPick(sized);
     };
     reader.readAsDataURL(f);
   }

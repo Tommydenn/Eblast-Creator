@@ -104,6 +104,16 @@ export function resolveImageRefs(rows: ImageRow[], known: ImageRow[] = []): Imag
   return out;
 }
 
+/**
+ * True for the row holding a slot's uncropped original.
+ *
+ * Hero and secondary keep theirs at -2 and -4; each gallery tile keeps its
+ * own at the odd index below its cropped copy.
+ */
+export function isOriginalIdx(idx: number): boolean {
+  return idx === -2 || idx === -4 || (idx <= -11 && idx % 2 !== 0);
+}
+
 // ─── Slot <-> index mapping ────────────────────────────────────────────────
 
 export type SlotImage = { url: string; originalUrl: string } | null;

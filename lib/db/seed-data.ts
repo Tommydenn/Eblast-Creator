@@ -663,10 +663,9 @@ export const seedCommunities: SeedCommunity[] = [
   },
   {
     community: {
-      // Rebranded from The Pillars of Grand Rapids. The slug is deliberately
-      // left alone: drafts are filed under it, and renaming it would orphan
-      // them along with the logo files.
-      slug: "the-pillars-of-grand-rapids",
+      // Rebranded from The Pillars of Grand Rapids; the slug was renamed with
+      // it, and every draft, approval and Planner task was carried across.
+      slug: "talamore-grand-rapids",
       displayName: "Talamore Grand Rapids",
       shortName: "Talamore",
       brandFamily: "Talamore",
@@ -676,7 +675,7 @@ export const seedCommunities: SeedCommunity[] = [
       trackingPhone: "218-245-4147",
       hubspot: {},
       brand: TALAMORE_BRAND,
-      logos: twoLogos("the-pillars-of-grand-rapids"),
+      logos: twoLogos("talamore-grand-rapids"),
       socials: {},
     },
     senders: [],
@@ -747,7 +746,7 @@ const ACRONYM_BY_SLUG: Record<string, string> = {
   "orchards-of-minnetonka": "OM",
   "broadwell": "BWP",
   "the-preserve-of-roseville": "TPR",
-  "the-pillars-of-grand-rapids": "PGR",
+  "talamore-grand-rapids": "PGR",
 };
 
 // Attach HubSpot acronym to each community's hubspot config.
@@ -794,7 +793,7 @@ const SENDERS_BY_SLUG: Record<string, SeedSender[]> = {
     { name: "Madelyn Macgowan", email: "mmacgowan@greatlakesmc.com" },
     { name: "Kasey Krieger", email: "kkrieger@greatlakesmc.com" },
   ],
-  "the-pillars-of-grand-rapids": [{ name: "Sherry Frick", email: "sfrick@greatlakesmc.com" }],
+  "talamore-grand-rapids": [{ name: "Sherry Frick", email: "sfrick@greatlakesmc.com" }],
 };
 for (const sc of seedCommunities) {
   const senders = SENDERS_BY_SLUG[sc.community.slug];
@@ -833,7 +832,7 @@ const CONTACT_BY_SLUG: Record<string, { address?: Address; websiteUrl?: string }
   "global-pointe": { address: { street: "5200 Wayzata Blvd", city: "Golden Valley", state: "MN", zip: "55416" }, websiteUrl: "globalpointeseniorliving.com" },
   "seven-hills": { address: { street: "733 Selby Ave", city: "Saint Paul", state: "MN", zip: "55104" }, websiteUrl: "sevenhillsseniorliving.com" },
   "orchards-of-minnetonka": { address: { street: "10955 Wayzata Blvd", city: "Minnetonka", state: "MN", zip: "55305" }, websiteUrl: "orchardsofminnetonka.com" },
-  "the-pillars-of-grand-rapids": { address: { street: "2060 SW 8th St", city: "Grand Rapids", state: "MN", zip: "55744" }, websiteUrl: "pillarsgrandrapids.com" },
+  "talamore-grand-rapids": { address: { street: "2060 SW 8th St", city: "Grand Rapids", state: "MN", zip: "55744" }, websiteUrl: "pillarsgrandrapids.com" },
 };
 for (const sc of seedCommunities) {
   const cc = CONTACT_BY_SLUG[sc.community.slug];

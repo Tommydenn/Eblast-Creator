@@ -17,7 +17,6 @@ const FAMILY_COLORS: Record<string, string> = {
   "Orchards of Minnetonka":      "#a8c4a0",
   "Seven Hills":                 "#b59e7a",
   "The Glenn":                   "#9b8bb5",
-  "The Pillars of Grand Rapids": "#b59b8b",
   "Talamore":                    "#7a9bb5",
 };
 const DEFAULT_BAR_COLOR = "#a0a89e";

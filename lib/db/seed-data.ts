@@ -108,15 +108,6 @@ const AMIRA_CHOICE_BRAND = {
   fontsSource: "brand-guide-extracted" as const,
 };
 
-const PILLARS_BRAND = {
-  primary: "#59611D",   // Fern Frond (dark olive green)
-  accent: "#AF7C58",    // Limed Oak (toffee copper)
-  background: "#FBF7EE",
-  fontHeadline: "Bebas Neue",
-  fontBody: "Neutra Text",
-  paletteSource: "brand-guide-extracted" as const,
-  fontsSource: "brand-guide-extracted" as const,
-};
 
 const GLOBAL_POINTE_BRAND = {
   primary: "#6B999B",   // PMS 5497 U — muted teal (IL property color)
@@ -672,17 +663,20 @@ export const seedCommunities: SeedCommunity[] = [
   },
   {
     community: {
+      // Rebranded from The Pillars of Grand Rapids. The slug is deliberately
+      // left alone: drafts are filed under it, and renaming it would orphan
+      // them along with the logo files.
       slug: "the-pillars-of-grand-rapids",
-      displayName: "The Pillars of Grand Rapids",
-      shortName: "The Pillars",
-      brandFamily: "The Pillars",
+      displayName: "Talamore Grand Rapids",
+      shortName: "Talamore",
+      brandFamily: "Talamore",
       type: "mixed",
       address: { city: "Grand Rapids", state: "MN" },
-      websiteUrl: null,
+      websiteUrl: "talamoreseniorliving.com/grand-rapids-mn/",
       trackingPhone: "218-245-4147",
       hubspot: {},
-      brand: PILLARS_BRAND,
-      logos: oneLogoLight("the-pillars-of-grand-rapids"),
+      brand: TALAMORE_BRAND,
+      logos: twoLogos("the-pillars-of-grand-rapids"),
       socials: {},
     },
     senders: [],

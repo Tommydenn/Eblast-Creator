@@ -271,6 +271,7 @@ export default function EditorLayout() {
   // time would make the handle worth less than the trouble.
   const flyerRef = useRef<HTMLDivElement>(null);
   const [flyerWidth, setFlyerWidth] = useState<number | null>(null);
+  const [resizing, setResizing] = useState(false);
   const FLYER_MIN = 360;
   // What the preview keeps for itself no matter how far the handle is dragged.
   const PREVIEW_MIN = 280;
@@ -288,28 +289,39 @@ export default function EditorLayout() {
     const el = flyerRef.current;
     const row = el?.parentElement;
     if (!el || !row) return;
+
+    // Capture the pointer on the handle. Without it the drag is followed on
+    // the window, and the moment the cursor crosses the flyer the events go to
+    // the PDF viewer's own document instead — including the release, so the
+    // drag never ended and the panel kept following the cursor afterwards.
+    // Capture keeps every event for this pointer on the handle, iframe or not.
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+
     const startX = e.clientX;
     const startWidth = el.offsetWidth;
     // Dragging left widens the panel, so the delta is subtracted.
     const ceiling = Math.max(FLYER_MIN, row.clientWidth - PREVIEW_MIN);
     let latest = startWidth;
+    setResizing(true);
+
     const onMove = (ev: PointerEvent) => {
       latest = Math.min(Math.max(startWidth - (ev.clientX - startX), FLYER_MIN), ceiling);
       setFlyerWidth(latest);
     };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+    const stop = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", stop);
+      handle.removeEventListener("pointercancel", stop);
+      try { handle.releasePointerCapture(e.pointerId); } catch {}
+      setResizing(false);
       try { localStorage.setItem("eblast_flyerWidth", String(Math.round(latest))); } catch {}
     };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    // Held on the body so the cursor and the drag survive the pointer crossing
-    // the iframe, which would otherwise swallow both.
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", stop);
+    // A cancelled pointer — the window losing focus mid-drag, say — has to end
+    // it too, or the panel is left following a cursor that is no longer down.
+    handle.addEventListener("pointercancel", stop);
   }
 
   // Opening the flyer narrows the preview column, and the email is a fixed
@@ -489,6 +501,8 @@ export default function EditorLayout() {
           </div>
         </div>
       </div>
+
+      {resizing && <div className="fixed inset-0 z-50 cursor-col-resize select-none" />}
 
       {approvalOpen && <ApprovalModal mode={approvalMode} onClose={() => setApprovalOpen(false)} />}
 

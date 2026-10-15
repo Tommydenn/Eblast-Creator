@@ -311,6 +311,15 @@ export interface DraftContextValue {
   buildHtml: () => string;
   /** A reopened draft is still fetching the photos shown in the eblast. */
   imagesLoading: boolean;
+  /**
+   * Bumped once the flyer a draft was generated from has been attached to it.
+   *
+   * A hand-uploaded flyer is staged before the draft has an id and claimed
+   * afterwards, so for a moment a brand new draft has no flyer. Anything that
+   * asks whether there is one has to ask again when this changes, or the
+   * answer stays "no" until the page is reloaded.
+   */
+  flyerAttachedAt: number;
   /** The unplaced flyer photos behind the picker are still arriving. */
   imageBankLoading: boolean;
   /** The full-size originals Reposition needs are still arriving. */
@@ -439,6 +448,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // half-loaded draft; `imagesLoadedRef` stays false if the load failed, which
   // keeps a failed load from being written back as "no photos".
   const [imagesLoading, setImagesLoading] = useState(false);
+  const [flyerAttachedAt, setFlyerAttachedAt] = useState(0);
   const [imageBankLoading, setImageBankLoading] = useState(false);
   /** The full-size originals Reposition re-crops from are still arriving. */
   const [originalsLoading, setOriginalsLoading] = useState(false);
@@ -865,7 +875,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ flyerKey: data.flyerKey }),
-              }).catch(() => null);
+              })
+                .then((r) => r.json())
+                // The editor asked whether this draft had a flyer before it
+                // had one. Tell it to ask again, or the button to show the
+                // flyer stays hidden until the page is reloaded.
+                .then((d) => { if (d?.attached) setFlyerAttachedAt(Date.now()); })
+                .catch(() => null);
             }
             // The untouched originals must be saved even as data URIs — they
             // are what repositionImage() re-crops from after a reload.
@@ -1541,6 +1557,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     fields,
     images,
     imagesLoading,
+    flyerAttachedAt,
     imageBankLoading,
     originalsLoading,
     imagesError,

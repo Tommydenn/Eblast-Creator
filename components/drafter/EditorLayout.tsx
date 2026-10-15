@@ -342,7 +342,29 @@ export default function EditorLayout() {
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           {/* Preview header */}
           <div className="h-9 flex items-center justify-between px-4 bg-[#f0ede7] border-b border-[#e8e3dc] shrink-0">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4]">Live Preview</span>
+            {/* The control that collapses the editor sits against the editor,
+                at this header's left edge, with its chevron pointing at the
+                panel it hides. It used to sit at the far right, the width of
+                the preview away from what it acted on. */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setPreviewWidth((w) => (w === "full" ? "half" : "full"))}
+                className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1"
+              >
+                {previewWidth === "full" ? (
+                  <>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                    Show editor
+                  </>
+                ) : (
+                  <>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    Full preview
+                  </>
+                )}
+              </button>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4]">Live Preview</span>
+            </div>
             <div className="flex items-center gap-4">
             {hasFlyer && (
               <button
@@ -357,22 +379,6 @@ export default function EditorLayout() {
                 {flyerOpen ? "Hide flyer" : "Show flyer"}
               </button>
             )}
-            <button
-              onClick={() => setPreviewWidth((w) => (w === "full" ? "half" : "full"))}
-              className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1"
-            >
-              {previewWidth === "full" ? (
-                <>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-                  Show editor
-                </>
-              ) : (
-                <>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-                  Full preview
-                </>
-              )}
-            </button>
             </div>
           </div>
 
@@ -399,8 +405,11 @@ export default function EditorLayout() {
               </div>
             </div>
 
+            {/* The PDF viewer's toolbar has a fixed minimum width and is clipped
+                by anything narrower, so the floor is set by that rather than by
+                how little the page can still be read in. */}
             {hasFlyer && flyerOpen && draftId && (
-              <div className="w-[42%] min-w-[320px] max-w-[620px] h-full shrink-0">
+              <div className="w-[42%] min-w-[460px] max-w-[620px] h-full shrink-0">
                 <FlyerPanel draftId={draftId} onClose={() => setFlyerOpen(false)} />
               </div>
             )}

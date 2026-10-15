@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useDraft } from "@/context/DraftContext";
 
 /**
  * The flyer this draft was written from, beside the eblast preview.
@@ -40,9 +41,15 @@ export function FlyerPanel({ draftId, onClose }: { draftId: string; onClose: () 
         </div>
       </div>
       {/* The browser's own PDF viewer: scrolling, zoom and page navigation for
-          free, and no PDF library shipped to the client. */}
-      <object data={`${url}#view=FitH`} type="application/pdf" className="flex-1 w-full">
-        <div className="h-full flex items-center justify-center p-6 text-center">
+          free, and no PDF library shipped to the client.
+
+          An iframe rather than an object. Chrome gives an embedded object its
+          cut-down viewer, whose floating toolbar is clipped in a panel this
+          size; an iframe gets the same full viewer a PDF opened in a tab does.
+          The message underneath shows through only if nothing renders over it,
+          which is the fallback an iframe cannot declare for itself. */}
+      <div className="relative flex-1 w-full">
+        <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
           <p className="text-xs text-[#7a8c85]">
             This browser won&rsquo;t display PDFs inline.{" "}
             <a href={url} target="_blank" rel="noopener noreferrer" className="text-[#1F4538] underline">
@@ -51,7 +58,8 @@ export function FlyerPanel({ draftId, onClose }: { draftId: string; onClose: () 
             .
           </p>
         </div>
-      </object>
+        <iframe src={url} title="The flyer this eblast was written from" className="absolute inset-0 w-full h-full border-0" />
+      </div>
     </div>
   );
 }
@@ -61,8 +69,14 @@ export function FlyerPanel({ draftId, onClose }: { draftId: string; onClose: () 
  *
  * Asked with ?exists=1 so a multi-megabyte PDF is not downloaded merely to
  * find out whether the button should appear.
+ *
+ * Asked again whenever a flyer is attached. A hand-uploaded flyer is staged
+ * before the draft has an id and claimed once it does, so a draft generated
+ * from one answers "no" for the moment between the two — and used to go on
+ * answering "no", leaving the button hidden until the page was reloaded.
  */
 export function useHasFlyer(draftId: string | null): boolean {
+  const { flyerAttachedAt } = useDraft();
   const [hasFlyer, setHasFlyer] = useState(false);
 
   useEffect(() => {
@@ -73,7 +87,7 @@ export function useHasFlyer(draftId: string | null): boolean {
       .then((d) => { if (!cancelled) setHasFlyer(!!d?.hasFlyer); })
       .catch(() => { if (!cancelled) setHasFlyer(false); });
     return () => { cancelled = true; };
-  }, [draftId]);
+  }, [draftId, flyerAttachedAt]);
 
   return hasFlyer;
 }

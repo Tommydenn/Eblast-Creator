@@ -6,6 +6,11 @@ import { RichInput, CallButtonField, EmailButtonField, SenderNameField } from "@
 import { DateTimeField } from "@/components/drafter/DateTimeField";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 import { type FooterSlot, type FooterCustomLine } from "@/lib/extracted-flyer";
+import {
+  defaultFooterName,
+  DEFAULT_THANK_YOU_TEXT,
+  DEFAULT_WEBSITE_BUTTON_LABEL,
+} from "@/lib/eblast-defaults";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -167,7 +172,7 @@ export default function CtaSection() {
 
       <Field label="Visit Our Website Button" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
         <RichInput
-          value={fields.footerButtonLabel ?? "Visit Our Website"}
+          value={fields.footerButtonLabel ?? DEFAULT_WEBSITE_BUTTON_LABEL}
           onValueChange={(html) => setField("footerButtonLabel", html || undefined)}
           placeholder="Visit Our Website"
           className={baseInput}
@@ -182,7 +187,7 @@ export default function CtaSection() {
 
       <Field label="Thank You Text" hint="Closing salutation displayed in the email footer.">
         <RichInput
-          value={fields.thankYouText ?? "Thank You!"}
+          value={fields.thankYouText ?? DEFAULT_THANK_YOU_TEXT}
           onValueChange={(html) => setField("thankYouText", html)}
           placeholder="Thank You!"
           className={baseInput}
@@ -211,7 +216,7 @@ export default function CtaSection() {
 
       <Field label="Footer Signature" hint="Name appearing below 'Thank You!' in the email footer.">
         <RichInput
-          value={fields.footerName ?? community?.displayName ?? ""}
+          value={fields.footerName ?? defaultFooterName(community)}
           onValueChange={(html) => setField("footerName", html)}
           placeholder="Community name"
           className={baseInput}

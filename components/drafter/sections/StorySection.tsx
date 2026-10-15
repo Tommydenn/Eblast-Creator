@@ -4,6 +4,7 @@ import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, RichBodyEditor } from "@/components/drafter/RichEditor";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
+import { defaultGalleryLabel } from "@/lib/eblast-defaults";
 
 function Field({
   label,
@@ -33,7 +34,7 @@ export default function StorySection() {
 
   if (!fields) return null;
 
-  const galleryDefault = community?.shortName ? `A Look Around ${community.shortName}` : "";
+  const galleryDefault = defaultGalleryLabel(community);
 
   return (
     <div className="space-y-5">

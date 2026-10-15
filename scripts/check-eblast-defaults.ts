@@ -1,0 +1,157 @@
+/**
+ * Guards the one rule the editor depends on: the sidebar and the preview must
+ * agree.
+ *
+ * Every box in the sidebar pre-fills with what the email would render for an
+ * untouched field, and the toolbar shows the size that field renders at. Both
+ * claims only hold while the two sides read the same values. They stopped
+ * holding once — the address line dropped the community name in the email and
+ * kept it in the sidebar — because each side had its own copy of the default.
+ *
+ * lib/eblast-defaults.ts is now the only copy. This checks that it stayed that
+ * way: that the email really renders what that module says, and that no
+ * sidebar field has quietly grown a second copy of a default.
+ *
+ *   npx tsx scripts/check-eblast-defaults.ts
+ */
+import fs from "node:fs";
+import { buildEblastHtml } from "@/lib/render-email";
+import {
+  FIELD_FONT_SIZES,
+  communityAddressLine,
+  defaultGalleryLabel,
+  defaultFooterName,
+  DEFAULT_THANK_YOU_TEXT,
+  DEFAULT_WEBSITE_BUTTON_LABEL,
+} from "@/lib/eblast-defaults";
+
+const failures: string[] = [];
+const notes: string[] = [];
+const fail = (msg: string) => failures.push(msg);
+
+const community: any = {
+  slug: "check-community",
+  displayName: "Checkworth Senior Living",
+  shortName: "Checkworth",
+  // Shaped like a real stored brand — the renderer reads every one of these.
+  brand: {
+    primary: "#004D71", accent: "#CCAC77", background: "#FBF7EE",
+    fontBody: "Nexa", fontHeadline: "Nexa",
+  },
+  address: { street: "1234 Oak St", city: "Green Bay", state: "WI", zip: "54301" },
+  websiteUrl: "https://example.com",
+  logos: [],
+  trackingPhone: "9205551234",
+  socials: {},
+  hubspot: {},
+  senders: [{ id: "s1", name: "Dana Reed", email: "dana@example.com", title: null, isPrimary: true }],
+};
+
+/** The fields an ExtractedFlyer always carries, whether or not they render. */
+const required: any = {
+  subject: "Check subject", previewText: "Preview text", eyebrow: "Eyebrow",
+  headline: "Headline", storyEyebrow: "Eyebrow", bodyParagraphs: ["Body copy."],
+  ctaEyebrow: "Reserve Your Seat", ctaHeadline: "March 3 · 2pm",
+  ctaSubline: "RSVP required", ctaButtonLabel: "Call 920-555-1234",
+  ctaButtonHref: "tel:9205551234", heroImageAlt: "Hero photo",
+  // The hero address rides with the date line, so the date has to be present
+  // for the address to render at all.
+  eventDate: "Wednesday, March 3",
+  heroImageDescription: "A photo of the community", audienceHints: [],
+};
+
+/** Text for every field, so nothing is hidden by an empty-value guard. */
+const populated: any = {
+  ...required,
+  rsvpLabel: "RSVP", headline: "Headline", scriptSubheadline: "Subheadline",
+  eventDate: "March 3", eventTime: "· 2pm", heroAddress: "1 Test St",
+  storyEyebrow: "Eyebrow", storyScriptTitle: "Title", bodyParagraphs: ["Body copy."],
+  galleryLabel: "Gallery", ctaRsvpLabel: "RSVP", ctaEventDate: "March 3",
+  ctaEventTime: "· 2pm", thankYouText: "Thanks", footerSenderName: "Dana Reed",
+  footerName: "Checkworth", footerSenderEmail: "dana@example.com",
+  footerButtonLabel: "Website", ctaButtonLabel: "Call 920-555-1234",
+  finalCtaButtonLabel: "Call 920-555-1234",
+};
+
+const px = (n: number) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${n}" height="${n}"/>`)}`;
+const opts = { heroImageUrl: px(600), secondaryImageUrl: px(528), galleryImageUrls: [px(252), px(252), px(252)] };
+
+// ── 1. Rendered sizes match the table the toolbar reads ────────────────────
+const html = buildEblastHtml(populated, community, opts);
+
+/** The size a field actually renders at: its own tag's, else its container's. */
+function renderedSize(field: string): number | null {
+  const at = html.indexOf(`data-field="${field}"`);
+  if (at === -1) return null;
+  let cursor = at;
+  for (let hop = 0; hop < 4; hop++) {
+    const open = html.lastIndexOf("<", cursor);
+    if (open === -1) return null;
+    const close = html.indexOf(">", open);
+    const size = html.slice(open, close).match(/font-size:\s*(\d+)px/);
+    if (size) return Number(size[1]);
+    cursor = open - 1; // no size on this tag — try the one enclosing it
+  }
+  return null;
+}
+
+for (const [field, listed] of Object.entries(FIELD_FONT_SIZES)) {
+  const rendered = renderedSize(field);
+  if (rendered === null) {
+    // Call-button labels are styled through the button, not a data-field, so
+    // there is no tag to read back. Their sizes come from the same table.
+    notes.push(`${field}: not tagged in the email, size not checkable by rendering`);
+    continue;
+  }
+  if (rendered !== listed) {
+    fail(`${field} renders at ${rendered}px but the toolbar shows ${listed}px`);
+  }
+}
+
+// ── 2. Untouched fields render the shared defaults ─────────────────────────
+const bare = buildEblastHtml(required, community, opts);
+const textOf = (field: string) => {
+  const m = bare.match(new RegExp(`data-field="${field}"[^>]*>(.*?)</`, "s"));
+  return m ? m[1].replace(/<[^>]*>/g, "").trim() : null;
+};
+const expected: Record<string, string> = {
+  heroAddress: communityAddressLine(community),
+  galleryLabel: defaultGalleryLabel(community),
+  thankYouText: DEFAULT_THANK_YOU_TEXT,
+  footerName: defaultFooterName(community),
+  footerButtonLabel: DEFAULT_WEBSITE_BUTTON_LABEL,
+};
+for (const [field, want] of Object.entries(expected)) {
+  const got = textOf(field);
+  if (got !== want) fail(`${field} defaults to "${got}" in the email but "${want}" in lib/eblast-defaults.ts`);
+}
+
+// The community name belongs to the logo above the address, not the address.
+if (communityAddressLine(community).includes(community.displayName)
+    || communityAddressLine(community).includes(community.shortName)) {
+  fail("the default address line still carries the community name");
+}
+
+// ── 3. No sidebar field has grown a second copy of a default ───────────────
+const SIDEBAR_COPIES: Array<[string, RegExp, string]> = [
+  ["components/drafter/sections/HeroSection.tsx", /displayName.*address\?\.street/s, "builds its own address line"],
+  ["components/drafter/sections/StorySection.tsx", /`A Look Around \$\{/, "hardcodes the gallery label"],
+  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*"Visit Our Website"/, "hardcodes the website button label"],
+  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*"Thank You!"/, "hardcodes the thank-you text"],
+  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*community\?\.displayName/, "hardcodes the footer signature"],
+  ["components/drafter/RichEditor.tsx", /const FIELD_FONT_SIZES/, "keeps its own font-size table"],
+];
+for (const [file, pattern, what] of SIDEBAR_COPIES) {
+  if (pattern.test(fs.readFileSync(file, "utf8"))) {
+    fail(`${file} ${what} — it should read lib/eblast-defaults.ts instead`);
+  }
+}
+
+// ── Report ─────────────────────────────────────────────────────────────────
+for (const n of notes) console.log(`  note: ${n}`);
+if (failures.length) {
+  console.error(`\nThe sidebar and the preview disagree in ${failures.length} place(s):\n`);
+  for (const f of failures) console.error(`  - ${f}`);
+  process.exit(1);
+}
+console.log(`\nSidebar and preview agree: ${Object.keys(FIELD_FONT_SIZES).length} field sizes, ${Object.keys(expected).length} text defaults, ${SIDEBAR_COPIES.length} duplicate-copy guards.`);

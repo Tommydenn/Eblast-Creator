@@ -5,6 +5,7 @@ import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
 import { DateTimeField } from "@/components/drafter/DateTimeField";
+import { communityAddressLine } from "@/lib/eblast-defaults";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -21,14 +22,6 @@ const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 
 export default function HeroSection() {
   const { fields, setField, setFields, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   if (!fields) return null;
-
-  // Default address line shown in the box when the field hasn't been overridden
-  // (matches the renderer's fallback), so the box is pre-filled rather than blank.
-  const communityAddressLine = community
-    ? [community.displayName, community.address?.street, community.address?.city,
-       [community.address?.state, community.address?.zip].filter(Boolean).join(" ")]
-        .filter(Boolean).join(", ")
-    : "";
 
   return (
     <div className="space-y-5">
@@ -91,11 +84,11 @@ export default function HeroSection() {
         activeFieldNameRef={activeFieldNameRef}
       />
 
-      <Field label="Address Line" hint="Shown beneath the event date in the hero section. Defaults to the community name and address.">
+      <Field label="Address Line" hint="Shown beneath the event date in the hero section. Defaults to the community's address.">
         <RichInput
-          value={fields.heroAddress ?? communityAddressLine}
+          value={fields.heroAddress ?? communityAddressLine(community)}
           onValueChange={(html) => setField("heroAddress", html)}
-          placeholder="e.g. Arbor Crossing, 1234 Oak St, Green Bay, WI 54301"
+          placeholder="e.g. 1234 Oak St, Green Bay, WI 54301"
           className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}

@@ -6,6 +6,14 @@ import type { Community } from "@/data/communities";
 import { type FooterSlot } from "@/lib/extracted-flyer";
 import logoDimensions from "@/lib/logo-dimensions.json";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
+import {
+  communityAddressLine,
+  defaultGalleryLabel,
+  defaultFooterName,
+  DEFAULT_THANK_YOU_TEXT,
+  DEFAULT_WEBSITE_BUTTON_LABEL,
+  FIELD_FONT_SIZES,
+} from "@/lib/eblast-defaults";
 
 /**
  * How big to draw a community's logo in the header.
@@ -204,13 +212,14 @@ const HERO_ADDRESS_COLOR = "#E8DDC4";
  * halves of that: nothing moves on its own, and the number in the toolbar is
  * the truth.
  *
- * These MUST stay equal to FIELD_FONT_SIZES in components/drafter/RichEditor.tsx.
- * Long text wraps instead of shrinking, which the pinned 600px shell and the
- * wrapping rules already handle.
+ * They come from lib/eblast-defaults.ts, which the editor's toolbar reads too,
+ * so the number shown while editing is the number that renders. Long text
+ * wraps instead of shrinking, which the pinned 600px shell and the wrapping
+ * rules already handle.
  */
-const SCRIPT_SUBHEADLINE_SIZE = 40;
-const CTA_DATE_SIZE = 32;
-const CALL_BUTTON_SIZE = 18;
+const SCRIPT_SUBHEADLINE_SIZE = FIELD_FONT_SIZES.scriptSubheadline;
+const CTA_DATE_SIZE = FIELD_FONT_SIZES.ctaEventDate;
+const CALL_BUTTON_SIZE = FIELD_FONT_SIZES.ctaButtonLabel;
 
 /** Character between the event date and time. Must match DateTimeField's. */
 const SEPARATOR = "·";
@@ -382,18 +391,7 @@ export function buildEblastHtml(
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
-  // The hero address line: street, city, state and zip.
-  //
-  // The community name is deliberately left out. The logo above it already
-  // says whose eblast this is, so repeating the name here read as clutter.
-  // Drafts that were already approved or pushed keep the old line, which was
-  // written into them as their own text before this changed.
-  const communityAddressLine = (() => {
-    const a = community.address;
-    const stateZip = [a.state, a.zip].filter(Boolean).join(" ");
-    return [a.street, a.city, stateZip].filter(Boolean).join(", ");
-  })();
-  const addressLine = flyer.heroAddress ?? communityAddressLine;
+  const addressLine = flyer.heroAddress ?? communityAddressLine(community);
 
   // RSVP label from the flyer ("RSVP Required" / "RSVP Requested")
   const rsvpLabel = flyer.rsvpLabel?.trim() ?? "";
@@ -569,8 +567,8 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
-            ${hasText(rsvpLabel) ? `<p data-field="rsvpLabel" style="${alignStyleFor("rsvpLabel")}font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
-            ${hasText(flyer.headline) ? `<p data-field="headline" class="glm-nowrap" style="${alignStyleFor("headline")}font-family: ${fontHeadline}; font-size: 40px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
+            ${hasText(rsvpLabel) ? `<p data-field="rsvpLabel" style="${alignStyleFor("rsvpLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.rsvpLabel}px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            ${hasText(flyer.headline) ? `<p data-field="headline" class="glm-nowrap" style="${alignStyleFor("headline")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.headline}px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
             ${hasText(flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="${alignStyleFor("scriptSubheadline")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}
             ${eventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
@@ -591,13 +589,13 @@ export function buildEblastHtml(
                     timeField: "eventTime",
                     timeStartsWithSeparator: stripHtml(flyer.eventTime ?? "").trim().startsWith("·"),
                     fontFamily: fontHeadline,
-                    fontSize: 26,
+                    fontSize: FIELD_FONT_SIZES.eventDate,
                     align: flyer.textAlign?.eventDate ?? flyer.textAlign?.eventTime,
                     extraStyle: "letter-spacing: 1px;",
                     // No address beneath it means no space needed under the date.
                     marginBottom: hasText(addressLine) ? 8 : 0,
                   })}
-                  ${hasText(addressLine) ? `<p data-field="heroAddress" class="glm-nowrap" style="${alignStyleFor("heroAddress")}font-family: ${fontBody}; font-size: 17px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
+                  ${hasText(addressLine) ? `<p data-field="heroAddress" class="glm-nowrap" style="${alignStyleFor("heroAddress")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.heroAddress}px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
@@ -648,8 +646,8 @@ export function buildEblastHtml(
   ${storyHeadShown ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td class="glm-bg-story" bgcolor="${storyBg}" style="background:${storyBg}; padding: 44px 36px 12px 36px;" data-bgfield="storyBgColor">
-      ${storyEyebrowHtml ? `<p data-field="storyEyebrow" class="glm-nowrap" style="${alignStyleFor("storyEyebrow")}font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
-      ${storyTitleHtml ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="${alignStyleFor("storyScriptTitle")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
+      ${storyEyebrowHtml ? `<p data-field="storyEyebrow" class="glm-nowrap" style="${alignStyleFor("storyEyebrow")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.storyEyebrow}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
+      ${storyTitleHtml ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="${alignStyleFor("storyScriptTitle")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${FIELD_FONT_SIZES.storyScriptTitle}px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
     </td>
   </tr>` : ""}
   ${storyBodyHtml ? `
@@ -691,7 +689,7 @@ export function buildEblastHtml(
     // row, handing its top padding to the photos below.
     const galleryLabelHtml =
       flyer.galleryLabel === undefined || flyer.galleryLabel === null
-        ? escapeHtml(`A Look Around ${community.shortName}`)
+        ? escapeHtml(defaultGalleryLabel(community))
         : hasText(flyer.galleryLabel)
           ? renderInlineField(flyer.galleryLabel)
           : "";
@@ -700,7 +698,7 @@ export function buildEblastHtml(
   ${galleryLabelHtml ? `
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
     <td class="glm-bg-gallerylabel" bgcolor="${galleryLabelBg}" style="background:${galleryLabelBg}; padding: ${galleryFollowsContent ? "8px" : "44px"} 36px 12px 36px;" align="center" data-bgfield="galleryLabelBgColor">
-      <p data-field="galleryLabel" style="${alignStyleFor("galleryLabel")}font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
+      <p data-field="galleryLabel" style="${alignStyleFor("galleryLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.galleryLabel}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
     </td>
   </tr>` : ""}
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
@@ -732,7 +730,7 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${hasText(ctaRsvpLabel) ? `<p style="font-family: ${fontBody}; font-size: 18px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
+            ${hasText(ctaRsvpLabel) ? `<p data-field="ctaRsvpLabel" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.ctaRsvpLabel}px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
             ${ctaDateLine ? dateTimeRow({
               dateHtml: renderInlineField(ctaDate ?? ""),
               dateField: "ctaEventDate",
@@ -781,14 +779,14 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
           <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg};" data-bgfield="footerButtonBgColor" data-deletefield="footerButtonHidden">
-            <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:17px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : "Visit Our Website"}</a>
+            <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:${FIELD_FONT_SIZES.footerButtonLabel}px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : escapeHtml(DEFAULT_WEBSITE_BUTTON_LABEL)}</a>
           </td>
         </tr>
       </table>` : ""}${footerLinesAfter("button")}
-      ${deletableLine(flyer.thankYouText, "Thank You!", (inner) => `<p data-field="thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: 30px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}${footerLinesAfter("thankYou")}
-      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}${footerLinesAfter("senderName")}
-      ${deletableLine(flyer.footerName, escapeHtml(community.displayName), (inner) => `<p data-field="footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: 18px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}${footerLinesAfter("footerName")}
-      ${primarySenderEmail ? alignWrap("footerSenderEmail", deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`)) : ""}
+      ${deletableLine(flyer.thankYouText, DEFAULT_THANK_YOU_TEXT, (inner) => `<p data-field="thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.thankYouText}px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}${footerLinesAfter("thankYou")}
+      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderName}px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}${footerLinesAfter("senderName")}
+      ${deletableLine(flyer.footerName, escapeHtml(defaultFooterName(community)), (inner) => `<p data-field="footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerName}px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}${footerLinesAfter("footerName")}
+      ${primarySenderEmail ? alignWrap("footerSenderEmail", deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderEmail}px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`)) : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
         .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)

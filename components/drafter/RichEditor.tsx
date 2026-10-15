@@ -2,6 +2,7 @@
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useDraft } from "@/context/DraftContext";
+import { fieldFontSize } from "@/lib/eblast-defaults";
 import {
   applyFormat,
   queryFormatState,
@@ -576,32 +577,6 @@ export function SenderNameField({
 
 // ── Toolbar ─────────────────────────────────────────────────────────────────────
 
-// Default font sizes as rendered in the email template, keyed by field name.
-// Every editable field must appear here so the toolbar's px box shows the
-// default size as a reference when the selection has no explicit size.
-const FIELD_FONT_SIZES: Record<string, number> = {
-  headline: 40,
-  scriptSubheadline: 40,
-  eventDate: 26,
-  eventTime: 26,
-  rsvpLabel: 18,
-  storyEyebrow: 15,
-  storyScriptTitle: 42,
-  bodyParagraphs: 19,
-  ctaEventDate: 32,
-  ctaEventTime: 32,
-  ctaRsvpLabel: 18,
-  footerSenderName: 18,
-  footerName: 18,
-  thankYouText: 30,
-  heroAddress: 17,
-  galleryLabel: 15,
-  ctaButtonLabel: 18,
-  finalCtaButtonLabel: 18,
-  footerButtonLabel: 17,
-  footerSenderEmail: 18,
-};
-
 // Formatting the email template forces on a field's container. The toolbar uses
 // these so a single click toggles the field's default off, and turning a toggle
 // off writes the explicit neutral value that overrides the template.
@@ -715,7 +690,7 @@ export function FormatToolbar({
       // The table alone was wrong whenever it disagreed with the template, and
       // being a second copy of the same numbers it was always liable to. It is
       // last resort now, for a field the preview hasn't rendered.
-      const size = st.fontSize ?? renderedFieldSize(fieldName) ?? (fieldName ? FIELD_FONT_SIZES[fieldName] : undefined);
+      const size = st.fontSize ?? renderedFieldSize(fieldName) ?? fieldFontSize(fieldName);
       setFontSizeInput(size != null ? String(size) : "");
     }
     document.addEventListener("selectionchange", refresh);

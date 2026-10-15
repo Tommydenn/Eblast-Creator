@@ -82,6 +82,21 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   // Called by the editor right after it swaps the body out.
   document.__glmResetOverlay=function(){ hideDelBtn(); };
 
+  // The button is placed from its target's rectangle, which is only re-read on
+  // mouse movement. A photo added to an eblast that generated without one
+  // decodes a moment after the markup lands, and everything below it drops by
+  // the height of the image while the cursor sits still. The button stayed
+  // where it was put and ended up over the hero photo, pointing at a section
+  // that had moved on — so the confirm box it opened appeared nowhere near it.
+  // Re-placing on every reflow keeps the two together without waiting for the
+  // mouse.
+  if(window.ResizeObserver){
+    new ResizeObserver(function(){ placeDelBtn(); }).observe(document.body);
+  }
+  // Images report their size only once decoded, and a decode that changes no
+  // other element's size is not a resize of the body.
+  document.addEventListener('load',function(){ placeDelBtn(); },true);
+
   function pointInRect(x,y,rect,pad){
     pad=pad||0;
     return x>=rect.left-pad && x<=rect.right+pad && y>=rect.top-pad && y<=rect.bottom+pad;
@@ -398,6 +413,26 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
     };
   }, [html, patchIframe]);
 
+  // Where a point inside the preview sits in the container's own coordinates.
+  //
+  // The iframe is a fixed 600px wide and drawn scaled down whenever the column
+  // is narrower than that, so a coordinate measured inside it is in unscaled
+  // pixels while the iframe's own rectangle is post-scale. Reading one straight
+  // into the other put every popover further from its element the further down
+  // the email it was — far enough, on a narrow column, that clicking the delete
+  // x looked like it did nothing at all.
+  const anchorInContainer = (x: number, y: number) => {
+    const iframe = iframeRef.current;
+    const iframeRect = iframe?.getBoundingClientRect();
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!iframe || !iframeRect || !containerRect) return null;
+    const scale = iframeRect.width / (iframe.offsetWidth || EMAIL_WIDTH);
+    return {
+      left: iframeRect.left - containerRect.left + x * scale,
+      top: iframeRect.top - containerRect.top + y * scale,
+    };
+  };
+
   // Handle section-click and bg-click messages from the iframe. bg-click opens
   // the same color picker used in the sidebar, anchored under the clicked
   // element — clicking a section/button background edits its color directly
@@ -411,39 +446,27 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
         return;
       }
       if (e.data.type === "bg-click") {
-        const iframeRect = iframeRef.current?.getBoundingClientRect();
-        const containerRect = containerRef.current?.getBoundingClientRect();
-        if (!iframeRect || !containerRect) return;
-        setBgPopover({
-          field: e.data.field as BgFieldKey,
-          left: iframeRect.left - containerRect.left + (e.data.left as number),
-          top: iframeRect.top - containerRect.top + (e.data.bottom as number),
-        });
+        const at = anchorInContainer(e.data.left as number, e.data.bottom as number);
+        if (!at) return;
+        setBgPopover({ field: e.data.field as BgFieldKey, ...at });
         return;
       }
       if (e.data.type === "link-click") {
-        const iframeRect = iframeRef.current?.getBoundingClientRect();
-        const containerRect = containerRef.current?.getBoundingClientRect();
-        if (!iframeRect || !containerRect) return;
+        const at = anchorInContainer(e.data.left as number, e.data.bottom as number);
+        if (!at) return;
         const rawIndex = e.data.index;
         setLinkPopover({
           field: e.data.field as LinkFieldKey,
           index: rawIndex === undefined || rawIndex === null || rawIndex === "" ? null : Number(rawIndex),
           label: (e.data.label as string) ?? "Photo",
-          left: iframeRect.left - containerRect.left + (e.data.left as number),
-          top: iframeRect.top - containerRect.top + (e.data.bottom as number),
+          ...at,
         });
         return;
       }
       if (e.data.type === "delete-click") {
-        const iframeRect = iframeRef.current?.getBoundingClientRect();
-        const containerRect = containerRef.current?.getBoundingClientRect();
-        if (!iframeRect || !containerRect) return;
-        setDeletePopover({
-          field: e.data.field as string,
-          left: iframeRect.left - containerRect.left + (e.data.left as number),
-          top: iframeRect.top - containerRect.top + (e.data.bottom as number),
-        });
+        const at = anchorInContainer(e.data.left as number, e.data.bottom as number);
+        if (!at) return;
+        setDeletePopover({ field: e.data.field as string, ...at });
       }
     }
     window.addEventListener("message", handler);

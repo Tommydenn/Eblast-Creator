@@ -49,7 +49,16 @@ export function FlyerPanel({ draftId }: { draftId: string }) {
             .
           </p>
         </div>
-        <iframe src={url} title="The flyer this eblast was written from" className="absolute inset-0 w-full h-full border-0" />
+        {/* #view=FitH scales the page to the panel. Without it the viewer
+            draws the page at its own default zoom, which is wider than the
+            panel, and the whole viewport — toolbar included — gets a
+            horizontal scrollbar, so the toolbar ran off the right-hand
+            edge. Chromium parses this fragment into its fit-to-width mode. */}
+        <iframe
+          src={`${url}#view=FitH`}
+          title="The flyer this eblast was written from"
+          className="absolute inset-0 w-full h-full border-0"
+        />
       </div>
     </div>
   );

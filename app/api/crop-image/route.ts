@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
     targetRatio: number;
     x?: number;
     y?: number;
+    /** 1 = the whole of the largest box that fits; above that, a tighter crop. */
+    zoom?: number;
     focus?: string;
   };
   try {
@@ -95,7 +97,7 @@ export async function POST(req: NextRequest) {
     let croppedUrl: string;
     if (body.x !== undefined && body.y !== undefined) {
       // Continuous XY offset from the repositioning tool.
-      croppedUrl = await cropDataUriToXY(imageUrl, body.targetRatio, body.x, body.y);
+      croppedUrl = await cropDataUriToXY(imageUrl, body.targetRatio, body.x, body.y, body.zoom ?? 1);
     } else {
       // Named focus from the AI refine pipeline (legacy).
       const validFoci = ["top", "center", "bottom", "left", "right"] as const;

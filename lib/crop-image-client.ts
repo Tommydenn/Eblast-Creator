@@ -14,6 +14,8 @@
  */
 
 const JPEG_QUALITY = 0.88; // matches sharp's quality: 88 on the server
+/** Never crop to nothing, however far someone drags the zoom. */
+const MIN_CROP_EDGE = 32;
 
 export function canCropInBrowser(): boolean {
   return typeof document !== "undefined" && typeof HTMLCanvasElement !== "undefined";
@@ -33,13 +35,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 /**
  * Crop to `targetRatio`, positioned by x/y (0-100, the same scale the
- * repositioning tool uses). Returns a JPEG data URI.
+ * repositioning tool uses) and tightened by `zoom`. Returns a JPEG data URI.
  */
 export async function cropInBrowser(
   imageUrl: string,
   targetRatio: number,
   x = 50,
   y = 50,
+  zoom = 1,
 ): Promise<string> {
   const img = await loadImage(imageUrl);
   const width = img.naturalWidth;
@@ -56,10 +59,17 @@ export async function cropInBrowser(
     cropWidth = width;
     cropHeight = Math.round(cropWidth / targetRatio);
   }
+  // Zoom takes a smaller piece of the same shape, which is what makes the
+  // subject bigger in a slot of fixed size. 1 is the whole of the largest box
+  // that fits, which is where this started and still the default.
+  const tightened = Math.max(1, zoom);
+  cropWidth = Math.round(cropWidth / tightened);
+  cropHeight = Math.round(cropHeight / tightened);
+
   // Rounding can push the derived side a pixel past the source when the two
   // ratios are nearly equal.
-  cropWidth = Math.min(cropWidth, width);
-  cropHeight = Math.min(cropHeight, height);
+  cropWidth = Math.min(Math.max(cropWidth, MIN_CROP_EDGE), width);
+  cropHeight = Math.min(Math.max(cropHeight, MIN_CROP_EDGE), height);
 
   const left = Math.round((width - cropWidth) * (x / 100));
   const top = Math.round((height - cropHeight) * (y / 100));

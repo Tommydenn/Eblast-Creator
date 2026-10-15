@@ -56,6 +56,8 @@ export interface ExtractionDiagnostic {
 }
 
 const MIN_AREA = 10_000;
+/** Never crop to nothing, however far someone drags the zoom. */
+const MIN_CROP_EDGE = 32;
 
 // ---------- helpers -------------------------------------------------------
 
@@ -457,6 +459,7 @@ export async function cropDataUriToXY(
   targetRatio: number,
   x: number, // 0-100
   y: number, // 0-100
+  zoom = 1, // 1 = the whole of the largest box that fits
 ): Promise<string> {
   try {
     const commaIdx = dataUri.indexOf(",");
@@ -486,10 +489,18 @@ export async function cropDataUriToXY(
       cropWidth = meta.width;
       cropHeight = Math.round(cropWidth / targetRatio);
     }
+    // Zoom takes a smaller piece of the same shape, which is what makes the
+    // subject bigger in a slot of fixed size. 1 is the whole of the box above,
+    // which is where this started and still the default. Kept identical to
+    // cropInBrowser, as the rest of this geometry is.
+    const tightened = Math.max(1, zoom);
+    cropWidth = Math.round(cropWidth / tightened);
+    cropHeight = Math.round(cropHeight / tightened);
+
     // Rounding can push the derived side a pixel past the source when the two
     // ratios are nearly equal — extract() throws on an out-of-bounds region.
-    cropWidth = Math.min(cropWidth, meta.width);
-    cropHeight = Math.min(cropHeight, meta.height);
+    cropWidth = Math.min(Math.max(cropWidth, MIN_CROP_EDGE), meta.width);
+    cropHeight = Math.min(Math.max(cropHeight, MIN_CROP_EDGE), meta.height);
 
     const left = Math.round((meta.width - cropWidth) * (x / 100));
     const top = Math.round((meta.height - cropHeight) * (y / 100));

@@ -26,7 +26,7 @@ import {
   type ImagePhaseName,
   type ImageRow,
 } from "@/lib/image-bank";
-import { canCropInBrowser, cropInBrowser } from "@/lib/crop-image-client";
+import { canCropInBrowser, cropInBrowser, downscaleInBrowser } from "@/lib/crop-image-client";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 
 // ─── Chunked PDF upload ───────────────────────────────────────────────────────
@@ -215,6 +215,7 @@ async function cropImage(
   ratio: number,
   x = 50,
   y = 50,
+  zoom = 1,
   /** Where this photo is stored, when it is — see the comment above. */
   source?: { draftId: string | null; idx: number | null },
 ): Promise<string> {
@@ -226,7 +227,7 @@ async function cropImage(
   // request limit that a big one would breach.
   if (!named && canCropInBrowser()) {
     try {
-      return await cropInBrowser(imageUrl, ratio, x, y);
+      return await cropInBrowser(imageUrl, ratio, x, y, zoom);
     } catch (e) {
       console.warn("[cropImage] cropping in the browser failed, asking the server:", e);
     }
@@ -239,8 +240,8 @@ async function cropImage(
     // and is what fails on a large photo.
     body: JSON.stringify(
       named
-        ? { draftId: source!.draftId, imageIdx: source!.idx, targetRatio: ratio, x, y }
-        : { imageUrl, targetRatio: ratio, x, y },
+        ? { draftId: source!.draftId, imageIdx: source!.idx, targetRatio: ratio, x, y, zoom }
+        : { imageUrl, targetRatio: ratio, x, y, zoom },
     ),
   });
   const data = await res.json();
@@ -296,7 +297,7 @@ export interface DraftContextValue {
   assignImage: (slot: "hero" | "secondary", imageUrl: string, bankIdx?: number) => Promise<void>;
   assignGalleryImage: (idx: number, imageUrl: string, bankIdx?: number) => Promise<void>;
   removeImage: (slot: "hero" | "secondary" | "gallery", galleryIdx?: number) => void;
-  repositionImage: (slot: "hero" | "secondary" | "gallery", x: number, y: number, galleryIdx?: number) => Promise<void>;
+  repositionImage: (slot: "hero" | "secondary" | "gallery", x: number, y: number, zoom: number, galleryIdx?: number) => Promise<void>;
   refine: (instruction: string) => Promise<void>;
   undo: () => void;
   redo: () => void;
@@ -370,9 +371,8 @@ function snapshotFooterOverrides(fields: ExtractedFlyer): void {
 
 // Batches image POSTs to /api/saved-drafts/[id]/images so multiple small
 // items share a request while staying safely under Vercel's ~4.5 MB route
-// body limit. Any single item over the cap is skipped (logged, not silently
-// dropped) rather than risk a failed request — in practice no observed
-// original/cropped image has come close to this.
+// body limit. A single item over the cap is shrunk to fit rather than
+// refused — see below.
 const IMAGE_BATCH_MAX_CHARS = 3_500_000;
 async function postImageBatches(draftId: string, rows: Array<{ idx: number; url: string }>): Promise<void> {
   // A photo used in more than one place is stored once and pointed at from the
@@ -404,28 +404,50 @@ async function postImageBatches(draftId: string, rows: Array<{ idx: number; url:
   const unsent: number[] = [];
   const missing = new Set<number>();
   for (const item of items) {
-    if (item.url.length > IMAGE_BATCH_MAX_CHARS) {
+    let url = item.url;
+    const pointer = url.startsWith(IMAGE_REF_PREFIX);
+
+    // A photo bigger than a request can carry is shrunk to fit rather than
+    // refused. Refusing it put a red "too large to save" box on drafts whose
+    // photos were perfectly good — the draft could not be saved at all until
+    // the photo was replaced by hand, and reopening it raised the same box
+    // again on the next autosave. Shrinking is what every other way a photo
+    // enters a draft already does.
+    if (!pointer && url.length > IMAGE_BATCH_MAX_CHARS) {
+      // Smaller each time until it fits. One pass at 1600 is enough for any
+      // photo seen so far; the rest are there so a pathological one still
+      // saves rather than blocking the draft.
+      for (const edge of [1600, 1200, 900]) {
+        url = await downscaleInBrowser(url, edge, IMAGE_BATCH_MAX_CHARS).catch(() => url);
+        if (url.length <= IMAGE_BATCH_MAX_CHARS) break;
+      }
+    }
+    // Still too big to send — a photo this size cannot be stored, and the
+    // pointers aimed at it have to go too, or the draft names a photo that was
+    // never stored: the "no longer stored with this draft" failure on
+    // repositioning and on picking a flyer photo.
+    if (!pointer && url.length > IMAGE_BATCH_MAX_CHARS) {
       unsent.push(item.idx);
       missing.add(item.idx);
       continue;
     }
-    if (item.url.startsWith(IMAGE_REF_PREFIX)) {
-      const target = Number(item.url.slice(IMAGE_REF_PREFIX.length));
+    if (pointer) {
+      const target = Number(url.slice(IMAGE_REF_PREFIX.length));
       if (missing.has(target)) {
         missing.add(item.idx);
         continue;
       }
     }
-    if (batchChars + item.url.length > IMAGE_BATCH_MAX_CHARS) await flush();
-    batch.push(item);
-    batchChars += item.url.length;
+    if (batchChars + url.length > IMAGE_BATCH_MAX_CHARS) await flush();
+    batch.push({ idx: item.idx, url });
+    batchChars += url.length;
   }
   await flush();
   if (unsent.length > 0) {
     throw new Error(
       unsent.length === 1
-        ? "One photo was too large to save. Replace it with a smaller one."
-        : `${unsent.length} photos were too large to save. Replace them with smaller ones.`,
+        ? "One photo could not be made small enough to save. Replace it with a smaller one."
+        : `${unsent.length} photos could not be made small enough to save. Replace them with smaller ones.`,
     );
   }
 }
@@ -662,7 +684,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     try {
       const ratio = ASPECT[slot];
-      const croppedUrl = await cropImage(imageUrl, ratio, 50, 50, {
+      const croppedUrl = await cropImage(imageUrl, ratio, 50, 50, 1, {
         draftId: draftIdRef.current,
         idx: bankIdx ?? null,
       });
@@ -677,7 +699,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
     let croppedUrl: string;
     try {
-      croppedUrl = await cropImage(imageUrl, ASPECT.gallery, 50, 50, {
+      croppedUrl = await cropImage(imageUrl, ASPECT.gallery, 50, 50, 1, {
         draftId: draftIdRef.current,
         idx: bankIdx ?? null,
       });
@@ -716,6 +738,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     slot: "hero" | "secondary" | "gallery",
     x: number,
     y: number,
+    zoom: number,
     galleryIdx?: number,
   ) => {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
@@ -744,7 +767,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     const originalIdx = trackedIdx === undefined ? slotOriginalIdx : trackedIdx;
     let croppedUrl: string;
     try {
-      croppedUrl = await cropImage(originalUrl, ratio, x, y, {
+      croppedUrl = await cropImage(originalUrl, ratio, x, y, zoom, {
         draftId: draftIdRef.current,
         idx: originalIdx,
       });

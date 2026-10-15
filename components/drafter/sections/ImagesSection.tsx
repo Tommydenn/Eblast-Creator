@@ -82,17 +82,23 @@ function SlotCard({
   );
 }
 
+/** The shapes the email draws these into, so the box shown is the real one. */
+const SLOT_RATIO = { hero: 600 / 340, secondary: 528 / 300, gallery: 4 / 3 } as const;
+
 function RepositionModal({
   imageUrl,
+  ratio,
   onClose,
   onSave,
 }: {
   imageUrl: string;
+  ratio: number;
   onClose: () => void;
-  onSave: (x: number, y: number) => void;
+  onSave: (x: number, y: number, zoom: number) => void;
 }) {
   const [pos, setPos] = React.useState({ x: 50, y: 50 });
-  const imgRef = useRef<HTMLImageElement>(null);
+  const [zoom, setZoom] = React.useState(1);
+  const [natural, setNatural] = React.useState<{ w: number; h: number } | null>(null);
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -101,25 +107,105 @@ function RepositionModal({
     setPos({ x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) });
   }
 
+  // The part of the photo that will be kept, as a share of the whole, worked
+  // out the same way the crop itself is: the largest box of the slot's shape
+  // that fits, divided by the zoom. Drawn rather than described, because a
+  // focal point on its own never said how much of the photo was being lost.
+  const box = (() => {
+    if (!natural) return null;
+    const srcRatio = natural.w / natural.h;
+    let w: number;
+    let h: number;
+    if (srcRatio > ratio) { h = natural.h; w = h * ratio; }
+    else { w = natural.w; h = w / ratio; }
+    w = Math.min(w / zoom, natural.w);
+    h = Math.min(h / zoom, natural.h);
+    const wPct = (w / natural.w) * 100;
+    const hPct = (h / natural.h) * 100;
+    return {
+      width: wPct,
+      height: hPct,
+      left: (100 - wPct) * (pos.x / 100),
+      top: (100 - hPct) * (pos.y / 100),
+    };
+  })();
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-base font-semibold text-[#1F4538] mb-1">Reposition Image</h3>
-        <p className="text-xs text-[#7a8c85] mb-4">Click on the image to set the focal point.</p>
-        <div
-          className="relative rounded-lg overflow-hidden cursor-crosshair"
-          onClick={handleClick}
-        >
-          <img ref={imgRef} src={imageUrl} alt="Reposition" className="w-full" />
+        <p className="text-xs text-[#7a8c85] mb-4">Click to set the focal point. The bright area is what the email shows.</p>
+        <div className="relative rounded-lg overflow-hidden cursor-crosshair" onClick={handleClick}>
+          <img
+            src={imageUrl}
+            alt="Reposition"
+            className="w-full block"
+            onLoad={(e) =>
+              setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+            }
+          />
+          {box && (
+            <>
+              {/* The photo dimmed, with the kept area cut back out of it at
+                  full strength, so the box reads as a window onto the photo
+                  rather than a rectangle drawn over it. */}
+              <div className="absolute inset-0 bg-black/50 pointer-events-none" />
+              <div
+                className="absolute overflow-hidden ring-2 ring-white pointer-events-none"
+                style={{
+                  left: `${box.left}%`,
+                  top: `${box.top}%`,
+                  width: `${box.width}%`,
+                  height: `${box.height}%`,
+                }}
+              >
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="absolute max-w-none"
+                  style={{
+                    width: `${(100 / box.width) * 100}%`,
+                    height: `${(100 / box.height) * 100}%`,
+                    left: `${(-box.left / box.width) * 100}%`,
+                    top: `${(-box.top / box.height) * 100}%`,
+                  }}
+                />
+              </div>
+            </>
+          )}
           <div
             className="absolute w-5 h-5 rounded-full border-2 border-white bg-[#1F4538] shadow-lg -translate-x-1/2 -translate-y-1/2 pointer-events-none"
             style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
           />
         </div>
+        <div className="flex items-center gap-3 mt-4">
+          <label htmlFor="reposition-zoom" className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">
+            Zoom
+          </label>
+          <input
+            id="reposition-zoom"
+            type="range"
+            min={1}
+            max={3}
+            step={0.05}
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
+            className="flex-1 accent-[#1F4538]"
+          />
+          <span className="text-xs tabular-nums text-[#9aaba4] w-10 text-right">{zoom.toFixed(1)}x</span>
+        </div>
         <div className="flex gap-3 mt-4 justify-end">
-          <button onClick={onClose} className="text-sm text-[#7a8c85] hover:text-[#1F4538] px-4 py-2">Cancel</button>
           <button
-            onClick={() => { onSave(pos.x, pos.y); onClose(); }}
+            onClick={() => { setPos({ x: 50, y: 50 }); setZoom(1); }}
+            className="text-sm text-[#7a8c85] hover:text-[#1F4538] px-4 py-2 mr-auto"
+          >
+            Reset
+          </button>
+          <button onClick={onClose} className="text-sm text-[#7a8c85] hover:text-[#1F4538] px-4 py-2">
+            Cancel
+          </button>
+          <button
+            onClick={() => { onSave(pos.x, pos.y, zoom); onClose(); }}
             className="text-sm font-semibold bg-[#1F4538] text-white rounded-lg px-4 py-2 hover:bg-[#173829] transition-colors"
           >
             Apply
@@ -252,9 +338,9 @@ export default function ImagesSection() {
     }
   }
 
-  async function handleReposition(x: number, y: number) {
+  async function handleReposition(x: number, y: number, zoom: number) {
     if (!reposition) return;
-    await repositionImage(reposition.slot, x, y, reposition.galleryIdx);
+    await repositionImage(reposition.slot, x, y, zoom, reposition.galleryIdx);
   }
 
   return (
@@ -357,6 +443,7 @@ export default function ImagesSection() {
       {reposition && (
         <RepositionModal
           imageUrl={reposition.originalUrl}
+          ratio={SLOT_RATIO[reposition.slot]}
           onClose={() => setReposition(null)}
           onSave={handleReposition}
         />

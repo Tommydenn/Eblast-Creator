@@ -402,7 +402,12 @@ export default function EditorLayout() {
 
           {/* Preview, with the flyer alongside it when asked for */}
           <div className="flex-1 flex overflow-hidden">
-            <div className="flex-1 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
+            {/* min-w-0 so this column can actually give way. A flex item
+                defaults to min-width:auto and will not shrink past its
+                content, which here is a 600px email — without it the flyer
+                beside it is pushed out of the row and clipped rather than
+                getting the width it asks for. */}
+            <div className="flex-1 min-w-0 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
               {/* Exactly the email s width. It was 640 for a 600px email, and
                   the email sits at the left of its box, so the leftover 40px
                   showed as a grey strip down the right-hand side. */}
@@ -411,13 +416,23 @@ export default function EditorLayout() {
               </div>
             </div>
 
-            {/* The PDF viewer lays its toolbar out at a fixed width and gives
-                itself a horizontal scrollbar when it cannot fit, so the floor
-                here is what that toolbar needs rather than how little the page
-                can still be read in. The preview beside it scales to whatever
-                room is left, so taking the space costs nothing but width. */}
+            {/* Wide enough for the PDF viewer's toolbar, which is what actually
+                sets the floor here.
+
+                The toolbar does not wrap or collapse. When it does not fit, the
+                viewer's whole body scrolls sideways and takes the page with it,
+                so the flyer loses its left edge at the same time as the toolbar
+                loses its page box — the two are one overflow, not two problems.
+                #view=FitH fits the page to the panel but has no say over the
+                toolbar.
+
+                Measured from the toolbar's own contents: the left group (sidebar
+                toggle, file name, page box) runs about 320px and the rest, from
+                the first separator through print, about 570px. 920 covers that
+                with room for a longer file name. The preview beside it scales
+                down to whatever is left, so the width costs nothing else. */}
             {hasFlyer && flyerOpen && draftId && (
-              <div className="w-[46%] min-w-[640px] max-w-[760px] h-full shrink-0">
+              <div className="w-[56%] min-w-[920px] max-w-[1040px] h-full shrink-0">
                 <FlyerPanel draftId={draftId} />
               </div>
             )}

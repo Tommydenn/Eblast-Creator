@@ -15,11 +15,12 @@ import { useDraft } from "@/context/DraftContext";
  * written from pasted details and everything made before flyers were kept.
  */
 /** Zoom steps. 1 is fit-to-width, which is where the panel opens. */
-const ZOOMS = [1, 1.25, 1.5, 2];
+const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const FIT = ZOOMS.indexOf(1);
 
 export function FlyerPanel({ draftId }: { draftId: string }) {
   const url = `/api/drafts/${draftId}/flyer`;
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(FIT);
   const zoom = ZOOMS[step];
 
   return (
@@ -68,27 +69,22 @@ export function FlyerPanel({ draftId }: { draftId: string }) {
           toolbar=0 out of the fragment and draws the page alone; view=FitH
           then fits that page to whatever width the panel has.
 
-          Zoom is ours rather than the viewer's: the iframe is made wider than
-          this box and fit-to-width does the rest, so the page grows and this
-          box scrolls. Asking the viewer to zoom would mean changing the
-          fragment and trusting it to notice.
+          Zoom is ours rather than the viewer's: the iframe is sized against
+          this box and fit-to-width does the rest, so the page grows or shrinks
+          with it. Below 100% the iframe is narrower than the box and its auto
+          margins centre it; above, it overflows and the box scrolls. Asking
+          the viewer to zoom would mean changing the fragment and trusting it
+          to notice.
 
-          The message underneath shows through only if nothing renders over
-          it, which is the fallback an iframe cannot declare for itself. */}
-      <div className="relative flex-1 overflow-x-auto overflow-y-hidden">
-        <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
-          <p className="text-xs text-[#7a8c85]">
-            This browser won&rsquo;t display PDFs inline.{" "}
-            <a href={url} target="_blank" rel="noopener noreferrer" className="text-[#1F4538] underline">
-              Open the flyer in a tab
-            </a>
-            .
-          </p>
-        </div>
+          A browser that cannot draw a PDF inline shows its own empty frame
+          here — an iframe, unlike an object, cannot declare a fallback. The
+          tab link in the header above is the way out of that, and it is there
+          whether or not this renders. */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
         <iframe
           src={`${url}#toolbar=0&view=FitH`}
           title="The flyer this eblast was written from"
-          className="relative block h-full border-0"
+          className="block h-full border-0 mx-auto"
           style={{ width: `${zoom * 100}%` }}
         />
       </div>

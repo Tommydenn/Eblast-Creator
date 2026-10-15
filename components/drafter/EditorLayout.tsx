@@ -266,6 +266,52 @@ export default function EditorLayout() {
   const hasFlyer = useHasFlyer(draftId);
   const [flyerOpen, setFlyerOpen] = useState(false);
 
+  // How wide the flyer panel has been dragged, or null for its default share.
+  // Kept so it survives moving between drafts — having to drag it back every
+  // time would make the handle worth less than the trouble.
+  const flyerRef = useRef<HTMLDivElement>(null);
+  const [flyerWidth, setFlyerWidth] = useState<number | null>(null);
+  const FLYER_MIN = 360;
+  // What the preview keeps for itself no matter how far the handle is dragged.
+  const PREVIEW_MIN = 280;
+
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem("eblast_flyerWidth"));
+      if (saved >= FLYER_MIN) setFlyerWidth(saved);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function startFlyerResize(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    const el = flyerRef.current;
+    const row = el?.parentElement;
+    if (!el || !row) return;
+    const startX = e.clientX;
+    const startWidth = el.offsetWidth;
+    // Dragging left widens the panel, so the delta is subtracted.
+    const ceiling = Math.max(FLYER_MIN, row.clientWidth - PREVIEW_MIN);
+    let latest = startWidth;
+    const onMove = (ev: PointerEvent) => {
+      latest = Math.min(Math.max(startWidth - (ev.clientX - startX), FLYER_MIN), ceiling);
+      setFlyerWidth(latest);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try { localStorage.setItem("eblast_flyerWidth", String(Math.round(latest))); } catch {}
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    // Held on the body so the cursor and the drag survive the pointer crossing
+    // the iframe, which would otherwise swallow both.
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
   // Opening the flyer narrows the preview column, and the email is a fixed
   // 600px that has to scale down to fit or it gets clipped on the right.
   // The preview re-measures on window resize, so say so once the new layout
@@ -407,20 +453,36 @@ export default function EditorLayout() {
                 content, which here is a 600px email — without it the flyer
                 beside it is pushed out of the row and clipped rather than
                 getting the width it asks for. */}
-            <div className="flex-1 min-w-0 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
+            <div className="eb-scroll flex-1 min-w-0 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
               {/* Exactly the email s width. It was 640 for a 600px email, and
                   the email sits at the left of its box, so the leftover 40px
                   showed as a grey strip down the right-hand side. */}
               <div className="w-full max-w-[600px] mx-auto shadow-xl rounded-lg overflow-hidden">
-                <PreviewPanel layoutSignal={flyerOpen ? "flyer" : "no-flyer"} />
+                <PreviewPanel layoutSignal={`${flyerOpen ? "flyer" : "no-flyer"}:${flyerWidth ?? "auto"}`} />
               </div>
             </div>
 
             {/* The viewer's toolbar is turned off (see FlyerPanel), so this is
                 sized for reading a flyer rather than for fitting a toolbar it
-                no longer shows. The preview beside it scales to what is left. */}
+                no longer shows. The default is a share of the row; once the
+                edge has been dragged it is whatever width was left there, and
+                the ceiling class comes off so the drag is not clamped by it. */}
             {hasFlyer && flyerOpen && draftId && (
-              <div className="w-[42%] min-w-[360px] max-w-[620px] h-full shrink-0">
+              <div
+                ref={flyerRef}
+                className={[
+                  "relative h-full shrink-0",
+                  flyerWidth == null ? "w-[42%] min-w-[360px] max-w-[620px]" : "",
+                ].join(" ")}
+                style={flyerWidth == null ? undefined : { width: flyerWidth }}
+              >
+                {/* Drag the panel's edge to widen it. Sits over the border
+                    rather than beside it, so there is nothing to aim at. */}
+                <div
+                  onPointerDown={startFlyerResize}
+                  title="Drag to resize"
+                  className="absolute inset-y-0 -left-1 w-2 z-10 cursor-col-resize hover:bg-[#1F4538]/25 active:bg-[#1F4538]/40 transition-colors"
+                />
                 <FlyerPanel draftId={draftId} />
               </div>
             )}

@@ -153,3 +153,32 @@
   font-family: inherit !important;
   background: transparent !important;
 }
+
+/* A scrollbar that can actually be seen.
+
+   The preview sits on a warm grey, and the browser's default thumb is close
+   enough to that colour, and thin enough, to be easy to miss. This one is
+   wider and reads against the background it sits on. */
+.eb-scroll {
+  scrollbar-width: auto;                        /* Firefox */
+  scrollbar-color: #7a8c85 rgba(0, 0, 0, 0.06);
+}
+.eb-scroll::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+.eb-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.06);
+}
+.eb-scroll::-webkit-scrollbar-thumb {
+  background: #7a8c85;
+  border-radius: 8px;
+  /* Transparent border with a content-box clip leaves the thumb a little air
+     either side, so it reads as a thumb in a groove rather than a filled bar. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.eb-scroll::-webkit-scrollbar-thumb:hover {
+  background: #5a6b63;
+  background-clip: content-box;
+}

@@ -31,20 +31,90 @@ interface ActiveEditorProps {
   fieldName: string;
 }
 
-// Insert plain text at the current selection (paste / typing fallback). Never
-// inserts HTML, so pasted markup can't leak in as literal tags.
-function insertPlainText(text: string, singleLine: boolean) {
+/**
+ * Insert plain text at the current selection (paste / typing fallback).
+ *
+ * Never inserts HTML, so pasted markup cannot leak in as literal tags.
+ *
+ * In a single-line field newlines collapse to spaces, since the field is one
+ * line by definition. In the body editor each pasted line becomes its own
+ * paragraph, the same shape generated copy already has: one <div> per
+ * paragraph, and an empty one for a blank line.
+ *
+ * That shape is what fixes pasted paragraphs running together in the sidebar.
+ * The text used to go in as a single text node with its newline characters
+ * intact, and HTML draws a newline as a space, so the box showed one block,
+ * while the serializer read those same characters as breaks and the email
+ * showed the paragraphs correctly. The box and the email disagreed about text
+ * neither of them had got wrong.
+ */
+function insertPlainText(text: string, singleLine: boolean, root?: HTMLElement | null) {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return;
-  const clean = singleLine ? text.replace(/[\r\n]+/g, " ") : text.replace(/\r\n/g, "\n");
   const range = sel.getRangeAt(0);
   range.deleteContents();
-  const node = document.createTextNode(clean);
-  range.insertNode(node);
-  range.setStartAfter(node);
-  range.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(range);
+
+  const place = (node: Node) => {
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
+
+  const lines = singleLine
+    ? [text.replace(/[\r\n]+/g, " ")]
+    : text.replace(/\r\n/g, "\n").split("\n");
+
+  // The paragraph the caret sits in, which a multi-line paste splits in two.
+  // Paragraphs are the editor's own children, so this walks up to the one
+  // sitting directly inside it.
+  let para: Node | null = root && range.startContainer !== root ? range.startContainer : null;
+  while (para && para.parentNode !== root) para = para.parentNode;
+
+  if (lines.length === 1 || !root || !para) {
+    // One line, a single-line field, or no paragraph to split: the text goes
+    // in where it is, with any breaks as real <br> rather than characters.
+    const frag = document.createDocumentFragment();
+    lines.forEach((line, i) => {
+      if (i) frag.appendChild(document.createElement("br"));
+      if (line) frag.appendChild(document.createTextNode(line));
+    });
+    const last = frag.lastChild;
+    range.insertNode(frag);
+    if (last) place(last);
+    return;
+  }
+
+  // Everything after the caret moves to the end of the last pasted line, so a
+  // paste into the middle of a paragraph splits it rather than overwriting it.
+  const tailRange = document.createRange();
+  tailRange.setStart(range.startContainer, range.startOffset);
+  tailRange.setEnd(para, para.childNodes.length);
+  const tail = tailRange.extractContents();
+
+  if (lines[0]) para.appendChild(document.createTextNode(lines[0]));
+  let caretAfter: Node | null = para.lastChild;
+
+  let anchor: Node = para;
+  for (let i = 1; i < lines.length; i++) {
+    const div = document.createElement("div");
+    if (lines[i]) div.appendChild(document.createTextNode(lines[i]));
+    if (i === lines.length - 1) {
+      caretAfter = div.lastChild;
+      div.appendChild(tail);
+    }
+    // An empty paragraph needs a break or it has no line for the caret and no
+    // height, the same reason the email gives a blank line a non-breaking space.
+    if (!div.firstChild) div.appendChild(document.createElement("br"));
+    anchor.parentNode?.insertBefore(div, anchor.nextSibling);
+    anchor = div;
+  }
+
+  if (!para.firstChild) para.appendChild(document.createElement("br"));
+  // Text ending in a blank line leaves no node to sit after, so the caret goes
+  // onto that last empty paragraph rather than staying where the paste began.
+  if (!caretAfter) caretAfter = anchor.lastChild;
+  if (caretAfter) place(caretAfter);
 }
 
 // Shared native-event wiring for a contentEditable region: pending-mark aware
@@ -98,7 +168,7 @@ function useEditorEvents(
     const onPaste = (e: ClipboardEvent) => {
       e.preventDefault();
       const text = e.clipboardData?.getData("text/plain") ?? "";
-      insertPlainText(text, singleLine);
+      insertPlainText(text, singleLine, el);
       serialize();
     };
     const onKeyDown = (e: KeyboardEvent) => {

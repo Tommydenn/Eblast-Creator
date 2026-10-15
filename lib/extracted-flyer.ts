@@ -132,6 +132,14 @@ export interface ExtractedFlyer {
   heroBgColor?: string;
   finalCtaBgColor?: string;
   footerBgColor?: string;
+  /**
+   * The white middle of the email. These three sit on the shell's own
+   * white, so without a value of their own there was no way to colour
+   * them at all — the only parts of the eblast that could not be changed.
+   */
+  storyBgColor?: string;
+  secondaryImageBgColor?: string;
+  galleryBgColor?: string;
 
   /** Same idea, for the three buttons — each independent of the others. */
   ctaButtonBgColor?: string;

@@ -171,6 +171,7 @@ const SECTION_MAP: Record<string, EditorSection> = {
 // pickers already use.
 type BgFieldKey =
   | "headerBgColor" | "heroBgColor" | "finalCtaBgColor" | "footerBgColor"
+  | "storyBgColor" | "secondaryImageBgColor" | "galleryBgColor"
   | "ctaButtonBgColor" | "finalCtaButtonBgColor" | "footerButtonBgColor";
 
 const BG_FIELD_LABELS: Record<BgFieldKey, string> = {
@@ -178,6 +179,9 @@ const BG_FIELD_LABELS: Record<BgFieldKey, string> = {
   heroBgColor: "Hero Background",
   finalCtaBgColor: "Call-to-Action Background",
   footerBgColor: "Footer Background",
+  storyBgColor: "Story Background",
+  secondaryImageBgColor: "Second Photo Background",
+  galleryBgColor: "Photo Gallery Background",
   ctaButtonBgColor: "Call Button Color",
   finalCtaButtonBgColor: "Call Button Color",
   footerButtonBgColor: "Visit Our Website Button Color",
@@ -189,6 +193,9 @@ function defaultForBgField(key: BgFieldKey, community: any): string {
     case "heroBgColor": return community?.brand.primary ?? "#000000";
     case "finalCtaBgColor": return community?.brand.accent ?? "#000000";
     case "footerBgColor": return "#FFFFFF";
+    case "storyBgColor": return "#FFFFFF";
+    case "secondaryImageBgColor": return "#FFFFFF";
+    case "galleryBgColor": return "#FFFFFF";
     case "ctaButtonBgColor": return community?.brand.accent ?? "#000000";
     case "finalCtaButtonBgColor": return community?.brand.primary ?? "#000000";
     case "footerButtonBgColor": return community?.brand.primary ?? "#000000";

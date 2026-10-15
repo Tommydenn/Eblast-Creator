@@ -442,6 +442,14 @@ export function buildEblastHtml(
   const headerBg = flyer.headerBgColor ?? defaultHeaderBg;
   const headerStripe = brand.accent;
 
+  // The three sections that sit on the shell's white. Each falls back to
+  // that same white, so an eblast with nothing chosen looks exactly as it
+  // always has.
+  const SHELL_WHITE = "#ffffff";
+  const storyBg = flyer.storyBgColor ?? SHELL_WHITE;
+  const secondaryImageBg = flyer.secondaryImageBgColor ?? SHELL_WHITE;
+  const galleryBg = flyer.galleryBgColor ?? SHELL_WHITE;
+
   // Logo follows the HEADER, not the raw surface. On a light header use the
   // light/primary logo; on a dark header require a dark/knockout (or "any")
   // logo — if none exists, fall through to the white text wordmark below.
@@ -638,20 +646,20 @@ export function buildEblastHtml(
   ${flyer.storySectionHidden ? "" : `
   ${storyHeadShown ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
-    <td style="padding: 44px 36px 12px 36px;">
+    <td class="glm-bg-story" bgcolor="${storyBg}" style="background:${storyBg}; padding: 44px 36px 12px 36px;" data-bgfield="storyBgColor">
       ${storyEyebrowHtml ? `<p data-field="storyEyebrow" class="glm-nowrap" style="${alignStyleFor("storyEyebrow")}font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
       ${storyTitleHtml ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="${alignStyleFor("storyScriptTitle")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: 42px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
     </td>
   </tr>` : ""}
   ${storyBodyHtml ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
-    <td style="padding: ${storyHeadShown ? "0" : "44px"} 36px 28px 36px;">
+    <td class="glm-bg-story" bgcolor="${storyBg}" style="background:${storyBg}; padding: ${storyHeadShown ? "0" : "44px"} 36px 28px 36px;" data-bgfield="storyBgColor">
       <p data-field="bodyParagraphs" style="${alignStyleFor("bodyParagraphs")}font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${storyBodyHtml}</p>
     </td>
   </tr>` : ""}`}
   ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
   <tr data-section="Secondary Image" data-deletefield="secondaryImageSectionHidden">
-    <td style="padding: 0 36px 28px 36px;">
+    <td class="glm-bg-secondary" bgcolor="${secondaryImageBg}" style="background:${secondaryImageBg}; padding: 0 36px 28px 36px;" data-bgfield="secondaryImageBgColor">
       ${linkedImage(`<img src="${secondaryImg}" data-img-label="Secondary image" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:528px; max-width:100%; height:auto; border:0;">`, flyer.secondaryImageLink, "secondaryImageLink")}
     </td>
   </tr>` : ""}
@@ -690,12 +698,12 @@ export function buildEblastHtml(
     return `
   ${galleryLabelHtml ? `
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
-    <td style="padding: ${galleryFollowsContent ? "8px" : "44px"} 36px 12px 36px;" align="center">
+    <td class="glm-bg-gallery" bgcolor="${galleryBg}" style="background:${galleryBg}; padding: ${galleryFollowsContent ? "8px" : "44px"} 36px 12px 36px;" align="center" data-bgfield="galleryBgColor">
       <p data-field="galleryLabel" style="${alignStyleFor("galleryLabel")}font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
     </td>
   </tr>` : ""}
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
-    <td style="padding: ${galleryLabelHtml ? "16px" : "44px"} 36px 32px 36px;">
+    <td class="glm-bg-gallery" bgcolor="${galleryBg}" style="background:${galleryBg}; padding: ${galleryLabelHtml ? "16px" : "44px"} 36px 32px 36px;" data-bgfield="galleryBgColor">
       <table role="presentation" cellpadding="0" cellspacing="6" border="0" width="100%" style="border-collapse:separate; border-spacing:6px;">
         ${rows
           .map(
@@ -869,6 +877,9 @@ export function buildEblastHtml(
   [data-ogsc] .glm-bg-finalctabtn, [data-ogsb] .glm-bg-finalctabtn { background-color: ${finalCtaButtonBg} !important; }
   [data-ogsc] .glm-bg-footerbtn, [data-ogsb] .glm-bg-footerbtn { background-color: ${footerButtonBg} !important; }
   [data-ogsc] .glm-bg-footer, [data-ogsb] .glm-bg-footer { background-color: ${footerBg} !important; }
+  [data-ogsc] .glm-bg-story, [data-ogsb] .glm-bg-story { background-color: ${storyBg} !important; }
+  [data-ogsc] .glm-bg-secondary, [data-ogsb] .glm-bg-secondary { background-color: ${secondaryImageBg} !important; }
+  [data-ogsc] .glm-bg-gallery, [data-ogsb] .glm-bg-gallery { background-color: ${galleryBg} !important; }
 </style>
 </head>
 <body class="glm-bg-outer" style="margin:0; padding:0; background:#f5f5f5;" bgcolor="#f5f5f5">

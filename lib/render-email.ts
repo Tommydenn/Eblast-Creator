@@ -382,11 +382,16 @@ export function buildEblastHtml(
 
   const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
 
-  // Community address line for hero/CTA: "Name, Street, City, ST ZIP"
+  // The hero address line: street, city, state and zip.
+  //
+  // The community name is deliberately left out. The logo above it already
+  // says whose eblast this is, so repeating the name here read as clutter.
+  // Drafts that were already approved or pushed keep the old line, which was
+  // written into them as their own text before this changed.
   const communityAddressLine = (() => {
     const a = community.address;
     const stateZip = [a.state, a.zip].filter(Boolean).join(" ");
-    return [community.displayName, a.street, a.city, stateZip].filter(Boolean).join(", ");
+    return [a.street, a.city, stateZip].filter(Boolean).join(", ");
   })();
   const addressLine = flyer.heroAddress ?? communityAddressLine;
 

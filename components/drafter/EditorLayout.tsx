@@ -416,23 +416,11 @@ export default function EditorLayout() {
               </div>
             </div>
 
-            {/* Wide enough for the PDF viewer's toolbar, which is what actually
-                sets the floor here.
-
-                The toolbar does not wrap or collapse. When it does not fit, the
-                viewer's whole body scrolls sideways and takes the page with it,
-                so the flyer loses its left edge at the same time as the toolbar
-                loses its page box — the two are one overflow, not two problems.
-                #view=FitH fits the page to the panel but has no say over the
-                toolbar.
-
-                Measured from the toolbar's own contents: the left group (sidebar
-                toggle, file name, page box) runs about 320px and the rest, from
-                the first separator through print, about 570px. 920 covers that
-                with room for a longer file name. The preview beside it scales
-                down to whatever is left, so the width costs nothing else. */}
+            {/* The viewer's toolbar is turned off (see FlyerPanel), so this is
+                sized for reading a flyer rather than for fitting a toolbar it
+                no longer shows. The preview beside it scales to what is left. */}
             {hasFlyer && flyerOpen && draftId && (
-              <div className="w-[56%] min-w-[920px] max-w-[1040px] h-full shrink-0">
+              <div className="w-[42%] min-w-[360px] max-w-[620px] h-full shrink-0">
                 <FlyerPanel draftId={draftId} />
               </div>
             )}

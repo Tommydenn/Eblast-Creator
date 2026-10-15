@@ -341,7 +341,7 @@ export default function EditorLayout() {
         {/* Right: preview */}
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           {/* Preview header */}
-          <div className="h-9 flex items-center justify-between px-4 bg-[#f0ede7] border-b border-[#e8e3dc] shrink-0">
+          <div className="h-9 relative flex items-center justify-between px-4 bg-[#f0ede7] border-b border-[#e8e3dc] shrink-0">
             {/* The control that collapses the editor sits against the editor,
                 at this header's left edge, with its chevron pointing at the
                 panel it hides. It used to sit at the far right, the width of
@@ -363,8 +363,14 @@ export default function EditorLayout() {
                   </>
                 )}
               </button>
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4]">Live Preview</span>
             </div>
+            {/* Centred on the header itself rather than placed between the two
+                groups of buttons, so it stays put as their labels change
+                length — "Show flyer" to "Hide flyer", "Full preview" to
+                "Show editor". Not a click target, so it sits above nothing. */}
+            <span className="absolute left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4] pointer-events-none">
+              Live Preview
+            </span>
             <div className="flex items-center gap-4">
             {hasFlyer && (
               <button
@@ -405,12 +411,14 @@ export default function EditorLayout() {
               </div>
             </div>
 
-            {/* The PDF viewer's toolbar has a fixed minimum width and is clipped
-                by anything narrower, so the floor is set by that rather than by
-                how little the page can still be read in. */}
+            {/* The PDF viewer lays its toolbar out at a fixed width and gives
+                itself a horizontal scrollbar when it cannot fit, so the floor
+                here is what that toolbar needs rather than how little the page
+                can still be read in. The preview beside it scales to whatever
+                room is left, so taking the space costs nothing but width. */}
             {hasFlyer && flyerOpen && draftId && (
-              <div className="w-[42%] min-w-[460px] max-w-[620px] h-full shrink-0">
-                <FlyerPanel draftId={draftId} onClose={() => setFlyerOpen(false)} />
+              <div className="w-[46%] min-w-[640px] max-w-[760px] h-full shrink-0">
+                <FlyerPanel draftId={draftId} />
               </div>
             )}
           </div>

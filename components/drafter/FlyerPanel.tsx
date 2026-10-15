@@ -14,31 +14,22 @@ import { useDraft } from "@/context/DraftContext";
  * Renders nothing at all when the draft has no flyer, which covers drafts
  * written from pasted details and everything made before flyers were kept.
  */
-export function FlyerPanel({ draftId, onClose }: { draftId: string; onClose: () => void }) {
+export function FlyerPanel({ draftId }: { draftId: string }) {
   const url = `/api/drafts/${draftId}/flyer`;
   return (
     <div className="h-full flex flex-col border-l border-[#e8e3dc] bg-[#f0ede7]">
       <div className="h-9 flex items-center justify-between px-3 border-b border-[#e8e3dc] shrink-0">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4]">Flyer</span>
-        <div className="flex items-center gap-3">
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors"
-          >
-            Open in a tab
-          </a>
-          <button
-            onClick={onClose}
-            title="Hide the flyer"
-            className="text-[#b0a89f] hover:text-[#5a6b63] transition-colors"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+        {/* No close button here: "Hide flyer" in the preview header already
+            does it, and two controls for one panel read as two different ones. */}
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors"
+        >
+          Open in a tab
+        </a>
       </div>
       {/* The browser's own PDF viewer: scrolling, zoom and page navigation for
           free, and no PDF library shipped to the client.

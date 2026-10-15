@@ -37,6 +37,8 @@ export interface ExtractionDiagnostic {
   cmykConvertedToSrgb: number;
   cmykConvertedVia: { mupdf: number; sharp: number };
   cmykConversionFailed: number;
+  /** Images whose page placement mirrors or flips them, put back the right way. */
+  placementCorrected: number;
   imagesByFormat: { jpeg: number; jpeg2000: number; flate: number; ccitt: number; other: number };
   errors: string[];
   imageDetails: Array<{
@@ -171,6 +173,89 @@ async function cmykJpegToSrgbViaSharp(jpegBytes: Buffer): Promise<Buffer | null>
   }
 }
 
+/** How a page draws an image, for the part of it pixels can be put back. */
+interface Placement {
+  /** Mirrored left to right. */
+  flop: boolean;
+  /** Flipped top to bottom. */
+  flip: boolean;
+}
+
+/**
+ * How each image is actually placed on its page.
+ *
+ * The extraction below reads an image's stored bytes, and those carry no record
+ * of how the page draws them. A flyer that places a photo mirrored — a negative
+ * x scale in its matrix — looks right on the flyer and came out reversed in the
+ * eblast. Across the flyers on file, 33 of 406 placements are exactly that.
+ *
+ * Walking the pages with a device that records nothing but each fill's matrix
+ * is what makes this visible, and it resolves the matrix of an image nested in
+ * a form XObject on the way through, which reading the content stream would
+ * not.
+ *
+ * Keyed by pixel size, the one thing both sides have in common. A size placed
+ * two different ways cannot be told apart from the stored bytes, so it is left
+ * alone rather than guessed at. Rotated and skewed placements are not recorded
+ * at all: flipping pixels cannot undo them, and they are left as they were.
+ */
+async function readImagePlacements(pdfBuffer: Buffer): Promise<Map<string, Placement>> {
+  // A matrix entry this small is a rounding artefact, not a rotation.
+  const FLAT = 1e-6;
+  const seen = new Map<string, Placement | null>();
+
+  try {
+    const mupdfModule: any = await import("mupdf");
+    const mupdf = mupdfModule.default ?? mupdfModule;
+    const doc = mupdf.Document.openDocument(pdfBuffer, "application/pdf");
+
+    const device = new mupdf.Device({
+      fillImage(image: any, ctm: number[]) {
+        const [a, b, c, d] = ctm;
+        if (Math.abs(b) > FLAT || Math.abs(c) > FLAT) return;
+        const key = `${image.getWidth()}x${image.getHeight()}`;
+        const here: Placement = { flop: a < 0, flip: d < 0 };
+        if (!seen.has(key)) { seen.set(key, here); return; }
+        const first = seen.get(key);
+        if (!first || first.flop !== here.flop || first.flip !== here.flip) seen.set(key, null);
+      },
+    });
+
+    for (let i = 0; i < doc.countPages(); i++) {
+      try { doc.loadPage(i).run(device, mupdf.Matrix.identity); } catch {}
+    }
+  } catch {
+    // No placement information: every image is taken as it is stored, which is
+    // what happened before any of this existed.
+    return new Map();
+  }
+
+  const out = new Map<string, Placement>();
+  for (const [key, placement] of seen) {
+    if (placement && (placement.flop || placement.flip)) out.set(key, placement);
+  }
+  return out;
+}
+
+/**
+ * Put an image back the way its page draws it.
+ *
+ * This re-encodes, which the extraction otherwise goes out of its way to avoid
+ * — stored bytes are passed through untouched so nothing is lost twice. Only
+ * the images a page actually mirrors come through here, and for those the
+ * choice is a re-encode or a photo that is the wrong way round.
+ */
+async function applyPlacement(jpegBytes: Buffer, placement: Placement): Promise<Buffer | null> {
+  try {
+    let img = sharp(jpegBytes, { failOn: "none" });
+    if (placement.flop) img = img.flop();
+    if (placement.flip) img = img.flip();
+    return await img.jpeg({ quality: 92 }).toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 // ---------- public API ----------------------------------------------------
 
 export async function extractImagesFromPdf(
@@ -185,6 +270,7 @@ export async function extractImagesFromPdf(
     cmykConvertedToSrgb: 0,
     cmykConvertedVia: { mupdf: 0, sharp: 0 },
     cmykConversionFailed: 0,
+    placementCorrected: 0,
     imagesByFormat: { jpeg: 0, jpeg2000: 0, flate: 0, ccitt: 0, other: 0 },
     errors: [],
     imageDetails: [],
@@ -198,6 +284,8 @@ export async function extractImagesFromPdf(
     diag.method = "none";
     return { images: [], diagnostic: diag };
   }
+
+  const placements = await readImagePlacements(pdfBuffer);
 
   const out: ExtractedImage[] = [];
   const seenHashes = new Set<string>();
@@ -313,6 +401,21 @@ export async function extractImagesFromPdf(
         diag.cmykConversionFailed++;
         diag.errors.push(`CMYK→sRGB conversion failed for ${width}x${height}`);
         // Fall back to original CMYK bytes — Chrome usually renders them OK.
+      }
+    }
+
+    // Mirrored or flipped on the page, so the stored bytes are the wrong way
+    // round for anyone who only ever saw the flyer. JPEG only: this works by
+    // re-encoding, and the other formats here are already passed through or
+    // skipped.
+    const placement = placements.get(`${width}x${height}`);
+    if (placement && outputMime === "image/jpeg") {
+      const corrected = await applyPlacement(outputBytes, placement);
+      if (corrected) {
+        outputBytes = corrected;
+        diag.placementCorrected++;
+      } else {
+        diag.errors.push(`could not correct placement for ${width}x${height}`);
       }
     }
 

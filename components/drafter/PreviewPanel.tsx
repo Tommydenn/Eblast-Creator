@@ -150,7 +150,10 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
     if(delBtn && delBtn.isConnected && delTarget && delTarget.isConnected && pointInRect(e.clientX,e.clientY,delBtn.getBoundingClientRect(),4)){
       e.preventDefault();
       e.stopPropagation();
-      var r=delTarget.getBoundingClientRect();
+      // The x's own rectangle, not the section's. The confirm box opens
+      // against the thing that was clicked, which is on screen by
+      // definition; a section can run several screens tall.
+      var r=delBtn.getBoundingClientRect();
       window.parent.postMessage({type:'delete-click',field:delTarget.dataset.deletefield,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
       hideDelBtn();
       return;
@@ -321,6 +324,14 @@ function injectScript(doc: Document) {
 
 /** The email's fixed design width, matching the 600px shell in render-email.ts. */
 const EMAIL_WIDTH = 600;
+// DeleteConfirmPopover's own size (w-56, and about this tall once its message,
+// buttons and footnote are laid out), needed because the box is positioned
+// rather than flowed. GAP is its distance from the x; GUTTER keeps it off the
+// container's edges.
+const CONFIRM_WIDTH = 224;
+const CONFIRM_HEIGHT = 112;
+const GAP = 6;
+const GUTTER = 8;
 
 /**
  * Size the iframe to its content, then scale the whole thing down if the
@@ -345,6 +356,47 @@ function resizeIframe(iframe: HTMLIFrameElement) {
   // The iframe is EMAIL_WIDTH wide and scaled visually, so the container has
   // to be told the post-scale height or it reserves the unscaled space.
   container.style.height = h > 0 ? `${Math.ceil(h * scale)}px` : "";
+}
+
+/**
+ * Where the delete confirm box opens, in the preview container's coordinates.
+ *
+ * It used to be anchored to the bottom edge of the section being deleted. The
+ * x sits at that section's top corner, so on a hero running several screens
+ * tall the box opened far below the fold — the user never saw it, and the
+ * click read as having done nothing. The x is on screen by definition, so the
+ * box follows it instead: tucked under it with their right edges aligned, so
+ * it opens inward over the email, and flipped above when there is no room
+ * below. Pure, so the arithmetic can be checked without a browser.
+ */
+export function confirmBoxPosition(
+  /** The x's rectangle, in the iframe's own unscaled coordinates. */
+  btn: { left: number; top: number; bottom: number; width: number },
+  geom: {
+    /** How far down the iframe is drawn from its natural size. */
+    scale: number;
+    /** The iframe's origin within the container. */
+    offsetX: number;
+    offsetY: number;
+    /** The container's own position and width on the page. */
+    containerTop: number;
+    containerWidth: number;
+    viewportHeight: number;
+  },
+): { left: number; top: number } {
+  const right = geom.offsetX + (btn.left + btn.width) * geom.scale;
+  const left = Math.min(
+    Math.max(GUTTER, right - CONFIRM_WIDTH),
+    Math.max(GUTTER, geom.containerWidth - CONFIRM_WIDTH - GUTTER),
+  );
+
+  const below = geom.offsetY + btn.bottom * geom.scale + GAP;
+  const above = geom.offsetY + btn.top * geom.scale - CONFIRM_HEIGHT - GAP;
+  // Measured against the window, which is what the user can actually see —
+  // the container itself is as tall as the whole email.
+  const fitsBelow = geom.containerTop + below + CONFIRM_HEIGHT <= geom.viewportHeight - GUTTER;
+  const fitsAbove = geom.containerTop + above >= GUTTER;
+  return { left, top: fitsBelow || !fitsAbove ? below : above };
 }
 
 export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown } = {}) {
@@ -464,9 +516,22 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
         return;
       }
       if (e.data.type === "delete-click") {
-        const at = anchorInContainer(e.data.left as number, e.data.bottom as number);
-        if (!at) return;
-        setDeletePopover({ field: e.data.field as string, ...at });
+        const iframe = iframeRef.current;
+        const iframeRect = iframe?.getBoundingClientRect();
+        const container = containerRef.current;
+        const containerRect = container?.getBoundingClientRect();
+        if (!iframe || !iframeRect || !container || !containerRect) return;
+        setDeletePopover({
+          field: e.data.field as string,
+          ...confirmBoxPosition(e.data as { left: number; top: number; bottom: number; width: number }, {
+            scale: iframeRect.width / (iframe.offsetWidth || EMAIL_WIDTH),
+            offsetX: iframeRect.left - containerRect.left,
+            offsetY: iframeRect.top - containerRect.top,
+            containerTop: containerRect.top,
+            containerWidth: container.clientWidth,
+            viewportHeight: window.innerHeight,
+          }),
+        });
       }
     }
     window.addEventListener("message", handler);
@@ -656,7 +721,7 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
       {deletePopover && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setDeletePopover(null)} />
-          <div className="absolute z-40" style={{ left: deletePopover.left, top: deletePopover.top + 4 }}>
+          <div className="absolute z-40" style={{ left: deletePopover.left, top: deletePopover.top }}>
             <DeleteConfirmPopover
               label={(DELETE_FIELD_LABELS as Record<string, string>)[deletePopover.field] ?? "this added line"}
               onConfirm={() => {

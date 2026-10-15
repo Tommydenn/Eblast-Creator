@@ -623,6 +623,17 @@ export function buildEblastHtml(
     ? flyer.bodyParagraphs.map((p) => renderBodyParagraph(p)).join("<br>")
     : "";
 
+  // Whether the gallery label follows body text or a photo in the same white
+  // block rather than opening a fresh one.
+  //
+  // The label reserved 44px above itself for the case where it opens the
+  // white area. Added to the 28px the story text and the secondary photo
+  // already leave below them, that put 72px between the copy and the label —
+  // roughly twice the gap anywhere else in the email, and it read as a hole.
+  const storyBodyShown = !flyer.storySectionHidden && !!storyBodyHtml;
+  const secondaryShown = !!secondaryImg && !flyer.secondaryImageSectionHidden;
+  const galleryFollowsContent = storyBodyShown || secondaryShown;
+
   const story = `
   ${flyer.storySectionHidden ? "" : `
   ${storyHeadShown ? `
@@ -679,7 +690,7 @@ export function buildEblastHtml(
     return `
   ${galleryLabelHtml ? `
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
-    <td style="padding: 44px 36px 12px 36px;" align="center">
+    <td style="padding: ${galleryFollowsContent ? "8px" : "44px"} 36px 12px 36px;" align="center">
       <p data-field="galleryLabel" style="${alignStyleFor("galleryLabel")}font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
     </td>
   </tr>` : ""}

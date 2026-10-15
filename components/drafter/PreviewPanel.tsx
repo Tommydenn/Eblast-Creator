@@ -56,19 +56,32 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
     cancelRemove();
     removeTimer=setTimeout(function(){ removeTimer=null; hideDelBtn(); },200);
   }
+  function placeDelBtn(){
+    if(!delBtn || !delTarget || !delTarget.isConnected) return;
+    var r=delTarget.getBoundingClientRect();
+    delBtn.style.left=(r.right-24)+'px';
+    delBtn.style.top=(r.top+4)+'px';
+  }
   function showDelBtnFor(target){
     cancelRemove();
-    if(delTarget===target && delBtn && delBtn.isConnected) return;
+    // Reuse the button when it is still on screen, but always move it.
+    // Hiding a section shifts everything below it, and a button left at
+    // the coordinates it was created with ends up sitting over whatever
+    // has moved into that spot — the hero photo, usually.
+    if(delTarget===target && delBtn && delBtn.isConnected){ placeDelBtn(); return; }
     hideDelBtn();
     delTarget=target;
-    var rect=target.getBoundingClientRect();
     var btn=document.createElement('div');
     btn.textContent='\\u00d7';
     btn.setAttribute('data-delete-btn','1');
-    btn.style.cssText='position:fixed;left:'+(rect.right-24)+'px;top:'+(rect.top+4)+'px;width:20px;height:20px;line-height:19px;text-align:center;background:#b3312c;color:#fff;border-radius:50%;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;cursor:pointer;z-index:99999;box-shadow:0 1px 3px rgba(0,0,0,0.35);user-select:none;';
+    btn.style.cssText='position:fixed;width:20px;height:20px;line-height:19px;text-align:center;background:#b3312c;color:#fff;border-radius:50%;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;cursor:pointer;z-index:99999;box-shadow:0 1px 3px rgba(0,0,0,0.35);user-select:none;';
     document.body.appendChild(btn);
     delBtn=btn;
+    placeDelBtn();
   }
+  // Called by the editor right after it swaps the body out.
+  document.__glmResetOverlay=function(){ hideDelBtn(); };
+
   function pointInRect(x,y,rect,pad){
     pad=pad||0;
     return x>=rect.left-pad && x<=rect.right+pad && y>=rect.top-pad && y<=rect.bottom+pad;
@@ -76,6 +89,12 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
 
   document.addEventListener('mousemove',function(e){
     var x=e.clientX, y=e.clientY;
+    // Editing re-renders the preview by replacing the whole body, which
+    // throws this button away. Left unchecked, the script goes on holding
+    // a node that is no longer on the page and the click below can never
+    // match it, so the x stops responding entirely.
+    if(delBtn && !delBtn.isConnected){ delBtn=null; delTarget=null; }
+    if(delTarget && !delTarget.isConnected){ hideDelBtn(); }
     if(delBtn && pointInRect(x,y,delBtn.getBoundingClientRect(),4)){ cancelRemove(); return; }
     var el=document.elementFromPoint(x,y);
     var found=el?findAncestors(el,['bgfield','deletefield','section','linkfield']):{};
@@ -113,7 +132,7 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   },true);
 
   document.addEventListener('click',function(e){
-    if(delBtn && delTarget && pointInRect(e.clientX,e.clientY,delBtn.getBoundingClientRect(),4)){
+    if(delBtn && delBtn.isConnected && delTarget && delTarget.isConnected && pointInRect(e.clientX,e.clientY,delBtn.getBoundingClientRect(),4)){
       e.preventDefault();
       e.stopPropagation();
       var r=delTarget.getBoundingClientRect();
@@ -171,7 +190,7 @@ const SECTION_MAP: Record<string, EditorSection> = {
 // pickers already use.
 type BgFieldKey =
   | "headerBgColor" | "heroBgColor" | "finalCtaBgColor" | "footerBgColor"
-  | "storyBgColor" | "secondaryImageBgColor" | "galleryBgColor"
+  | "storyBgColor" | "secondaryImageBgColor" | "galleryLabelBgColor" | "galleryBgColor"
   | "ctaButtonBgColor" | "finalCtaButtonBgColor" | "footerButtonBgColor";
 
 const BG_FIELD_LABELS: Record<BgFieldKey, string> = {
@@ -181,6 +200,7 @@ const BG_FIELD_LABELS: Record<BgFieldKey, string> = {
   footerBgColor: "Footer Background",
   storyBgColor: "Story Background",
   secondaryImageBgColor: "Second Photo Background",
+  galleryLabelBgColor: "Gallery Label Background",
   galleryBgColor: "Photo Gallery Background",
   ctaButtonBgColor: "Call Button Color",
   finalCtaButtonBgColor: "Call Button Color",
@@ -195,6 +215,7 @@ function defaultForBgField(key: BgFieldKey, community: any): string {
     case "footerBgColor": return "#FFFFFF";
     case "storyBgColor": return "#FFFFFF";
     case "secondaryImageBgColor": return "#FFFFFF";
+    case "galleryLabelBgColor": return "#FFFFFF";
     case "galleryBgColor": return "#FFFFFF";
     case "ctaButtonBgColor": return community?.brand.accent ?? "#000000";
     case "finalCtaButtonBgColor": return community?.brand.primary ?? "#000000";
@@ -361,6 +382,8 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
       const parser = new DOMParser();
       const parsed = parser.parseFromString(newHtml, "text/html");
       doc.body.innerHTML = parsed.body.innerHTML;
+      // The hover-delete button lived in the body that was just replaced.
+      (doc as any).__glmResetOverlay?.();
       injectScript(doc);
       resizeIframe(iframe);
     } catch {}

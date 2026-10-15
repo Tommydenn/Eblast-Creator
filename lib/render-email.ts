@@ -448,6 +448,7 @@ export function buildEblastHtml(
   const SHELL_WHITE = "#ffffff";
   const storyBg = flyer.storyBgColor ?? SHELL_WHITE;
   const secondaryImageBg = flyer.secondaryImageBgColor ?? SHELL_WHITE;
+  const galleryLabelBg = flyer.galleryLabelBgColor ?? SHELL_WHITE;
   const galleryBg = flyer.galleryBgColor ?? SHELL_WHITE;
 
   // Logo follows the HEADER, not the raw surface. On a light header use the
@@ -698,7 +699,7 @@ export function buildEblastHtml(
     return `
   ${galleryLabelHtml ? `
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
-    <td class="glm-bg-gallery" bgcolor="${galleryBg}" style="background:${galleryBg}; padding: ${galleryFollowsContent ? "8px" : "44px"} 36px 12px 36px;" align="center" data-bgfield="galleryBgColor">
+    <td class="glm-bg-gallerylabel" bgcolor="${galleryLabelBg}" style="background:${galleryLabelBg}; padding: ${galleryFollowsContent ? "8px" : "44px"} 36px 12px 36px;" align="center" data-bgfield="galleryLabelBgColor">
       <p data-field="galleryLabel" style="${alignStyleFor("galleryLabel")}font-family: ${fontBody}; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
     </td>
   </tr>` : ""}
@@ -879,6 +880,7 @@ export function buildEblastHtml(
   [data-ogsc] .glm-bg-footer, [data-ogsb] .glm-bg-footer { background-color: ${footerBg} !important; }
   [data-ogsc] .glm-bg-story, [data-ogsb] .glm-bg-story { background-color: ${storyBg} !important; }
   [data-ogsc] .glm-bg-secondary, [data-ogsb] .glm-bg-secondary { background-color: ${secondaryImageBg} !important; }
+  [data-ogsc] .glm-bg-gallerylabel, [data-ogsb] .glm-bg-gallerylabel { background-color: ${galleryLabelBg} !important; }
   [data-ogsc] .glm-bg-gallery, [data-ogsb] .glm-bg-gallery { background-color: ${galleryBg} !important; }
 </style>
 </head>

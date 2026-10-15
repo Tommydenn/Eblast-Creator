@@ -139,6 +139,8 @@ export interface ExtractedFlyer {
    */
   storyBgColor?: string;
   secondaryImageBgColor?: string;
+  /** The "A look around …" line, coloured apart from the photos below it. */
+  galleryLabelBgColor?: string;
   galleryBgColor?: string;
 
   /** Same idea, for the three buttons — each independent of the others. */

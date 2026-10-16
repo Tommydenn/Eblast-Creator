@@ -8,6 +8,7 @@ import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
 import { cropDataUriToFocusAndRatio } from "@/lib/pdf-images";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { withParagraphSpacing } from "@/lib/extracted-flyer";
+import { boundToSection, isEblastSection, sectionScopeInstruction } from "@/lib/eblast-sections";
 
 // Order-independent deep stringify, so a true no-op is detected even for fields
 // getChangedFields doesn't enumerate (event details, footer overrides, alt text…).
@@ -51,6 +52,14 @@ interface Body {
   current: ExtractedFlyer;
   instruction: string;
   communitySlug: string;
+  /**
+   * The section the user is working in, or absent for the whole email.
+   *
+   * Narrows what the instruction is taken to mean — "make it shorter" means
+   * something different in the Hero than in the Footer — and bounds what the
+   * answer is allowed to touch.
+   */
+  section?: string;
   heroImageUrl?: string;
   secondaryImageUrl?: string;
   galleryImageUrls?: string[];
@@ -99,24 +108,34 @@ export async function POST(req: NextRequest) {
         ).join("\n")
       : "  (no photos are currently in this email)";
 
+    const section = isEblastSection(body.section) ? body.section : null;
+
     const result = await refineFlyerContent({
       current: body.current,
       instruction: body.instruction,
       community,
       pastSends,
       imageManifestText,
+      sectionScope: section ? sectionScopeInstruction(section) : undefined,
     });
 
     // Merge onto the prior draft so any field the model omitted is preserved
     // (the model is told to return the full object and to set "" to clear a
     // field, so explicit clears still work; omissions never silently drop data).
     const mergedExtracted: ExtractedFlyer = { ...body.current, ...result.flyer };
+
     // The model returns paragraphs with no blank line between them. Put the
     // spacing back only when it actually rewrote the body — a body it left
     // alone keeps whatever spacing the writer gave it.
     if (result.flyer.bodyParagraphs) {
       mergedExtracted.bodyParagraphs = withParagraphSpacing(result.flyer.bodyParagraphs);
     }
+    // Working in a section means changes land in that section.
+    const bounded = boundToSection(
+      body.current as unknown as Record<string, unknown>,
+      mergedExtracted as unknown as Record<string, unknown>,
+      section,
+    ) as unknown as ExtractedFlyer;
 
     // Resolve the image arrangement. Default: keep exactly what the client sent.
     let nextHero = body.heroImageUrl;
@@ -162,7 +181,7 @@ export async function POST(req: NextRequest) {
     // Return sentinel HTML — no image data URIs embedded. The client injects
     // images from the `images` field (or its own current state) after receiving.
     const galleryCount = nextGallery.length;
-    const html = await inlineRelativeImages(buildEblastHtml(mergedExtracted, community, {
+    const html = await inlineRelativeImages(buildEblastHtml(bounded, community, {
       heroImageUrl: nextHero ? SENTINEL_HERO : undefined,
       secondaryImageUrl: nextSecondary ? SENTINEL_SECONDARY : undefined,
       galleryImageUrls: galleryCount > 0
@@ -170,11 +189,11 @@ export async function POST(req: NextRequest) {
         : undefined,
     }));
     // Human-readable labels for the history pill (a tracked subset)…
-    const changedFields = getChangedFields(body.current, mergedExtracted);
+    const changedFields = getChangedFields(body.current, bounded);
     // …but the "nothing happened" decision compares the ENTIRE object, so an
     // edit to an untracked field (event time, footer, alt text, etc.) is never
     // mislabeled as a no-op.
-    const textChanged = stableStringify(mergedExtracted) !== stableStringify(body.current);
+    const textChanged = stableStringify(bounded) !== stableStringify(body.current);
     const noChange = !textChanged && !imagesChanged;
 
     // Only return image data when the layout actually changed — avoids echoing
@@ -185,7 +204,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      extracted: mergedExtracted,
+      extracted: bounded,
       html,
       changedFields,
       images,

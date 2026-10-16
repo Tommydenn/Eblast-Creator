@@ -314,6 +314,8 @@ export async function refineFlyerContent(opts: {
   /** Pre-formatted "[0] hero ..." list of the photos currently in the email.
    *  When provided, the model may return imageLayout to rearrange them. */
   imageManifestText?: string;
+  /** The part of the email the user is working in, when they are in one. */
+  sectionScope?: string;
 }): Promise<RefineResult> {
   const c = client();
 
@@ -343,7 +345,10 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
 - If the user's instruction implies a small cascading change (e.g. shortening a headline that a script subhead quotes), make the minimum cascading change and explain nothing.
 - Always return the FULL updated object via the extract_flyer tool (every text field), so nothing is accidentally dropped.
 - Set \`refineNote\` to one short sentence describing what you changed (or an "I couldn't ..." explanation if part of the request is out of scope).
-- If the request CANNOT be handled through text/copy editing at all (e.g. "use a different photo", "add a new image", "change the layout", "update the branding"), set \`isOutOfScope=true\` AND return every content field with its current value completely unchanged. Do not attempt any edits when isOutOfScope is true.${imageBlock}`,
+${opts.sectionScope ? `
+WHERE THE USER IS WORKING
+${opts.sectionScope}
+` : ""}- If the request CANNOT be handled through text/copy editing at all (e.g. "use a different photo", "add a new image", "change the layout", "update the branding"), set \`isOutOfScope=true\` AND return every content field with its current value completely unchanged. Do not attempt any edits when isOutOfScope is true.${imageBlock}`,
     tools: [
       {
         name: "extract_flyer",

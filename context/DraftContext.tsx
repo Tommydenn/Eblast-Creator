@@ -33,6 +33,7 @@ import {
   withoutTextColor,
 } from "@/lib/eblast-defaults";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
+import type { EblastSection } from "@/lib/eblast-sections";
 
 // ─── Chunked PDF upload ───────────────────────────────────────────────────────
 
@@ -303,7 +304,11 @@ export interface DraftContextValue {
   assignGalleryImage: (idx: number, imageUrl: string, bankIdx?: number) => Promise<void>;
   removeImage: (slot: "hero" | "secondary" | "gallery", galleryIdx?: number) => void;
   repositionImage: (slot: "hero" | "secondary" | "gallery", x: number, y: number, zoom: number, galleryIdx?: number) => Promise<void>;
-  refine: (instruction: string) => Promise<void>;
+  refine: (instruction: string, section?: EblastSection | null) => Promise<void>;
+  /** One line from the last refinement saying what it did. */
+  refineNote: string | null;
+  /** The fields that actually changed, by their readable names. */
+  changedFields: string[];
   undo: () => void;
   redo: () => void;
   save: () => Promise<void>;
@@ -532,6 +537,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Refine / undo-redo
   const [isRefining, setIsRefining] = useState(false);
   const [refineError, setRefineError] = useState<string | null>(null);
+  const [refineNote, setRefineNote] = useState<string | null>(null);
+  const [changedFields, setChangedFields] = useState<string[]>([]);
   const [undoStack, setUndoStack] = useState<RefineSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<RefineSnapshot[]>([]);
   // Read inside undo()/redo() so their setState calls can stay pure updaters.
@@ -969,7 +976,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ─── Refine ────────────────────────────────────────────────────────────────
-  const refine = useCallback(async (instruction: string) => {
+  const refine = useCallback(async (instruction: string, section?: EblastSection | null) => {
     const f = fieldsRef.current;
     const c = communityRef.current;
     const imgs = imagesRef.current;
@@ -985,6 +992,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
 
     setIsRefining(true);
     setRefineError(null);
+    setRefineNote(null);
+    setChangedFields([]);
     try {
       const res = await fetch("/api/refine-eblast", {
         method: "POST",
@@ -993,6 +1002,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
           current: f,
           instruction,
           communitySlug: c.slug,
+          section: section ?? undefined,
           heroImageUrl: imgs.hero?.url,
           secondaryImageUrl: imgs.secondary?.url,
           galleryImageUrls: imgs.gallery.map((g) => g.url),
@@ -1002,6 +1012,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       if (!data.ok) throw new Error(data.error ?? "Refinement failed");
 
       setFields_(data.extracted as ExtractedFlyer);
+      // What it says it did, and what actually moved. Both were already coming
+      // back from the route and neither was shown to anyone.
+      setRefineNote(typeof data.refineNote === "string" ? data.refineNote : null);
+      setChangedFields(Array.isArray(data.changedFields) ? (data.changedFields as string[]) : []);
 
       if (data.imagesChanged && data.images) {
         const { hero: h, secondary: s, gallery: g } = data.images as { hero?: string; secondary?: string; gallery?: string[] };
@@ -1635,6 +1649,8 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     generateError,
     isRefining,
     refineError,
+    refineNote,
+    changedFields,
     canUndo: undoStack.length > 0,
     canRedo: redoStack.length > 0,
     lastRefineInstruction: undoStack.at(-1)?.instruction ?? null,

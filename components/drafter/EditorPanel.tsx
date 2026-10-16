@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
 import SubjectSection from "./sections/SubjectSection";
@@ -8,8 +8,6 @@ import HeroSection from "./sections/HeroSection";
 import StorySection from "./sections/StorySection";
 import ImagesSection from "./sections/ImagesSection";
 import CtaSection from "./sections/CtaSection";
-
-type LocalTab = EditorSection | "ai";
 
 const SECTION_TABS: Array<{ id: EditorSection; label: string; icon: React.ReactNode }> = [
   {
@@ -39,145 +37,38 @@ const SECTION_TABS: Array<{ id: EditorSection; label: string; icon: React.ReactN
   },
 ];
 
-const AI_TAB = {
-  id: "ai" as const,
-  label: "AI",
-  icon: (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
-    </svg>
-  ),
-};
-
-
-// ── AI Refine panel ───────────────────────────────────────────────────────────
-
-function RefinePanel() {
-  const { refine, isRefining, refineError, canUndo, canRedo, undo, redo, lastRefineInstruction } = useDraft();
-  const [instruction, setInstruction] = useState("");
-  const [refineHistory, setRefineHistory] = useState<Array<{ instruction: string }>>([]);
-
-  async function handleRefine() {
-    if (!instruction.trim() || isRefining) return;
-    const inst = instruction.trim();
-    setInstruction("");
-    await refine(inst);
-    setRefineHistory((prev) => [{ instruction: inst }, ...prev.slice(0, 9)]);
-  }
-
-  return (
-    <div className="rounded-xl border border-[#e8e3dc] bg-white overflow-hidden">
-      <div className="px-4 pt-4 pb-4 space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">Refine with AI</p>
-
-        <div className="flex gap-2">
-          <textarea
-            value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleRefine(); } }}
-            rows={2}
-            disabled={isRefining}
-            placeholder="e.g. Make the headline more urgent, shorten the body…"
-            className="flex-1 rounded-lg border border-[#ddd8d0] bg-[#faf9f6] px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] resize-none disabled:opacity-50"
-          />
-          <button
-            onClick={handleRefine}
-            disabled={!instruction.trim() || isRefining}
-            className="self-end rounded-lg bg-[#1F4538] text-white text-xs font-semibold px-3 py-2 hover:bg-[#173829] transition-colors disabled:opacity-40"
-          >
-            {isRefining ? (
-              <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                <path d="M12 2a10 10 0 0 1 10 10"/>
-              </svg>
-            ) : "Go"}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={undo}
-            disabled={!canUndo}
-            className="text-xs text-[#7a8c85] hover:text-[#1F4538] disabled:opacity-30 transition-colors flex items-center gap-1"
-            title={lastRefineInstruction ? `Undo: ${lastRefineInstruction}` : "Nothing to undo"}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h11a5 5 0 0 1 0 10H3"/><polyline points="7 3 3 7 7 11"/></svg>
-            Undo
-          </button>
-          <span className="text-[#e0dbd3] text-xs">|</span>
-          <button
-            onClick={redo}
-            disabled={!canRedo}
-            className="text-xs text-[#7a8c85] hover:text-[#1F4538] disabled:opacity-30 transition-colors flex items-center gap-1"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 7H10a5 5 0 0 0 0 10h11"/><polyline points="17 3 21 7 17 11"/></svg>
-            Redo
-          </button>
-        </div>
-
-        {refineError && (
-          <div className="rounded-lg bg-red-50 border border-red-200 p-2 text-xs text-red-700">{refineError}</div>
-        )}
-
-        {refineHistory.length > 0 && (
-          <div className="pt-1 space-y-1 border-t border-[#f0ede7]">
-            <p className="text-[10px] font-medium uppercase tracking-widest text-[#b0a89f] pt-1">Recent</p>
-            {refineHistory.slice(0, 3).map((h, i) => (
-              <div key={i} className="text-xs text-[#9aaba4] truncate">↳ {h.instruction}</div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ── Main EditorPanel ──────────────────────────────────────────────────────────
 
 export default function EditorPanel() {
   const { activeSection, setActiveSection, fields } = useDraft();
-  const [localTab, setLocalTab] = useState<LocalTab>(activeSection);
-
-  // Sync localTab → context when the user selects a real section tab
-  const localTabRef = useRef(localTab);
-  localTabRef.current = localTab;
-  useEffect(() => {
-    if (localTab !== "ai") setActiveSection(localTab as EditorSection);
-  }, [localTab, setActiveSection]);
-
-  // Sync context → localTab when the preview sends a section click (only if not on AI tab)
-  useEffect(() => {
-    if (localTabRef.current !== "ai" && activeSection !== localTabRef.current) {
-      setLocalTab(activeSection);
-    }
-  }, [activeSection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!fields) return null;
 
-  const sectionComponent = localTab === "ai" ? null : ({
+  // The tab and the section are now the same thing. They used to be kept
+  // apart because the AI was a tab as well, and opening it had to leave the
+  // section underneath alone; the AI lives under the preview now, so there is
+  // nothing left to hold apart.
+  const sectionComponent = ({
     subject: <SubjectSection />,
     hero: <HeroSection />,
     story: <StorySection />,
     images: <ImagesSection />,
     cta: <CtaSection />,
-  } as Record<EditorSection, React.ReactNode>)[localTab as EditorSection];
-
-  const allTabs = [...SECTION_TABS, AI_TAB];
+  } as Record<EditorSection, React.ReactNode>)[activeSection];
 
   return (
     <div className="h-full flex flex-col bg-[#faf9f6] border-r border-[#e8e3dc]">
       {/* Tab bar */}
       <div className="flex border-b border-[#e8e3dc] bg-white shrink-0">
-        {allTabs.map((tab) => (
+        {SECTION_TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setLocalTab(tab.id as LocalTab)}
+            onClick={() => setActiveSection(tab.id)}
             className={[
               "flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-semibold uppercase tracking-wider transition-colors",
-              localTab === tab.id
-                ? tab.id === "ai"
-                  ? "text-[#1F4538] border-b-2 border-[#1F4538] bg-[#f0f5f2]"
-                  : "text-[#1F4538] border-b-2 border-[#1F4538]"
+              activeSection === tab.id
+                ? "text-[#1F4538] border-b-2 border-[#1F4538]"
                 : "text-[#9aaba4] hover:text-[#5a6b63]",
             ].join(" ")}
           >
@@ -188,16 +79,8 @@ export default function EditorPanel() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        {localTab === "ai" ? (
-          <div className="p-4 space-y-3">
-            <RefinePanel />
-          </div>
-        ) : (
-          <div className="p-5">
-            {sectionComponent}
-          </div>
-        )}
+      <div className="eb-scroll flex-1 overflow-y-auto">
+        <div className="p-5">{sectionComponent}</div>
       </div>
 
     </div>

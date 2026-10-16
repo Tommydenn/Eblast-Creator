@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDraft } from "@/context/DraftContext";
 import { FormatToolbar } from "@/components/drafter/RichEditor";
+import { AiBar } from "@/components/drafter/AiBar";
 import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
 import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
@@ -513,6 +514,10 @@ export default function EditorLayout() {
               </div>
             )}
           </div>
+
+          {/* The AI, under the email rather than in the sidebar, so asking for
+              a change no longer hides the fields the change is about. */}
+          <AiBar />
         </div>
       </div>
 

@@ -31,6 +31,16 @@ const FOLDER_TABS: Array<{ folder: DraftFolder; always: boolean }> = [
   { folder: "deleted", always: true },
 ];
 
+/** What an empty folder means, which differs enough to be worth saying. */
+const EMPTY_FOLDER: Record<DraftFolder, string> = {
+  pending: "Nothing waiting. Eblasts the schedule writes from your Planner tasks turn up here.",
+  "in-progress": "Nothing on the go. Start one with New eblast, or open something from Pending.",
+  waiting: "Nothing with a salesperson right now.",
+  done: "Nothing has gone to HubSpot yet.",
+  archived: "Nothing archived. Anything you put here is kept until you remove it.",
+  deleted: "Nothing deleted.",
+};
+
 /** Where a number means there is something to do. */
 const COUNTED = new Set<DraftFolder>(["pending", "in-progress", "waiting"]);
 
@@ -48,6 +58,7 @@ interface DraftMeta {
   folder?: DraftFolder;
   status?: DraftStatus;
   archivedAt?: string | null;
+  approvalSentAt?: string | null;
   isNewFormat: boolean;
   /** True when the daily Planner pass created this draft rather than a person. */
   fromPlanner?: boolean;
@@ -122,6 +133,64 @@ interface StuckTask {
   kind: "missing_community" | "waiting_on_flyer" | "other";
 }
 
+/**
+ * The one line under the subject that says where this eblast stands.
+ *
+ * Which fact matters depends entirely on the folder. A deadline is the whole
+ * point while an eblast is still being written and means nothing once it has
+ * gone to HubSpot — a card in Done saying "send by" reads as work outstanding
+ * when there is none. So each folder gets the date that answers the question
+ * someone is actually asking there, and only that one.
+ */
+function contextLine(draft: DraftMeta): { text: string; tone: string } | null {
+  const day = (d: string) =>
+    new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const daysSince = (d: string) => {
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    return Math.floor((midnight.getTime() - new Date(d).getTime()) / 86400000);
+  };
+  const ago = (d: string) => {
+    const n = daysSince(d);
+    return n <= 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
+  };
+
+  switch (draft.folder) {
+    case "done":
+      // It is in HubSpot. When, and who put it there.
+      if (draft.approvedAt) return { text: `Approved ${day(draft.approvedAt)}`, tone: "text-[#2d6a4f]" };
+      if (draft.pushedAt) return { text: `Pushed ${day(draft.pushedAt)}`, tone: "text-[#2563eb]" };
+      return null;
+
+    case "waiting":
+      if (draft.status === "changes-requested") return { text: "Changes requested", tone: "text-[#b3312c]" };
+      if (draft.status === "approval-expired") return { text: "Approval link expired", tone: "text-[#8a6d3b]" };
+      if (draft.approvalSentAt) return { text: `Sent for approval ${ago(draft.approvalSentAt)}`, tone: "text-[#8a6d3b]" };
+      return { text: "Sent for approval", tone: "text-[#8a6d3b]" };
+
+    case "archived":
+      return draft.archivedAt ? { text: `Archived ${day(draft.archivedAt)}`, tone: "text-[#7a8c85]" } : null;
+
+    // Still to go out, so the deadline is the fact that matters. A deadline
+    // already behind us almost always means a task was un-ticked by accident,
+    // and the date on its own looks like any other date.
+    default: {
+      if (!draft.dueAt) return null;
+      const late = daysSince(draft.dueAt);
+      const when = new Date(draft.dueAt).toLocaleDateString(undefined, {
+        weekday: "short", month: "short", day: "numeric",
+      });
+      if (late > 0) {
+        return {
+          text: `Was due ${when}, ${late === 1 ? "1 day" : `${late} days`} ago — check this is still wanted`,
+          tone: "text-[#b3312c]",
+        };
+      }
+      return { text: `Send by ${when}`, tone: "text-[#8a6d3b]" };
+    }
+  }
+}
+
 function DraftCard({
   draft,
   accentColor,
@@ -138,6 +207,7 @@ function DraftCard({
   onDelete: () => void;
 }) {
   const isLegacy = !draft.isNewFormat;
+  const context = contextLine(draft);
   // Exact save timestamp — e.g. "7/9/2026, 9:45 AM" — not a relative "2d ago"
   // bucket, since the precise moment matters for telling similarly-named
   // drafts apart.
@@ -162,42 +232,25 @@ function DraftCard({
       <div className="w-1 shrink-0" style={{ backgroundColor: isLegacy ? "#ddd8d0" : accentColor }} />
 
       <div className="flex-1 min-w-0 p-4">
-        {/* Community + date row */}
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4] truncate">
-            {draft.communityName}
-          </p>
-          <p className="text-[10px] text-[#b0a89f] shrink-0">{relTime}</p>
-        </div>
-
-        {draft.dueAt && (() => {
-          // A deadline already behind us. Almost always a task that was
-          // un-ticked by accident and drafted again, so the eblast either went
-          // out weeks ago or is no longer wanted. Said in red and in words,
-          // because the date alone looks the same as any other.
-          const due = new Date(draft.dueAt);
-          const midnight = new Date();
-          midnight.setHours(0, 0, 0, 0);
-          const daysLate = Math.floor((midnight.getTime() - due.getTime()) / 86400000);
-          const overdue = daysLate > 0;
-          return (
-            <p className={`mb-1.5 text-[10px] font-semibold ${overdue ? "text-[#b3312c]" : "text-[#8a6d3b]"}`}>
-              Send by{" "}
-              {due.toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
-              {overdue && (
-                <span> &mdash; {daysLate === 1 ? "1 day" : `${daysLate} days`} ago, check this is still wanted</span>
-              )}
-            </p>
-          );
-        })()}
-
-        {/* Subject */}
-        <p className={`text-sm font-medium leading-snug line-clamp-2 ${isLegacy ? "text-[#7a8c85]" : "text-[#1a1a1a]"}`}>
+        {/* The subject first and on its own, because that is what anyone is
+            scanning for. Everything else used to come before it in smaller,
+            fainter type, which made four grey things to read past. */}
+        <p
+          className={`text-sm font-medium leading-snug line-clamp-2 ${isLegacy ? "text-[#7a8c85]" : "text-[#1a1a1a]"}`}
+          title={`Last saved ${relTime}`}
+        >
           {draft.subject || "(no subject)"}
+        </p>
+
+        {/* Who it is for, and the one date that matters where this card is. */}
+        <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[#9aaba4] min-w-0">
+          <span className="truncate">{draft.communityName}</span>
+          {context && (
+            <>
+              <span className="text-[#ddd8d0] shrink-0">&middot;</span>
+              <span className={`${context.tone} font-medium`}>{context.text}</span>
+            </>
+          )}
         </p>
 
         {/* Footer row */}
@@ -213,7 +266,7 @@ function DraftCard({
                 {draft.imageCount}
               </span>
             )}
-            <StatusPill draft={draft} />
+            {draft.folder !== "done" && draft.folder !== "waiting" && <StatusPill draft={draft} />}
             {isLegacy && (
               <span className="text-[10px] text-[#b0a89f] italic">Outdated</span>
             )}
@@ -770,25 +823,16 @@ function SavedDraftsView({
     );
   }
 
-  if (drafts.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-[#ddd8d0] px-8 py-20 text-center">
-        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#f0ede7] mb-4">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9aaba4" strokeWidth="1.8">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14,2 14,8 20,8"/>
-          </svg>
-        </div>
-        <p className="text-sm font-medium text-[#5a6b63]">No saved drafts yet</p>
-        <p className="mt-1.5 text-xs text-[#9aaba4]">Generate an eblast and click "Save draft" to find it here.</p>
-      </div>
-    );
-  }
+  // An empty folder used to return early, which took Run now and the
+  // needs-attention list with it — so the moment Pending emptied there was no
+  // way left to fill it. The empty state is part of the page now, not instead
+  // of it.
+  const isEmpty = drafts.length === 0;
 
   return (
     <div className="space-y-4">
       {/* Search + community dropdown */}
-      <div className="flex items-center gap-3">
+      <div className={`flex items-center gap-3 ${isEmpty ? "hidden" : ""}`}>
         <div className="relative flex-1">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9aaba4] pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -836,11 +880,7 @@ function SavedDraftsView({
       {/* Cards grid */}
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[#ddd8d0] py-12 text-center">
-          <p className="text-sm text-[#9aaba4]">
-            {view === "pending"
-              ? "Nothing waiting. Drafts made from your Planner tasks show up here."
-              : "No drafts match your search."}
-          </p>
+          <p className="text-sm text-[#9aaba4]">{isEmpty ? EMPTY_FOLDER[folder] : "No drafts match your search."}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1266,30 +1306,31 @@ export default function GenerateView() {
             </div>
           </div>
 
-          {/* Resume banner */}
-          {resumeDraft && (
-            <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-[#c8d8d0] bg-[#f0f5f2] px-5 py-3.5">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-[#1F4538]">Resume where you left off</p>
-                <p className="text-sm text-[#3d5249] truncate mt-0.5">
-                  {resumeDraft.communityName} · <span className="text-[#5a6b63]">{resumeDraft.subject || "(no subject)"}</span>
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => setResumeDraft(null)}
-                  className="text-xs text-[#9aaba4] hover:text-[#5a6b63] transition-colors"
-                >
-                  Dismiss
-                </button>
-                <button
-                  onClick={handleResume}
-                  disabled={isResuming}
-                  className="text-xs font-semibold text-white bg-[#1F4538] hover:bg-[#173829] rounded-lg px-4 py-1.5 transition-colors disabled:opacity-50"
-                >
-                  {isResuming ? "Opening…" : "Resume Draft →"}
-                </button>
-              </div>
+          {/* The last draft you had open, offered where you would otherwise
+              start a new one. It used to be a banner above every tab, which
+              put a prompt to go back to one draft on top of a list of all of
+              them. One quiet line, on the tab where starting something is
+              the alternative. */}
+          {resumeDraft && tab === "new" && (
+            <div className="mb-6 flex items-center justify-center gap-2 text-xs">
+              <span className="text-[#9aaba4]">Last open:</span>
+              <button
+                onClick={handleResume}
+                disabled={isResuming}
+                className="min-w-0 max-w-md truncate font-medium text-[#1F4538] hover:underline underline-offset-2 disabled:opacity-50"
+              >
+                {resumeDraft.subject || "(no subject)"}
+                <span className="text-[#7a8c85] font-normal"> · {resumeDraft.communityName}</span>
+              </button>
+              <button
+                onClick={() => setResumeDraft(null)}
+                title="Hide this"
+                className="shrink-0 text-[#c9c0b8] hover:text-[#5a6b63] transition-colors"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
           )}
 

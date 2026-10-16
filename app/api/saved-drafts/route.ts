@@ -157,6 +157,8 @@ export async function GET(req: NextRequest) {
         pendingApproval: pendingIds.has(meta.id),
         changesRequested,
         approvalExpired,
+        /** When the approval email went out, for "sent for approval 3 days ago". */
+        approvalSentAt: realRequest ? latest!.sentAt : null,
         folder: folderFor(state),
         status: statusFor(state),
         fromPlanner: !!task,

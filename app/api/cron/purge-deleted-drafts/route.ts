@@ -19,14 +19,6 @@ import { savedDrafts, pendingFlyers } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
 import { PURGE_AFTER_DAYS } from "@/lib/draft-folders";
 
-/**
- * Replacements from this date onward retire the eblast they replace.
- *
- * The backlog that existed when the rule arrived is left where it is. Clearing
- * it is a separate, deliberate act — see the note on the retire query below.
- */
-const RETIRE_FROM = new Date("2026-10-16T00:00:00Z");
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -48,12 +40,9 @@ export async function GET(req: NextRequest) {
     // The newest one per community stays wherever it is. Everything older
     // goes to Deleted, where it is recoverable for a week.
     //
-    // Only replacements made since RETIRE_FROM count. When this rule arrived
-    // there were 107 finished eblasts across 28 communities, and retiring
-    // every superseded one would have moved 79 of them to Deleted on the
-    // first night. That may well be wanted, but it is a decision to make
-    // deliberately rather than something a tidy-up does on its own the first
-    // time it runs. From here on it keeps pace, one at a time.
+    // The backlog this rule inherited — 79 superseded eblasts across 28
+    // communities — was cleared by hand once it was agreed, so from here this
+    // only ever has one or two to retire on any given night.
     const retired = await db.execute(sql`
       update saved_drafts d
       set deleted_at = now()
@@ -67,7 +56,6 @@ export async function GET(req: NextRequest) {
             and newer.deleted_at is null
             and (newer.pushed_at is not null or newer.approved_at is not null)
             and coalesce(newer.approved_at, newer.pushed_at) > coalesce(d.approved_at, d.pushed_at)
-            and coalesce(newer.approved_at, newer.pushed_at) >= ${RETIRE_FROM}
         )
       returning d.id
     `);

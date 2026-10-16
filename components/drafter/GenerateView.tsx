@@ -219,6 +219,7 @@ function DraftCard({
   isDeleting,
   onOpen,
   onDelete,
+  onArchive,
 }: {
   draft: DraftMeta;
   accentColor: string;
@@ -226,7 +227,9 @@ function DraftCard({
   isDeleting: boolean;
   onOpen: () => void;
   onDelete: () => void;
+  onArchive: () => void;
 }) {
+  const archived = !!draft.archivedAt;
   const isLegacy = !draft.isNewFormat;
   const context = contextLine(draft);
   // Falls back to the save time for anything saved before opens were
@@ -330,10 +333,29 @@ function DraftCard({
                 {isOpening ? "Opening…" : "Open"}
               </button>
             )}
+            {/* Archived is the one folder nothing clears on its own, so this
+                is how an eblast is kept past the week. Same button both ways. */}
+            <button
+              onClick={(e) => { e.stopPropagation(); onArchive(); }}
+              disabled={isDeleting || isOpening}
+              title={archived ? "Take out of Archived" : "Keep this one — move to Archived"}
+              className={[
+                "p-1 rounded-lg transition-all disabled:opacity-30",
+                archived
+                  ? "text-[#1F4538] hover:bg-[#f0f5f2]"
+                  : "text-[#c9c0b8] hover:text-[#1F4538] hover:bg-[#f0f5f2] opacity-0 group-hover:opacity-100",
+              ].join(" ")}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <rect x="3" y="4" width="18" height="4" rx="1" />
+                <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+                <line x1="10" y1="12" x2="14" y2="12" strokeLinecap="round" />
+              </svg>
+            </button>
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(); }}
               disabled={isDeleting || isOpening}
-              title="Delete"
+              title="Move to Deleted"
               className="p-1 rounded-lg text-[#c9c0b8] hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-30"
             >
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -604,9 +626,7 @@ function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onClear
               </div>
             ))}
           </div>
-          <p className="mt-2.5 text-[11px] text-[#9a8582]">
-            Add the community on the Communities page and it&rsquo;ll be drafted on the next run.
-          </p>
+          <p className="mt-2.5 text-[11px] text-[#9a8582]">Add the community and it drafts on the next run.</p>
         </div>
       )}
 
@@ -629,9 +649,7 @@ function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onClear
           <ul className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-5">
             {waiting.map((t) => row(t, { text: "text-[#5a6b63]", meta: "text-[#b0a89f]", hover: "text-[#b0a89f] hover:text-[#5a6b63] hover:bg-[#f0ede7]" }))}
           </ul>
-          <p className="mt-2.5 text-[11px] text-[#9aaba4]">
-            Nothing to do &mdash; each is checked again daily and drafted once a flyer is attached to the task.
-          </p>
+          <p className="mt-2.5 text-[11px] text-[#9aaba4]">Nothing to do &mdash; each drafts once a flyer is attached.</p>
         </div>
       )}
     </div>
@@ -695,9 +713,7 @@ function RedraftPendingButton({ count, onDone }: { count: number; onDone: () => 
           <p className="text-xs text-[#9a3a34]">
             Move all {count} pending draft{count === 1 ? "" : "s"} to Deleted and write them again from their flyers?
           </p>
-          <p className="mt-1 text-[11px] text-[#9a8582]">
-            Nothing approved or pushed is touched. The old ones stay in Deleted, so this can be undone.
-          </p>
+          <p className="mt-1 text-[11px] text-[#9a8582]">The old ones stay in Deleted.</p>
           <div className="mt-2.5 flex gap-2">
             <button
               onClick={run}
@@ -750,6 +766,24 @@ function SavedDraftsView({
   const [search, setSearch] = useState("");
   const [filterSlug, setFilterSlug] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<DraftMeta | null>(null);
+
+  // Archiving is reversible and moves nothing out of reach, so it just
+  // happens — the card leaves the folder, which is the confirmation.
+  const toggleArchive = useCallback(
+    async (d: DraftMeta) => {
+      const archived = !d.archivedAt;
+      const res = await fetch(`/api/saved-drafts/${encodeURIComponent(d.id)}/archive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived }),
+      }).catch(() => null);
+      if (res?.ok) {
+        setDrafts((prev) => prev.filter((x) => x.id !== d.id));
+        onCountsChanged?.();
+      }
+    },
+    [onCountsChanged],
+  );
   const [needsAttention, setNeedsAttention] = useState<StuckTask[]>([]);
 
   const router = useRouter();
@@ -928,6 +962,7 @@ function SavedDraftsView({
               isDeleting={deletingId === d.id}
               onOpen={() => openDraft(d.id)}
               onDelete={() => setConfirmDelete(d)}
+              onArchive={() => toggleArchive(d)}
             />
           ))}
         </div>
@@ -943,7 +978,7 @@ function SavedDraftsView({
                 message={
                   <>Move <span className="font-semibold">{confirmDelete.subject || "this draft"}</span> to Deleted?</>
                 }
-                footerNote="It stays in Deleted for a week, where you can put it back. After that it is gone for good."
+                footerNote="Kept for a week."
                 confirmLabel="Move to Deleted"
                 onConfirm={() => {
                   const id = confirmDelete.id;
@@ -1065,6 +1100,25 @@ function DeletedDraftsView() {
     }
   }, []);
 
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const [emptying, setEmptying] = useState(false);
+
+  const emptyBin = useCallback(async () => {
+    setEmptying(true);
+    try {
+      const res = await fetch("/api/saved-drafts/purge-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({ ok: false }));
+      if (data.ok) setDrafts([]);
+    } finally {
+      setEmptying(false);
+      setConfirmEmpty(false);
+    }
+  }, []);
+
   const purgeForever = useCallback(async (id: string) => {
     setBusyId(id);
     try {
@@ -1113,16 +1167,24 @@ function DeletedDraftsView() {
           </svg>
         </div>
         <p className="text-sm font-medium text-[#5a6b63]">Nothing in Deleted Drafts</p>
-        <p className="mt-1.5 text-xs text-[#9aaba4]">Deleted drafts stay here for a week. After that they are gone for good, along with their flyer and photos.</p>
+        <p className="mt-1.5 text-xs text-[#9aaba4]">Kept for a week, then gone for good.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-[#9aaba4]">
-        {drafts.length} {drafts.length === 1 ? "draft" : "drafts"} — each is gone for good a week after it was deleted.
-      </p>
+      <div className="flex items-baseline gap-3">
+        <p className="text-xs text-[#9aaba4]">
+          {drafts.length} {drafts.length === 1 ? "draft" : "drafts"}, each gone for good a week after it was deleted.
+        </p>
+        <button
+          onClick={() => setConfirmEmpty(true)}
+          className="ml-auto text-xs font-medium text-[#b08a86] hover:text-[#b3312c] transition-colors"
+        >
+          Empty now
+        </button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {drafts.map((d) => (
           <DeletedDraftCard
@@ -1136,6 +1198,26 @@ function DeletedDraftsView() {
         ))}
       </div>
 
+      {confirmEmpty && (
+        <>
+          <div className="fixed inset-0 z-30 bg-black/20" onClick={() => setConfirmEmpty(false)} />
+          <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto">
+              <DeleteConfirmPopover
+                label="everything in Deleted"
+                message={
+                  <>Delete all {drafts.length} permanently?</>
+                }
+                confirmLabel={emptying ? "Deleting…" : "Delete all"}
+                footerNote="Archived drafts are left alone."
+                onConfirm={emptyBin}
+                onCancel={() => setConfirmEmpty(false)}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
       {confirmPurge && (
         <>
           <div className="fixed inset-0 z-30 bg-black/20" onClick={() => setConfirmPurge(null)} />
@@ -1147,7 +1229,7 @@ function DeletedDraftsView() {
                   <>Permanently delete <span className="font-semibold">{confirmPurge.subject || "this draft"}</span>?</>
                 }
                 confirmLabel="Delete permanently"
-                footerNote="This cannot be undone. The draft, its flyer and its photos are removed now rather than at the end of the week."
+                footerNote="This cannot be undone."
                 onConfirm={() => {
                   const id = confirmPurge.id;
                   setConfirmPurge(null);
@@ -1283,7 +1365,7 @@ export default function GenerateView() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-semibold text-[#1F4538] tracking-tight">Eblast Drafter</h1>
             <p className="mt-2 text-[#5a6b63] text-sm">
-              Create a new draft from a flyer PDF, pasted event details, or both — or continue editing a saved one.
+              From a flyer PDF, pasted event details, or both.
             </p>
           </div>
 

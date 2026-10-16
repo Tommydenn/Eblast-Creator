@@ -345,7 +345,13 @@ const GUTTER = 8;
 function resizeIframe(iframe: HTMLIFrameElement) {
   const doc = iframe.contentDocument;
   if (!doc?.body) return;
-  const h = doc.documentElement.scrollHeight || doc.body.scrollHeight;
+  // Measured from the body, not documentElement. documentElement.scrollHeight
+  // is never less than the iframe is tall, so once the frame had been sized
+  // it could only ever report that size back — the height ratcheted up and
+  // never came down, leaving blank page below a short eblast and keeping the
+  // room a long one had needed after switching away from it. The body is a
+  // plain block with no height of its own, so it measures its contents.
+  const h = doc.body.scrollHeight || doc.documentElement.scrollHeight;
   if (h > 0) iframe.style.height = h + "px";
 
   const container = iframe.parentElement;

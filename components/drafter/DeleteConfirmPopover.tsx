@@ -6,7 +6,13 @@ interface Props {
   label: string;
   /** Defaults to `Remove {label} from this eblast?` (the preview hover-delete copy). */
   message?: ReactNode;
-  /** Defaults to "You can bring it back anytime from the sidebar." */
+  /**
+   * Only worth setting when the answer is not already on screen.
+   *
+   * A confirm whose button says "Move to Deleted" has already said where the
+   * draft is going; a line underneath repeating it is one more thing to read
+   * before the same click. Left unset, nothing is shown.
+   */
   footerNote?: string;
   confirmLabel?: string;
   onConfirm: () => void;
@@ -48,7 +54,7 @@ export function DeleteConfirmPopover({ label, message, footerNote, confirmLabel,
           Cancel
         </button>
       </div>
-      <p className="mt-2 text-[10px] text-[#9aaba4]">{footerNote ?? "You can bring it back anytime from the sidebar."}</p>
+      {footerNote && <p className="mt-2 text-[10px] text-[#9aaba4]">{footerNote}</p>}
     </div>
   );
 }

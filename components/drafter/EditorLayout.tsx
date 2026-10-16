@@ -532,7 +532,7 @@ export default function EditorLayout() {
             <DeleteConfirmPopover
               label="colors"
               message={<>Put every color back to <span className="font-semibold">{community?.displayName ?? "this community"}</span>&rsquo;s own?</>}
-              footerNote="Section, button and text colors. Bold, italic, size and alignment are left alone."
+              footerNote="Colors only — bold, italic and size stay."
               confirmLabel="Reset"
               onConfirm={() => { resetColors(); setResetColorsOpen(false); }}
               onCancel={() => setResetColorsOpen(false)}

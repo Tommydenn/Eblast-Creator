@@ -38,11 +38,25 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         isTest: a.isTest,
       }),
     );
+    // Opening a draft is what moves it out of Pending: the schedule wrote
+    // it, and now somebody has looked. Stamped once and never again, so the
+    // folder reflects the first time it was picked up rather than the last.
+    // Not awaited — the draft is already loaded and this changes nothing the
+    // caller is waiting for.
+    if (!rows[0].openedAt) {
+      db.update(savedDrafts)
+        .set({ openedAt: new Date() })
+        .where(eq(savedDrafts.id, id))
+        .catch(() => null);
+    }
+
     return NextResponse.json({
       ok: true,
       draft: rows[0].data,
       approvedAt: rows[0].approvedAt,
       pushedAt: rows[0].pushedAt,
+      openedAt: rows[0].openedAt,
+      archivedAt: rows[0].archivedAt,
       pendingApproval,
     });
   } catch (err) {

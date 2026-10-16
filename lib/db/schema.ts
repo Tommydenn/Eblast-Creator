@@ -302,6 +302,22 @@ export const savedDrafts = pgTable("saved_drafts", {
    */
   hubspotEmailId: text("hubspot_email_id"),
   /**
+   * First time this draft was opened in the editor.
+   *
+   * What separates a draft the schedule wrote and nobody has looked at from
+   * one being worked on. A draft made by hand has this set when it is made,
+   * since somebody was there to make it.
+   */
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  /**
+   * Set when somebody puts this draft in Archived.
+   *
+   * Archived is the one folder nothing moves a draft out of on its own: not
+   * the tidy-up that keeps only the newest eblast per community, and not the
+   * purge. Putting a draft there is a decision to keep it.
+   */
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  /**
    * Soft-delete marker. Set when the user deletes a draft from the Saved
    * Drafts list — the row (and its data/images/approval history) stays
    * intact and recoverable via the Deleted Drafts view until the daily

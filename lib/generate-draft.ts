@@ -33,7 +33,7 @@ import {
 } from "@/lib/eblast-defaults";
 import { db } from "@/lib/db";
 import { savedDrafts } from "@/lib/db/schema";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 
 /**
  * The colours this community's last eblast was left in.
@@ -60,10 +60,20 @@ export async function colorsFromLastEblast(
   draft: ExtractedFlyer,
 ): Promise<Partial<ExtractedFlyer>> {
   try {
+    // The last eblast this community actually sent, not merely the last one
+    // written. A colour is carried forward because somebody chose it and kept
+    // it; a draft still being worked on has not been kept yet, and a pending
+    // one sitting above it would otherwise hide the real answer.
     const [previous] = await db
       .select({ data: savedDrafts.data })
       .from(savedDrafts)
-      .where(and(eq(savedDrafts.communitySlug, communitySlug), isNull(savedDrafts.deletedAt)))
+      .where(
+        and(
+          eq(savedDrafts.communitySlug, communitySlug),
+          isNull(savedDrafts.deletedAt),
+          or(isNotNull(savedDrafts.pushedAt), isNotNull(savedDrafts.approvedAt)),
+        ),
+      )
       .orderBy(desc(savedDrafts.savedAt))
       .limit(1);
     if (!previous) return {};

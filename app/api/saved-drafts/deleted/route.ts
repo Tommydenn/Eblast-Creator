@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { savedDrafts } from "@/lib/db/schema";
 import { desc, isNotNull } from "drizzle-orm";
+import { PURGE_AFTER_DAYS } from "@/lib/draft-folders";
 
 // Always fetch fresh from the DB — without this, Next tries to statically
 // prerender this route at build time and errors on the dynamic DB call
 // (harmless, but noisy in build logs).
 export const dynamic = "force-dynamic";
 
-const PURGE_AFTER_DAYS = 30;
+
 
 // GET /api/saved-drafts/deleted — the trash view. Same slim meta shape as the
 // normal saved-drafts list, plus deletedAt and the computed purgeAt date the

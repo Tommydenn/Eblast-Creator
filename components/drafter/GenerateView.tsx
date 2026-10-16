@@ -6,8 +6,33 @@ import { useDraft, type SavedDraft } from "@/context/DraftContext";
 import { CommunityIntelligence } from "@/components/CommunityIntelligence";
 import { Header } from "@/components/Header";
 import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
+import {
+  FOLDER_LABELS,
+  STATUS_LABELS,
+  type DraftFolder,
+  type DraftStatus,
+} from "@/lib/draft-folders";
 
 // ─── Saved Drafts ─────────────────────────────────────────────────────────────
+
+/**
+ * The tabs, in pipeline order, then the two places things are kept.
+ *
+ * "always" means the tab is shown even when empty, because its absence would
+ * be confusing rather than tidy — there is always somewhere to look for
+ * finished work and always a bin.
+ */
+const FOLDER_TABS: Array<{ folder: DraftFolder; always: boolean }> = [
+  { folder: "pending", always: true },
+  { folder: "in-progress", always: true },
+  { folder: "waiting", always: false },
+  { folder: "done", always: true },
+  { folder: "archived", always: false },
+  { folder: "deleted", always: true },
+];
+
+/** Where a number means there is something to do. */
+const COUNTED = new Set<DraftFolder>(["pending", "in-progress", "waiting"]);
 
 interface DraftMeta {
   id: string;
@@ -19,6 +44,10 @@ interface DraftMeta {
   approvedAt: string | null;
   pushedAt: string | null;
   pendingApproval: boolean;
+  /** Where it sits, and what it is doing there — both worked out server-side. */
+  folder?: DraftFolder;
+  status?: DraftStatus;
+  archivedAt?: string | null;
   isNewFormat: boolean;
   /** True when the daily Planner pass created this draft rather than a person. */
   fromPlanner?: boolean;
@@ -29,6 +58,59 @@ interface DraftMeta {
   /** The flyer it was generated from was kept and can be opened alongside it. */
   hasFlyer?: boolean;
   flyerName?: string | null;
+}
+
+/**
+ * What has happened to this eblast, in one phrase.
+ *
+ * The words are fixed and mean one thing each. Pushed is it was put into
+ * HubSpot from here. Approved is a salesperson put it into HubSpot by
+ * clicking their link — the same outcome, named for who did it. Sent for
+ * approval is the only place the word sent appears, and it refers to the
+ * email asking them to look, never to the eblast reaching anybody.
+ *
+ * Nothing says published. Whether HubSpot has actually mailed it out is not
+ * something the app acts on, and a badge that was a day behind the truth
+ * would be worse than no badge at all.
+ */
+function StatusPill({ draft }: { draft: DraftMeta }) {
+  const status: DraftStatus | null =
+    draft.status ??
+    (draft.approvedAt ? "approved" : draft.pushedAt ? "pushed" : draft.pendingApproval ? "sent-for-approval" : null);
+  if (!status || status === "pending" || status === "in-progress") return null;
+
+  const look: Record<string, { className: string; icon: React.ReactNode }> = {
+    approved: {
+      className: "text-[#2d6a4f]",
+      icon: <polyline points="20,6 9,17 4,12" strokeLinecap="round" strokeLinejoin="round" />,
+    },
+    pushed: {
+      className: "text-[#2563eb]",
+      icon: <path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />,
+    },
+    "sent-for-approval": {
+      className: "text-amber-700",
+      icon: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round" /></>,
+    },
+    "changes-requested": {
+      className: "text-[#b3312c]",
+      icon: <><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></>,
+    },
+    "approval-expired": {
+      className: "text-[#8a6d3b]",
+      icon: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5" strokeLinecap="round" /><path d="M12 16v.01" strokeLinecap="round" /></>,
+    },
+  };
+  const { className, icon } = look[status];
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${className}`}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        {icon}
+      </svg>
+      {STATUS_LABELS[status]}
+    </span>
+  );
 }
 
 /** A Planner task the schedule looked at but couldn't draft, and why. */
@@ -131,30 +213,7 @@ function DraftCard({
                 {draft.imageCount}
               </span>
             )}
-            {draft.approvedAt && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#2d6a4f]">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="20,6 9,17 4,12" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Approved
-              </span>
-            )}
-            {draft.pushedAt && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#2563eb]">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Pushed
-              </span>
-            )}
-            {draft.pendingApproval && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Pending Approval
-              </span>
-            )}
+            <StatusPill draft={draft} />
             {isLegacy && (
               <span className="text-[10px] text-[#b0a89f] italic">Outdated</span>
             )}
@@ -584,7 +643,16 @@ function RedraftPendingButton({ count, onDone }: { count: number; onDone: () => 
   );
 }
 
-function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
+function SavedDraftsView({
+  folder,
+  onCountsChanged,
+}: {
+  folder: DraftFolder;
+  onCountsChanged?: () => void;
+}) {
+  // The old name, kept because the ordering and empty-state copy below still
+  // read in terms of it.
+  const view = folder;
   const { loadSavedDraft, communities } = useDraft();
   const [drafts, setDrafts] = useState<DraftMeta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -603,7 +671,7 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/saved-drafts?view=${view}`)
+    fetch(`/api/saved-drafts?folder=${folder}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) {
@@ -642,7 +710,7 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
     setDeletingId(id);
     try {
       // Soft-delete (default, no ?permanent param) — moves it to Deleted
-      // Drafts, recoverable there for 30 days.
+      // Drafts, recoverable there for a week.
       const res = await fetch(`/api/saved-drafts/${encodeURIComponent(id)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({ ok: false }));
       if (data.ok) setDrafts((prev) => prev.filter((d) => d.id !== id));
@@ -798,9 +866,10 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
               <DeleteConfirmPopover
                 label={confirmDelete.subject || "this draft"}
                 message={
-                  <>Delete <span className="font-semibold">{confirmDelete.subject || "this draft"}</span>?</>
+                  <>Move <span className="font-semibold">{confirmDelete.subject || "this draft"}</span> to Deleted?</>
                 }
-                footerNote="It'll move to Deleted Drafts, recoverable there for 30 days before it's permanently deleted."
+                footerNote="It stays in Deleted for a week, where you can put it back. After that it is gone for good."
+                confirmLabel="Move to Deleted"
                 onConfirm={() => {
                   const id = confirmDelete.id;
                   setConfirmDelete(null);
@@ -816,7 +885,7 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
   );
 }
 
-// ─── Deleted Drafts (trash, 30-day recovery) ──────────────────────────────────
+// ─── Deleted Drafts (the bin, a week to change your mind) ────────────────────
 
 interface DeletedDraftMeta extends DraftMeta {
   deletedAt: string;
@@ -969,7 +1038,7 @@ function DeletedDraftsView() {
           </svg>
         </div>
         <p className="text-sm font-medium text-[#5a6b63]">Nothing in Deleted Drafts</p>
-        <p className="mt-1.5 text-xs text-[#9aaba4]">Deleted drafts stay here for 30 days before being permanently removed.</p>
+        <p className="mt-1.5 text-xs text-[#9aaba4]">Deleted drafts stay here for a week. After that they are gone for good, along with their flyer and photos.</p>
       </div>
     );
   }
@@ -977,7 +1046,7 @@ function DeletedDraftsView() {
   return (
     <div className="space-y-4">
       <p className="text-xs text-[#9aaba4]">
-        {drafts.length} {drafts.length === 1 ? "draft" : "drafts"} — each is permanently deleted 30 days after being removed.
+        {drafts.length} {drafts.length === 1 ? "draft" : "drafts"} — each is gone for good a week after it was deleted.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {drafts.map((d) => (
@@ -1002,8 +1071,8 @@ function DeletedDraftsView() {
                 message={
                   <>Permanently delete <span className="font-semibold">{confirmPurge.subject || "this draft"}</span>?</>
                 }
-                confirmLabel="Delete Forever"
-                footerNote="This cannot be undone — it will not go through the 30-day recovery period."
+                confirmLabel="Delete permanently"
+                footerNote="This cannot be undone. The draft, its flyer and its photos are removed now rather than at the end of the week."
                 onConfirm={() => {
                   const id = confirmPurge.id;
                   setConfirmPurge(null);
@@ -1048,7 +1117,17 @@ export default function GenerateView() {
   const [notes, setNotes] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const router = useRouter();
-  const [tab, setTab] = useState<"new" | "pending" | "drafts" | "deleted">("new");
+  const [tab, setTab] = useState<"new" | DraftFolder>("new");
+  // Every folder's size, so a tab can show what is in it and stay out of the
+  // way when it is empty. Refreshed whenever a folder view reloads.
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const refreshCounts = useCallback(() => {
+    fetch("/api/saved-drafts")
+      .then((r) => r.json())
+      .then((d) => { if (d.ok && d.counts) setCounts(d.counts); })
+      .catch(() => null);
+  }, []);
+  useEffect(() => { refreshCounts(); }, [refreshCounts, tab]);
   const [resumeDraft, setResumeDraft] = useState<ResumeDraft | null>(null);
   const [isResuming, setIsResuming] = useState(false);
 
@@ -1133,44 +1212,58 @@ export default function GenerateView() {
             </p>
           </div>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-1 bg-[#f0ede7] rounded-xl p-1 mb-8 w-fit mx-auto">
+          {/* Making a new eblast is an action, not a place, so it is a button.
+              What is left reads as one thing: where the eblasts are.
+
+              Waiting and Archived appear only when they hold something. Most
+              days there is nothing waiting on a salesperson and nothing has
+              been archived, and a tab for an empty folder is one more thing
+              to read past. Counts go on the three that mean there is work. */}
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
             <button
               onClick={() => setTab("new")}
               className={[
-                "px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                tab === "new" ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
+                "rounded-lg px-4 py-2 text-sm font-semibold transition-colors flex items-center gap-1.5",
+                tab === "new"
+                  ? "bg-[#1F4538] text-white"
+                  : "bg-[#1F4538] text-white hover:bg-[#173829]",
               ].join(" ")}
             >
-              New Draft
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              New eblast
             </button>
-            <button
-              onClick={() => setTab("pending")}
-              className={[
-                "px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                tab === "pending" ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
-              ].join(" ")}
-            >
-              Pending Drafts
-            </button>
-            <button
-              onClick={() => setTab("drafts")}
-              className={[
-                "px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                tab === "drafts" ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
-              ].join(" ")}
-            >
-              Saved Drafts
-            </button>
-            <button
-              onClick={() => setTab("deleted")}
-              className={[
-                "px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                tab === "deleted" ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
-              ].join(" ")}
-            >
-              Deleted Drafts
-            </button>
+
+            <div className="flex items-center gap-1 bg-[#f0ede7] rounded-xl p-1">
+              {FOLDER_TABS.map(({ folder, always }) => {
+                const n = counts[folder] ?? 0;
+                if (!always && n === 0 && tab !== folder) return null;
+                const divider = folder === "archived" || (folder === "deleted" && (counts.archived ?? 0) === 0);
+                return (
+                  <React.Fragment key={folder}>
+                    {divider && <span className="w-px h-5 bg-[#ddd8d0] mx-1" aria-hidden />}
+                    <button
+                      onClick={() => setTab(folder)}
+                      className={[
+                        "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-1.5",
+                        tab === folder ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#3d5249]",
+                      ].join(" ")}
+                    >
+                      {FOLDER_LABELS[folder]}
+                      {COUNTED.has(folder) && n > 0 && (
+                        <span className={[
+                          "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+                          tab === folder ? "bg-[#1F4538] text-white" : "bg-[#ddd8d0] text-[#5a6b63]",
+                        ].join(" ")}>
+                          {n}
+                        </span>
+                      )}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
 
           {/* Resume banner */}
@@ -1377,12 +1470,10 @@ export default function GenerateView() {
                 </div>
               </div>
             </div>
-          ) : tab === "pending" ? (
-            <SavedDraftsView view="pending" />
-          ) : tab === "drafts" ? (
-            <SavedDraftsView view="saved" />
-          ) : (
+          ) : tab === "deleted" ? (
             <DeletedDraftsView />
+          ) : (
+            <SavedDraftsView folder={tab} onCountsChanged={refreshCounts} />
           )}
         </div>
       </div>

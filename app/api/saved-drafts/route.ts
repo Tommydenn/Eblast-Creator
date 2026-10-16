@@ -3,6 +3,14 @@ import { db } from "@/lib/db";
 import { savedDrafts, savedDraftApprovals, plannerTasks, draftFlyers } from "@/lib/db/schema";
 import { eq, desc, inArray, isNull, isNotNull, and } from "drizzle-orm";
 import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
+import { isApprovalExpired } from "@/lib/approval-expiry";
+import {
+  DRAFT_FOLDERS,
+  folderFor,
+  statusFor,
+  isDraftFolder,
+  type DraftFolder,
+} from "@/lib/draft-folders";
 
 // GET /api/saved-drafts?communitySlug=X  — filter by community (omit for all)
 // Only returns non-deleted drafts — see /api/saved-drafts/deleted for the trash view.
@@ -19,7 +27,15 @@ import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval
  */
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("communitySlug");
-  const view = req.nextUrl.searchParams.get("view");
+  // "folder" is the current name. "view" is what the editor used to send,
+  // and pending/saved still mean something, so both are understood.
+  const asked = req.nextUrl.searchParams.get("folder") ?? req.nextUrl.searchParams.get("view");
+  const folder: DraftFolder | null = isDraftFolder(asked)
+    ? asked
+    : asked === "saved"
+      ? "done"
+      : null;
+  const view = asked;
   try {
     const query = db
       .select({
@@ -31,6 +47,8 @@ export async function GET(req: NextRequest) {
         imageCount: savedDrafts.imageCount,
         approvedAt: savedDrafts.approvedAt,
         pushedAt: savedDrafts.pushedAt,
+        openedAt: savedDrafts.openedAt,
+        archivedAt: savedDrafts.archivedAt,
         data: savedDrafts.data,
       })
       .from(savedDrafts)
@@ -103,12 +121,44 @@ export async function GET(req: NextRequest) {
       : [];
     const flyerByDraft = new Map(flyerRows.map((f) => [f.draftId, f.fileName]));
 
+    // The newest approval request per draft, which is what decides whether a
+    // draft is waiting on somebody and what it is waiting for.
+    const newestApproval = new Map<string, { decision: string; sentAt: Date | string; isTest: boolean }>();
+    for (const a of allApprovals) {
+      if (newestByDraft.get(a.savedDraftId) === a.token) {
+        newestApproval.set(a.savedDraftId, { decision: a.decision, sentAt: a.sentAt, isTest: !!a.isTest });
+      }
+    }
+
     let rows = rawRows.map(({ data, ...meta }) => {
       const task = taskByDraft.get(meta.id);
+      const latest = newestApproval.get(meta.id);
+      const settled = !!meta.pushedAt || !!meta.approvedAt;
+      // A test request is clickable but never counted, so it never puts a
+      // draft in Waiting either.
+      const realRequest = latest && !latest.isTest;
+      const changesRequested = !settled && realRequest && latest.decision === "edits_requested";
+      const approvalExpired =
+        !settled && realRequest && latest.decision === "pending" && isApprovalExpired(latest.sentAt);
+      const state = {
+        fromPlanner: !!task,
+        openedAt: meta.openedAt,
+        pushedAt: meta.pushedAt,
+        approvedAt: meta.approvedAt,
+        archivedAt: meta.archivedAt,
+        deletedAt: null,
+        awaitingApproval: pendingIds.has(meta.id),
+        changesRequested,
+        approvalExpired,
+      };
       return {
         ...meta,
         isNewFormat: !!(data as any)?.fields,
         pendingApproval: pendingIds.has(meta.id),
+        changesRequested,
+        approvalExpired,
+        folder: folderFor(state),
+        status: statusFor(state),
         fromPlanner: !!task,
         taskTitle: task?.taskTitle ?? null,
         dueAt: task?.dueAt ?? null,
@@ -118,6 +168,14 @@ export async function GET(req: NextRequest) {
         flyerName: flyerByDraft.get(meta.id) ?? null,
       };
     });
+
+    // Every folder's size, worked out before the list is narrowed to one, so
+    // the tabs can show counts and hide themselves when they have nothing.
+    const counts: Record<string, number> = {};
+    for (const f of DRAFT_FOLDERS) counts[f] = 0;
+    for (const r of rows) counts[r.folder] = (counts[r.folder] ?? 0) + 1;
+
+    if (folder) rows = rows.filter((r) => r.folder === folder);
 
     const awaitingAction = (r: (typeof rows)[number]) => r.fromPlanner && !r.pushedAt && !r.approvedAt;
     if (view === "pending") {
@@ -131,8 +189,6 @@ export async function GET(req: NextRequest) {
       byPriority.sort((a, b) => String(a.assigneePriority).localeCompare(String(b.assigneePriority)));
       rest.sort((a, b) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
       rows = [...byPriority, ...rest];
-    } else if (view === "saved") {
-      rows = rows.filter((r) => !awaitingAction(r));
     }
 
     // Tasks the schedule looked at and couldn't draft. These only ever
@@ -147,7 +203,7 @@ export async function GET(req: NextRequest) {
       reason: string;
       kind: "missing_community" | "waiting_on_flyer" | "other";
     }> = [];
-    if (view === "pending") {
+    if (folder === "pending") {
       const stuck = await db
         .select({
           taskId: plannerTasks.taskId,
@@ -179,7 +235,7 @@ export async function GET(req: NextRequest) {
         });
     }
 
-    return NextResponse.json({ ok: true, drafts: rows, needsAttention });
+    return NextResponse.json({ ok: true, drafts: rows, needsAttention, counts });
   } catch (err) {
     console.error("[saved-drafts GET]", err);
     return NextResponse.json({ ok: false, error: "Database error" }, { status: 500 });

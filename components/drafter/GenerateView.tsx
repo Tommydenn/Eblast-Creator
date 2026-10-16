@@ -59,6 +59,8 @@ interface DraftMeta {
   status?: DraftStatus;
   archivedAt?: string | null;
   approvalSentAt?: string | null;
+  /** Most recent time it was opened, which is not the same as last saved. */
+  lastOpenedAt?: string | null;
   isNewFormat: boolean;
   /** True when the daily Planner pass created this draft rather than a person. */
   fromPlanner?: boolean;
@@ -131,6 +133,25 @@ interface StuckTask {
   dueAt: string | null;
   reason: string;
   kind: "missing_community" | "waiting_on_flyer" | "other";
+}
+
+/**
+ * How long ago, in as few words as it takes.
+ *
+ * Rough on purpose. The exact moment is in the card's tooltip for telling two
+ * similar drafts apart; here the only question is whether this is the one you
+ * were just in, and "2h" answers that faster than a timestamp does.
+ */
+function shortAgo(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /**
@@ -208,6 +229,12 @@ function DraftCard({
 }) {
   const isLegacy = !draft.isNewFormat;
   const context = contextLine(draft);
+  // Falls back to the save time for anything saved before opens were
+  // recorded, which is the nearest thing those drafts have.
+  const openedIso = draft.lastOpenedAt ?? draft.savedAt;
+  const lastOpen = openedIso
+    ? { ago: shortAgo(openedIso), exact: new Date(openedIso).toLocaleString() }
+    : null;
   // Exact save timestamp — e.g. "7/9/2026, 9:45 AM" — not a relative "2d ago"
   // bucket, since the precise moment matters for telling similarly-named
   // drafts apart.
@@ -242,14 +269,22 @@ function DraftCard({
           {draft.subject || "(no subject)"}
         </p>
 
-        {/* Who it is for, and the one date that matters where this card is. */}
+        {/* Who it is for, the one date that matters where this card is, and
+            when it was last open. The last of those sits at the far right on
+            its own, so it reads as a note about the card rather than another
+            thing competing with the subject. */}
         <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[#9aaba4] min-w-0">
           <span className="truncate">{draft.communityName}</span>
           {context && (
             <>
               <span className="text-[#ddd8d0] shrink-0">&middot;</span>
-              <span className={`${context.tone} font-medium`}>{context.text}</span>
+              <span className={`${context.tone} font-medium shrink-0`}>{context.text}</span>
             </>
+          )}
+          {lastOpen && (
+            <span className="ml-auto shrink-0 text-[#b0a89f]" title={`Last opened ${lastOpen.exact}`}>
+              Opened {lastOpen.ago}
+            </span>
           )}
         </p>
 

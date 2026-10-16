@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
         approvedAt: savedDrafts.approvedAt,
         pushedAt: savedDrafts.pushedAt,
         openedAt: savedDrafts.openedAt,
+        lastOpenedAt: savedDrafts.lastOpenedAt,
         archivedAt: savedDrafts.archivedAt,
         data: savedDrafts.data,
       })
@@ -178,6 +179,17 @@ export async function GET(req: NextRequest) {
     for (const r of rows) counts[r.folder] = (counts[r.folder] ?? 0) + 1;
 
     if (folder) rows = rows.filter((r) => r.folder === folder);
+
+    // What you were last working on, first. Everywhere else the save time is
+    // the right order; here it is not, because opening a draft to read it
+    // changes nothing and still means you were just in it.
+    if (folder === "in-progress") {
+      rows.sort(
+        (a, b) =>
+          new Date(b.lastOpenedAt ?? b.savedAt).getTime() -
+          new Date(a.lastOpenedAt ?? a.savedAt).getTime(),
+      );
+    }
 
     const awaitingAction = (r: (typeof rows)[number]) => r.fromPlanner && !r.pushedAt && !r.approvedAt;
     if (view === "pending") {

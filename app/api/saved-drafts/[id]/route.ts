@@ -43,12 +43,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     // folder reflects the first time it was picked up rather than the last.
     // Not awaited — the draft is already loaded and this changes nothing the
     // caller is waiting for.
-    if (!rows[0].openedAt) {
-      db.update(savedDrafts)
-        .set({ openedAt: new Date() })
-        .where(eq(savedDrafts.id, id))
-        .catch(() => null);
-    }
+    db.update(savedDrafts)
+      .set({
+        lastOpenedAt: new Date(),
+        // Only the first open moves a draft out of Pending, so this one is
+        // left alone once it is set.
+        ...(rows[0].openedAt ? {} : { openedAt: new Date() }),
+      })
+      .where(eq(savedDrafts.id, id))
+      .catch(() => null);
 
     return NextResponse.json({
       ok: true,
@@ -56,6 +59,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       approvedAt: rows[0].approvedAt,
       pushedAt: rows[0].pushedAt,
       openedAt: rows[0].openedAt,
+      lastOpenedAt: rows[0].lastOpenedAt,
       archivedAt: rows[0].archivedAt,
       pendingApproval,
     });

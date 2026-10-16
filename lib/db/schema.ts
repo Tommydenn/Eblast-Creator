@@ -310,6 +310,15 @@ export const savedDrafts = pgTable("saved_drafts", {
    */
   openedAt: timestamp("opened_at", { withTimezone: true }),
   /**
+   * Most recent time this draft was opened, as opposed to the first.
+   *
+   * openedAt above is stamped once and never again, because it decides
+   * whether a draft has left Pending. This one moves every time, and is what
+   * answers "what was I last working on" — including opening something to
+   * look at it without changing anything, which no save time would catch.
+   */
+  lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }),
+  /**
    * Set when somebody puts this draft in Archived.
    *
    * Archived is the one folder nothing moves a draft out of on its own: not

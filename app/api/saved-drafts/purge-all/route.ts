@@ -1,18 +1,16 @@
 /**
  * Empty the bin now, rather than waiting out the week.
  *
- * Only touches drafts already in Deleted. Archived ones are skipped even if
- * they were deleted first: putting a draft there is a decision to keep it,
- * and this is the one place that decision would otherwise be overridden by a
- * single click.
+ * Everything in Deleted, and nothing else — archiving a draft takes it out of
+ * Deleted, so there is no overlap to worry about.
  *
  * This is a hard delete. The drafts go, and so do their flyers, their photos
- * and their approval records, which is what the confirmation says.
+ * and their approval records.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { savedDrafts } from "@/lib/db/schema";
-import { and, isNotNull, isNull } from "drizzle-orm";
+import { isNotNull } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +24,7 @@ export async function POST(req: NextRequest) {
     body = {};
   }
 
-  const inTheBin = and(isNotNull(savedDrafts.deletedAt), isNull(savedDrafts.archivedAt));
+  const inTheBin = isNotNull(savedDrafts.deletedAt);
 
   try {
     if (body.dryRun) {

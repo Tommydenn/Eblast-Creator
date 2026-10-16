@@ -1209,7 +1209,7 @@ function DeletedDraftsView() {
                   <>Delete all {drafts.length} permanently?</>
                 }
                 confirmLabel={emptying ? "Deleting…" : "Delete all"}
-                footerNote="Archived drafts are left alone."
+                footerNote={undefined}
                 onConfirm={emptyBin}
                 onCancel={() => setConfirmEmpty(false)}
               />
@@ -1392,37 +1392,6 @@ export default function GenerateView() {
               New eblast
             </button>
 
-            {/* The other way in, next to the one it is an alternative to.
-                It was a banner above every tab, then a line of text floating
-                over the list, which read as a leftover rather than a control.
-                Shaped like a button, beside the button it belongs with. */}
-            {resumeDraft && (
-              <div className="flex items-center rounded-lg border border-[#ddd8d0] bg-white pl-1 pr-0.5 py-0.5 max-w-xs">
-                <button
-                  onClick={handleResume}
-                  disabled={isResuming}
-                  title={`${resumeDraft.subject || "(no subject)"} — ${resumeDraft.communityName}`}
-                  className="min-w-0 flex items-center gap-1.5 px-2 py-1 rounded text-sm text-[#5a6b63] hover:text-[#1F4538] transition-colors disabled:opacity-50"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
-                    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><polyline points="3 3 3 8 8 8" />
-                  </svg>
-                  <span className="truncate font-medium">
-                    {isResuming ? "Opening…" : resumeDraft.subject || "(no subject)"}
-                  </span>
-                </button>
-                <button
-                  onClick={() => setResumeDraft(null)}
-                  title="Hide this"
-                  className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-[#c9c0b8] hover:text-[#5a6b63] hover:bg-[#f5f3ef] transition-colors"
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-            )}
-
             <div className="flex items-center gap-1 bg-[#f0ede7] rounded-xl p-1">
               {FOLDER_TABS.map(({ folder, always }) => {
                 const n = counts[folder] ?? 0;
@@ -1604,6 +1573,42 @@ export default function GenerateView() {
                 {generateError && (
                   <div className="mt-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
                     {generateError}
+                  </div>
+                )}
+
+                {/* Inside the card, under the thing it is the alternative to.
+                    Three placements failed because it was a lone element
+                    belonging to no group — a banner over the page, then text
+                    floating above the list, then a button in the tab row. Here
+                    it is part of something: the last row of the panel whose
+                    job is "start an eblast". */}
+                {resumeDraft && (
+                  <div className="mt-6 pt-4 border-t border-[#f0ede7] flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4]">
+                        Or pick up where you left off
+                      </p>
+                      <p className="mt-0.5 text-sm text-[#3d5249] truncate">
+                        {resumeDraft.subject || "(no subject)"}
+                        <span className="text-[#9aaba4]"> · {resumeDraft.communityName}</span>
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleResume}
+                      disabled={isResuming}
+                      className="shrink-0 rounded-lg border border-[#1F4538]/30 text-[#1F4538] text-xs font-semibold px-3 py-1.5 hover:bg-[#1F4538] hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {isResuming ? "Opening…" : "Open"}
+                    </button>
+                    <button
+                      onClick={() => setResumeDraft(null)}
+                      title="Hide this"
+                      className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-[#c9c0b8] hover:text-[#5a6b63] hover:bg-[#f5f3ef] transition-colors"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
                   </div>
                 )}
               </div>

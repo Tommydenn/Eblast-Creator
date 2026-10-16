@@ -64,7 +64,6 @@ export async function GET(req: NextRequest) {
       .delete(savedDrafts)
       .where(
         sql`${savedDrafts.deletedAt} is not null
-            and ${savedDrafts.archivedAt} is null
             and ${savedDrafts.deletedAt} < now() - interval '${sql.raw(String(PURGE_AFTER_DAYS))} days'`,
       )
       .returning({ id: savedDrafts.id });

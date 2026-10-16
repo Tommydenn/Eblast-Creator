@@ -477,6 +477,99 @@ function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onClear
   );
 }
 
+/**
+ * Throw away every pending draft and let the automation write them again.
+ *
+ * For when the drafter has improved since these were made. Deleting them in
+ * the list would not be enough: each one's Planner task still points at it, so
+ * the next run counts it as done, and the task is still marked In progress, so
+ * it is not a candidate either. This does all three.
+ *
+ * The drafts go to Deleted rather than being destroyed, so this is undoable
+ * for as long as they sit there.
+ */
+function RedraftPendingButton({ count, onDone }: { count: number; onDone: () => void }) {
+  const [asking, setAsking] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await fetch("/api/planner/redraft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!d.ok) {
+        setResult(d.error ?? "Could not redraft");
+      } else {
+        const stuck = (d.failedToUnmark ?? []).length;
+        setResult(
+          stuck > 0
+            ? `Moved ${d.deleted} to Deleted. ${stuck} task${stuck === 1 ? "" : "s"} could not be set back to Not started in Planner — do those by hand, then press Run now.`
+            : `Moved ${d.deleted} to Deleted and put their tasks back to Not started. Press Run now to write them again.`,
+        );
+        setAsking(false);
+        onDone();
+      }
+    } catch (e: any) {
+      setResult(e?.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-4">
+      {result && (
+        <div className="mb-2 rounded-xl border border-[#d8e3dc] bg-[#f3f8f5] px-4 py-2.5 text-xs text-[#1F4538]">
+          {result}
+        </div>
+      )}
+      {asking ? (
+        <div className="rounded-xl border border-[#f0d5d5] bg-[#fdf6f6] px-4 py-3">
+          <p className="text-xs text-[#9a3a34]">
+            Move all {count} pending draft{count === 1 ? "" : "s"} to Deleted and write them again from their flyers?
+          </p>
+          <p className="mt-1 text-[11px] text-[#9a8582]">
+            Nothing approved or pushed is touched. The old ones stay in Deleted, so this can be undone.
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            <button
+              onClick={run}
+              disabled={busy}
+              className="rounded-lg bg-[#b3312c] text-white text-xs font-semibold px-3 py-1.5 hover:bg-[#96271f] transition-colors disabled:opacity-40"
+            >
+              {busy ? "Working…" : "Redraft them"}
+            </button>
+            <button
+              onClick={() => setAsking(false)}
+              disabled={busy}
+              className="rounded-lg border border-[#ddd8d0] text-[#5a6b63] text-xs font-medium px-3 py-1.5 hover:bg-[#f5f3ef] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAsking(true)}
+          className="text-xs font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1.5"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+            <path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+          </svg>
+          Redraft all {count} pending
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
   const { loadSavedDraft, communities } = useDraft();
   const [drafts, setDrafts] = useState<DraftMeta[]>([]);
@@ -653,6 +746,10 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
       {view === "pending" && <PlannerControls onFinished={reload} />}
 
       {needsAttention.length > 0 && <NeedsAttentionPanel tasks={needsAttention} onCleared={reload} />}
+
+      {view === "pending" && drafts.length > 0 && (
+        <RedraftPendingButton count={drafts.length} onDone={reload} />
+      )}
 
       {/* Cards grid */}
       {filtered.length === 0 ? (

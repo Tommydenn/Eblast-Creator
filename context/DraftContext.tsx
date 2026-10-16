@@ -27,6 +27,11 @@ import {
   type ImageRow,
 } from "@/lib/image-bank";
 import { canCropInBrowser, cropInBrowser, downscaleInBrowser } from "@/lib/crop-image-client";
+import {
+  SECTION_COLOR_FIELDS,
+  COLORABLE_TEXT_FIELDS,
+  withoutTextColor,
+} from "@/lib/eblast-defaults";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 
 // ─── Chunked PDF upload ───────────────────────────────────────────────────────
@@ -330,6 +335,8 @@ export interface DraftContextValue {
   /** A save or send is holding until the photos are in. */
   waitingForImages: boolean;
   addToImageBank: (url: string) => void;
+  /** Put every colour back to the community's own — sections, buttons and text. */
+  resetColors: () => void;
   dismissPushResult: () => void;
   /** Resolves with the copy's id, so the caller can navigate to it. */
   makeCopy: () => Promise<string | null>;
@@ -784,6 +791,37 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
       }
       return { ...prev, [slot]: { ...prev[slot], url: croppedUrl, originalUrl } };
     });
+  }, [requestCopyPrompt]);
+
+/**
+   * Put every colour in the eblast back to the community's own.
+   *
+   * Section and button colours are cleared, which makes the renderer fall back
+   * to the brand's; text colours are taken off the words, leaving whatever
+   * else was done to them — bold, italic, size, alignment — alone, since
+   * someone asking for the colours back has not asked to lose the rest.
+   *
+   * This is also the way out of a colour carried forward from the community's
+   * last eblast that is not wanted on this one.
+   */
+  const resetColors = useCallback(() => {
+    if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
+    setFields_((prev) => {
+      if (!prev) return prev;
+      const next: Record<string, unknown> = { ...prev };
+      for (const key of SECTION_COLOR_FIELDS) delete next[key];
+      for (const key of COLORABLE_TEXT_FIELDS) {
+        const value = next[key];
+        if (key === "bodyParagraphs") {
+          if (Array.isArray(value)) next[key] = (value as string[]).map((p) => withoutTextColor(p));
+          continue;
+        }
+        if (typeof value === "string") next[key] = withoutTextColor(value);
+      }
+      return next as unknown as ExtractedFlyer;
+    });
+    setIsSaved(false);
+    setLastEditTimestamp(Date.now());
   }, [requestCopyPrompt]);
 
   const addToImageBank = useCallback((url: string) => {
@@ -1636,6 +1674,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     swapSubjectLine,
     buildHtml,
     addToImageBank,
+    resetColors,
     dismissPushResult,
     makeCopy,
     cancelCopyPrompt,

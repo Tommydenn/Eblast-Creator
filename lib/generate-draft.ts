@@ -25,6 +25,92 @@ import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render
 import type { Community } from "@/lib/db/queries";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { withParagraphSpacing } from "@/lib/extracted-flyer";
+import {
+  SECTION_COLOR_FIELDS,
+  COLORABLE_TEXT_FIELDS,
+  singleTextColor,
+  withTextColor,
+} from "@/lib/eblast-defaults";
+import { db } from "@/lib/db";
+import { savedDrafts } from "@/lib/db/schema";
+import { and, desc, eq, isNull } from "drizzle-orm";
+
+/**
+ * The colours this community's last eblast was left in.
+ *
+ * Colour is a standing choice, not a per-send one: a community that had its
+ * hero turned burgundy wants the next one burgundy too, and redoing it every
+ * time is the work this saves. Scoped to the exact community — The Glenn
+ * Hopkins and The Glenn West St Paul share a brand and nothing else, so one
+ * never inherits from the other.
+ *
+ * Section and button colours carry as they are. A text colour carries only
+ * where the whole field wears one: a line with a word picked out in another
+ * colour has no single colour to carry, and one with any uncoloured text is
+ * partly the template's own, so both start again from the default.
+ *
+ * Nothing here is allowed to fail a draft. A community with no previous eblast
+ * — or a lookup that goes wrong — simply starts from the brand's defaults.
+ *
+ * Exported so scripts/check-color-inheritance.ts can run it against the drafts
+ * actually on file, rather than against a mock of them.
+ */
+export async function colorsFromLastEblast(
+  communitySlug: string,
+  draft: ExtractedFlyer,
+): Promise<Partial<ExtractedFlyer>> {
+  try {
+    const [previous] = await db
+      .select({ data: savedDrafts.data })
+      .from(savedDrafts)
+      .where(and(eq(savedDrafts.communitySlug, communitySlug), isNull(savedDrafts.deletedAt)))
+      .orderBy(desc(savedDrafts.savedAt))
+      .limit(1);
+    if (!previous) return {};
+
+    const raw = typeof previous.data === "string" ? JSON.parse(previous.data) : previous.data;
+    const fields = (raw?.fields ?? {}) as Record<string, unknown>;
+    const carried: Record<string, unknown> = {};
+
+    for (const key of SECTION_COLOR_FIELDS) {
+      const value = fields[key];
+      if (typeof value === "string" && value.trim()) carried[key] = value;
+    }
+
+    for (const key of COLORABLE_TEXT_FIELDS) {
+      const previousValue = fields[key];
+      // The body is paragraphs, and carries a colour only when every one of
+      // them is written in the same single colour.
+      if (key === "bodyParagraphs") {
+        const paragraphs = Array.isArray(previousValue) ? (previousValue as string[]) : null;
+        if (!paragraphs?.length) continue;
+        const written = paragraphs.filter((p) => stripHtmlText(p) !== "");
+        if (!written.length) continue;
+        const colors = written.map((p) => singleTextColor(p));
+        if (colors.some((c) => c === null) || new Set(colors).size !== 1) continue;
+        const next = draft.bodyParagraphs ?? [];
+        if (!next.length) continue;
+        carried[key] = next.map((p) => (stripHtmlText(p) === "" ? p : withTextColor(p, colors[0]!)));
+        continue;
+      }
+      if (typeof previousValue !== "string") continue;
+      const color = singleTextColor(previousValue);
+      if (!color) continue;
+      const next = (draft as unknown as Record<string, unknown>)[key];
+      if (typeof next !== "string" || !stripHtmlText(next)) continue;
+      carried[key] = withTextColor(next, color);
+    }
+
+    return carried as Partial<ExtractedFlyer>;
+  } catch {
+    return {};
+  }
+}
+
+/** The readable text of a field, for telling an empty one from a written one. */
+function stripHtmlText(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim();
+}
 
 export interface GeneratedDraft {
   extracted: ExtractedFlyer;
@@ -128,9 +214,15 @@ export async function generateDraft(opts: {
     throw new Error(message);
   }
 
-  const extracted: ExtractedFlyer = {
+  const withSpacing: ExtractedFlyer = {
     ...loop.finalDraft,
     bodyParagraphs: withParagraphSpacing(loop.finalDraft.bodyParagraphs ?? []),
+  };
+  // Picked up last, over a draft that is otherwise finished, so a colour
+  // carried forward can only ever change a colour.
+  const extracted: ExtractedFlyer = {
+    ...withSpacing,
+    ...(await colorsFromLastEblast(community.slug, withSpacing)),
   };
   // Shrink first, then crop from the shrunk copy.
   //

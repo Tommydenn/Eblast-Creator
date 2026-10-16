@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDraft } from "@/context/DraftContext";
 import { FormatToolbar } from "@/components/drafter/RichEditor";
+import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
 import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
 import ApprovalModal from "./ApprovalModal";
@@ -258,7 +259,7 @@ export default function EditorLayout() {
   const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
   const {
     isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, activeFieldNameRef, community,
-    lockInfo, copyPromptOpen, isMakingCopy, makeCopy, cancelCopyPrompt, draftId,
+    lockInfo, copyPromptOpen, isMakingCopy, makeCopy, cancelCopyPrompt, draftId, resetColors,
   } = useDraft();
 
   // The flyer this draft was written from, for checking the copy against.
@@ -272,6 +273,7 @@ export default function EditorLayout() {
   const flyerRef = useRef<HTMLDivElement>(null);
   const [flyerWidth, setFlyerWidth] = useState<number | null>(null);
   const [resizing, setResizing] = useState(false);
+  const [resetColorsOpen, setResetColorsOpen] = useState(false);
   const FLYER_MIN = 360;
   // What the preview keeps for itself no matter how far the handle is dragged.
   const PREVIEW_MIN = 280;
@@ -430,6 +432,18 @@ export default function EditorLayout() {
               Live Preview
             </span>
             <div className="flex items-center gap-4">
+            <button
+              onClick={() => setResetColorsOpen(true)}
+              title="Put every colour back to this community's own"
+              className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="13.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="14" r="2.5" />
+                <circle cx="8.5" cy="7.5" r="2.5" /><circle cx="6.5" cy="12.5" r="2.5" />
+                <path d="M12 2a10 10 0 0 0 0 20c.9 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16a6 6 0 0 0 6-6c0-5-4.5-9-10-9z" />
+              </svg>
+              Reset colors
+            </button>
             {hasFlyer && (
               <button
                 onClick={() => setFlyerOpen((o) => !o)}
@@ -503,6 +517,24 @@ export default function EditorLayout() {
       </div>
 
       {resizing && <div className="fixed inset-0 z-50 cursor-col-resize select-none" />}
+
+      {/* Asked before, not undone after: it reaches the whole eblast, and the
+          colours it clears were chosen one at a time. */}
+      {resetColorsOpen && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setResetColorsOpen(false)} />
+          <div className="fixed top-24 right-6 z-50">
+            <DeleteConfirmPopover
+              label="colors"
+              message={<>Put every color back to <span className="font-semibold">{community?.displayName ?? "this community"}</span>&rsquo;s own?</>}
+              footerNote="Section, button and text colors. Bold, italic, size and alignment are left alone."
+              confirmLabel="Reset"
+              onConfirm={() => { resetColors(); setResetColorsOpen(false); }}
+              onCancel={() => setResetColorsOpen(false)}
+            />
+          </div>
+        </>
+      )}
 
       {approvalOpen && <ApprovalModal mode={approvalMode} onClose={() => setApprovalOpen(false)} />}
 

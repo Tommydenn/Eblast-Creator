@@ -18,6 +18,11 @@ import fs from "node:fs";
 import { buildEblastHtml } from "@/lib/render-email";
 import {
   FIELD_FONT_SIZES,
+  SECTION_COLOR_FIELDS,
+  COLORABLE_TEXT_FIELDS,
+  singleTextColor,
+  withoutTextColor,
+  withTextColor,
   communityAddressLine,
   defaultGalleryLabel,
   defaultFooterName,
@@ -132,7 +137,54 @@ if (communityAddressLine(community).includes(community.displayName)
   fail("the default address line still carries the community name");
 }
 
-// ── 3. No sidebar field has grown a second copy of a default ───────────────
+// ── 3. Every colourable section is one the email actually draws ───────────
+for (const field of SECTION_COLOR_FIELDS) {
+  if (!html.includes(`data-bgfield="${field}"`)) {
+    fail(`${field} can be coloured in the editor but the email has no section tagged with it`);
+  }
+}
+// And the other way: nothing the email offers is missing from the list, or it
+// could be coloured by clicking the preview and never reset or carried forward.
+for (const tagged of html.matchAll(/data-bgfield="([^"]+)"/g)) {
+  if (!(SECTION_COLOR_FIELDS as readonly string[]).includes(tagged[1])) {
+    fail(`the email tags ${tagged[1]} as colourable but it is not in SECTION_COLOR_FIELDS`);
+  }
+}
+
+// ── 4. A colour carries forward only when the whole field wears it ────────
+const COLOR_CASES: Array<[string, string | null]> = [
+  ["plain text", null],
+  ['<span style="color: #ff0000">all of it</span>', "#ff0000"],
+  ['<span style="color: #ff0000">part</span> and plain', null],
+  ['<span style="color: #ff0000">one</span><span style="color: #00ff00">two</span>', null],
+  ['<span style="font-weight: 700">bold, no colour</span>', null],
+  ['<span style="color: #ff0000; font-weight: 700">both</span>', "#ff0000"],
+];
+for (const [html_, want] of COLOR_CASES) {
+  const got = singleTextColor(html_);
+  if (got !== want) fail(`singleTextColor(${JSON.stringify(html_)}) gave ${got}, expected ${want}`);
+  // Whatever it reports, stripping must leave nothing for it to find.
+  if (singleTextColor(withoutTextColor(html_)) !== null) {
+    fail(`a colour survived withoutTextColor on ${JSON.stringify(html_)}`);
+  }
+}
+// Stripping must leave the words, and everything else done to them, alone.
+const formatted = '<span style="color: #ff0000; font-weight: 700; font-size: 22px">Keep me</span>';
+const stripped = withoutTextColor(formatted);
+if (!stripped.includes("Keep me")) fail("withoutTextColor lost the text");
+if (!stripped.includes("font-weight: 700") || !stripped.includes("font-size: 22px")) {
+  fail("withoutTextColor took off more than the colour");
+}
+// And a colour put on must be one that reads back.
+if (singleTextColor(withTextColor("words", "#123456")) !== "#123456") {
+  fail("a colour carried onto a field does not read back as that colour");
+}
+// The body is colourable too, and is the one field that is not a string.
+if (!COLORABLE_TEXT_FIELDS.includes("bodyParagraphs")) {
+  fail("bodyParagraphs is missing from COLORABLE_TEXT_FIELDS");
+}
+
+// ── 5. No sidebar field has grown a second copy of a default ───────────────
 const SIDEBAR_COPIES: Array<[string, RegExp, string]> = [
   ["components/drafter/sections/HeroSection.tsx", /displayName.*address\?\.street/s, "builds its own address line"],
   ["components/drafter/sections/StorySection.tsx", /`A Look Around \$\{/, "hardcodes the gallery label"],
@@ -140,6 +192,7 @@ const SIDEBAR_COPIES: Array<[string, RegExp, string]> = [
   ["components/drafter/sections/CtaSection.tsx", /\?\?\s*"Thank You!"/, "hardcodes the thank-you text"],
   ["components/drafter/sections/CtaSection.tsx", /\?\?\s*community\?\.displayName/, "hardcodes the footer signature"],
   ["components/drafter/RichEditor.tsx", /const FIELD_FONT_SIZES/, "keeps its own font-size table"],
+  ["components/drafter/PreviewPanel.tsx", /type BgFieldKey =\s*\n?\s*\|/, "keeps its own list of colourable sections"],
 ];
 for (const [file, pattern, what] of SIDEBAR_COPIES) {
   if (pattern.test(fs.readFileSync(file, "utf8"))) {
@@ -154,4 +207,8 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log(`\nSidebar and preview agree: ${Object.keys(FIELD_FONT_SIZES).length} field sizes, ${Object.keys(expected).length} text defaults, ${SIDEBAR_COPIES.length} duplicate-copy guards.`);
+console.log(
+  `\nSidebar and preview agree: ${Object.keys(FIELD_FONT_SIZES).length} field sizes, ` +
+  `${Object.keys(expected).length} text defaults, ${SECTION_COLOR_FIELDS.length} colourable sections, ` +
+  `${COLOR_CASES.length} colour-carrying cases, ${SIDEBAR_COPIES.length} duplicate-copy guards.`,
+);

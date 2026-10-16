@@ -89,6 +89,101 @@ export const FIELD_FONT_SIZES = {
   footerSenderEmail: 18,
 };
 
+/**
+ * Every section and button whose colour someone can set on a draft.
+ *
+ * The editor's colour picker, the reset, and the carry-forward from a
+ * community's last eblast all work from this one list, so a colour added here
+ * is picked up by all three rather than by whichever was remembered.
+ */
+export const SECTION_COLOR_FIELDS = [
+  "headerBgColor",
+  "heroBgColor",
+  "finalCtaBgColor",
+  "footerBgColor",
+  "storyBgColor",
+  "secondaryImageBgColor",
+  "galleryLabelBgColor",
+  "galleryBgColor",
+  "ctaButtonBgColor",
+  "finalCtaButtonBgColor",
+  "footerButtonBgColor",
+] as const;
+
+export type SectionColorField = (typeof SECTION_COLOR_FIELDS)[number];
+
+/**
+ * The text fields whose colour someone can set. Every field the toolbar knows
+ * a size for is one, plus the body, which is paragraphs rather than a line.
+ */
+export const COLORABLE_TEXT_FIELDS: string[] = [
+  ...Object.keys(FIELD_FONT_SIZES),
+  "bodyParagraphs",
+];
+
+/**
+ * The one colour a field is written in, or null if it is not written in one.
+ *
+ * Carrying a colour forward only makes sense when the whole field wears it. A
+ * line with one word picked out in another colour has no single colour to
+ * carry, and a field with any uncoloured text is partly the template's default
+ * — in both cases the honest answer is to carry nothing and let the new draft
+ * start from the default, which is what was asked for.
+ *
+ * Reads the canonical inline format the editor writes: flat spans, no nesting.
+ */
+export function singleTextColor(html: string | undefined | null): string | null {
+  if (!html) return null;
+  const withoutBreaks = html.replace(/<br\s*\/?>/gi, "");
+  let color: string | null = null;
+  let sawText = false;
+  let cursor = 0;
+
+  const span = /<span([^>]*)>([\s\S]*?)<\/span>/gi;
+  let match: RegExpExecArray | null;
+  const hasText = (s: string) => s.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim() !== "";
+
+  while ((match = span.exec(withoutBreaks)) !== null) {
+    // Text sitting between spans wears the template's own colour, so the field
+    // is a mix whatever the spans say.
+    if (hasText(withoutBreaks.slice(cursor, match.index))) return null;
+    cursor = match.index + match[0].length;
+
+    if (!hasText(match[2])) continue;
+    sawText = true;
+    const declared = /(?:^|[;\s"])color\s*:\s*([^;"]+)/i.exec(match[1]);
+    if (!declared) return null; // formatted, but still the default colour
+    const here = declared[1].trim().toLowerCase();
+    if (color === null) color = here;
+    else if (color !== here) return null;
+  }
+
+  if (hasText(withoutBreaks.slice(cursor))) return null;
+  return sawText ? color : null;
+}
+
+/** The same field with every colour taken off, and nothing else changed. */
+export function withoutTextColor(html: string | undefined | null): string {
+  if (!html) return html ?? "";
+  return html
+    .replace(/\sstyle="([^"]*)"/gi, (_whole, style: string) => {
+      const kept = String(style)
+        .split(";")
+        .map((d) => d.trim())
+        .filter(Boolean)
+        .filter((d) => !/^color\s*:/i.test(d));
+      return kept.length ? ` style="${kept.join("; ")}"` : "";
+    })
+    // A span that carried nothing but a colour has no reason to be left behind.
+    .replace(/<span>([\s\S]*?)<\/span>/gi, "$1");
+}
+
+/** Wrap a field's text in a colour, for one carried forward from a past draft. */
+export function withTextColor(html: string, color: string): string {
+  if (!html.trim()) return html;
+  return `<span style="color: ${color}">${html}</span>`;
+}
+
 /** Size for a field name only known at runtime, such as the editor's selection. */
 export function fieldFontSize(field: string | null | undefined): number | undefined {
   return field ? (FIELD_FONT_SIZES as Record<string, number>)[field] : undefined;

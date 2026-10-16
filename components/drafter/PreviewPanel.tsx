@@ -8,6 +8,7 @@ import { buildEblastHtml } from "@/lib/render-email";
 import { IMAGE_LOADING_PLACEHOLDER } from "@/lib/image-bank";
 import { ColorPickerPopover } from "@/components/drafter/ColorPickerPopover";
 import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
+import type { SectionColorField } from "@/lib/eblast-defaults";
 import { ImageLinkPopover } from "@/components/drafter/ImageLinkPopover";
 
 const PREVIEW_SCRIPT = /* javascript */`(function(){
@@ -206,10 +207,10 @@ const SECTION_MAP: Record<string, EditorSection> = {
 // header's true default also factors in a light/dark/gray classifier that's
 // approximated here as brand.background, same simplification the sidebar
 // pickers already use.
-type BgFieldKey =
-  | "headerBgColor" | "heroBgColor" | "finalCtaBgColor" | "footerBgColor"
-  | "storyBgColor" | "secondaryImageBgColor" | "galleryLabelBgColor" | "galleryBgColor"
-  | "ctaButtonBgColor" | "finalCtaButtonBgColor" | "footerButtonBgColor";
+// The one list of colourable sections, shared with the reset and with the
+// carry-forward from a community's last eblast — so a colour added there is
+// pickable here without anyone remembering to add it twice.
+type BgFieldKey = SectionColorField;
 
 const BG_FIELD_LABELS: Record<BgFieldKey, string> = {
   headerBgColor: "Header Background",

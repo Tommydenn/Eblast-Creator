@@ -157,7 +157,11 @@ four sentences per paragraph at most. When in doubt, cut.
 Where each piece goes
 The reference eblasts were written as flat emails; this template renders
 structured fields. Map them like this:
-- The opening hook becomes the headline.
+- The headline is the event's name, not the opening hook. The hook is a
+  sentence and the headline is a title: 'Oktoberfest Open House', not
+  'Oktoberfest is coming to Talamore Sun Prairie!'. The community's name
+  never appears in it — its logo is directly above the line.
+- The opening hook opens the body instead, where a sentence belongs.
 - The paragraphs and closing line become the body paragraphs.
 - WHEN / WHERE / phone are NOT body copy. The template already renders the
   date, time, address and phone in their own blocks, so repeating them in the

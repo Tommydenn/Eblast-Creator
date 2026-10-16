@@ -46,6 +46,7 @@ export interface PlannerAttachment {
 /** Planner's own encoding of progress. 0 not started, 50 in progress, 100 done. */
 export const NOT_STARTED = 0;
 export const IN_PROGRESS = 50;
+export const COMPLETED = 100;
 
 /** Tasks assigned to one person, across every plan — i.e. their "My Tasks". */
 export async function listAssignedTasks(userEmail: string, token?: string): Promise<PlannerTask[]> {

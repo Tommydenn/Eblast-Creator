@@ -23,7 +23,7 @@
  */
 import { db } from "@/lib/db";
 import { savedDrafts, plannerTasks, draftFlyers, draftImageBank } from "@/lib/db/schema";
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { listCommunities, getCommunity } from "@/data/communities";
 import {
   isTaskInProgress,
@@ -35,6 +35,7 @@ import {
   markTaskNotStarted,
   matchCommunity,
   NOT_STARTED,
+  COMPLETED,
   type PlannerTask,
 } from "@/lib/planner";
 import { getGraphToken } from "@/lib/graph";
@@ -59,6 +60,8 @@ export interface PlannerRunSummary {
   skipped: Array<{ task: string; reason: string }>;
   failed: Array<{ task: string; error: string }>;
   recovered: number;
+  /** Tasks that were on the needs-attention list and no longer belong there. */
+  clearedSkips: number;
   /** Candidates still waiting when this run stopped. Non-zero means hand off. */
   remaining: number;
 }
@@ -84,6 +87,7 @@ export async function runPlannerDraftPass(opts?: {
     skipped: [],
     failed: [],
     recovered: 0,
+    clearedSkips: 0,
     remaining: 0,
   };
 
@@ -115,6 +119,12 @@ export async function runPlannerDraftPass(opts?: {
     await backfillFlyersAndOrder(all, token);
   }
   summary.scanned = all.length;
+
+  // Anything still carrying a reason it could not be drafted, that nobody is
+  // waiting on any more.
+  if (!opts?.dryRun) {
+    summary.clearedSkips = await clearStaleSkips(all);
+  }
 
   const candidates = all.filter(
     (t) =>
@@ -299,6 +309,40 @@ export async function runPlannerDraftPass(opts?: {
  * A missing flyer costs a download, so only a few are done per run. A missing
  * order is free, since the task list is already in hand.
  */
+/**
+ * Take finished and departed tasks off the needs-attention list.
+ *
+ * A task that could not be drafted — no flyer yet, a plan that matches no
+ * community — keeps the reason on its row, and that reason is the whole basis
+ * of the list. Nothing ever cleared it. So a task someone went and completed
+ * in Planner, or handed to someone else, stayed on the list asking for
+ * attention it no longer needed, and the list only grew.
+ *
+ * Cleared, not deleted: the row still carries how many attempts it took and
+ * when it was first seen, and a task reopened later is picked up again as
+ * normal.
+ */
+async function clearStaleSkips(assigned: PlannerTask[]): Promise<number> {
+  const open = new Set(
+    assigned.filter((t) => t.percentComplete < COMPLETED).map((t) => t.id),
+  );
+  const flagged = await db
+    .select({ taskId: plannerTasks.taskId })
+    .from(plannerTasks)
+    .where(isNotNull(plannerTasks.skipReason));
+
+  // Anything flagged that is finished, or no longer assigned to this person at
+  // all, since a task that has left the list is not waiting on anyone either.
+  const stale = flagged.map((f) => f.taskId).filter((id) => !open.has(id));
+  if (stale.length === 0) return 0;
+
+  await db
+    .update(plannerTasks)
+    .set({ skipReason: null })
+    .where(inArray(plannerTasks.taskId, stale));
+  return stale.length;
+}
+
 const BACKFILL_FLYERS_PER_RUN = 8;
 
 async function backfillFlyersAndOrder(tasks: PlannerTask[], token: string): Promise<void> {

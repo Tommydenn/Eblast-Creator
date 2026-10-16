@@ -182,17 +182,24 @@ export async function POST(req: NextRequest) {
   // Always persist the segments that were used so the next push inherits them.
   updateCommunitySegments(community.slug, segments.includedListIds, segments.excludedListIds).catch(() => null);
 
-  // Insert/upsert a past_sends record with the HubSpot email ID so
-  // resolveSegmentsFromRecentSend can find this push on the next run and
-  // look up the actual list assignments directly from HubSpot.
+  // Record the HubSpot email this push created, so the next push can read
+  // its list assignments back and so the draft can be asked after.
+  //
+  // This used to be written as PUBLISHED, dated now. It is not: a push makes
+  // a draft inside HubSpot, and somebody has to send it before any of that is
+  // true. Saying otherwise put a send with no recipients and no opens into the
+  // same table the drafter reads a community's recent sends from, and would
+  // make any "has this gone out?" badge say yes the moment it was pushed.
+  // The nightly sync fills in the real state, and the date with it.
   if (create.ok && create.body?.id) {
+    const hubspotEmailId = String(create.body.id);
+    const state = typeof create.body.state === "string" ? create.body.state : "DRAFT";
     db.insert(pastSends)
       .values({
-        hubspotEmailId: String(create.body.id),
+        hubspotEmailId,
         communityId: community.id,
         subject: body.subject,
-        state: "PUBLISHED",
-        publishedAt: new Date(),
+        state,
         fromName: community.senders[0]?.name ?? community.displayName,
       })
       .onConflictDoUpdate({
@@ -200,17 +207,22 @@ export async function POST(req: NextRequest) {
         set: {
           communityId: community.id,
           subject: body.subject,
-          state: "PUBLISHED",
-          publishedAt: new Date(),
+          state,
           syncedAt: new Date(),
         },
       })
       .catch(() => null);
-  }
 
-  // Mark the originating saved draft as pushed so the editor knows further
-  // edits must go to a copy instead of altering what was actually sent.
-  if (create.ok && body.draftId) {
+    // Mark the originating saved draft as pushed so the editor knows further
+    // edits must go to a copy instead of altering what was actually sent, and
+    // keep the HubSpot id with it.
+    if (body.draftId) {
+      db.update(savedDrafts)
+        .set({ pushedAt: new Date(), hubspotEmailId })
+        .where(eq(savedDrafts.id, body.draftId))
+        .catch(() => null);
+    }
+  } else if (create.ok && body.draftId) {
     db.update(savedDrafts).set({ pushedAt: new Date() }).where(eq(savedDrafts.id, body.draftId)).catch(() => null);
   }
 

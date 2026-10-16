@@ -75,11 +75,17 @@ export async function resolveSegmentsFromRecentSend(opts: {
   };
 
   try {
+    // The most recent email made for this community, sent or not. What this
+    // wants is the last one's list assignments, and a push that has not gone
+    // out yet has those just as much as one that has. It used to require
+    // PUBLISHED, which only worked because a push wrote itself in as
+    // published; now that a push records the truth, this asks for what it
+    // actually needs.
     const [recent] = await db
       .select({ hubspotEmailId: pastSends.hubspotEmailId })
       .from(pastSends)
-      .where(and(eq(pastSends.communityId, opts.communityId), eq(pastSends.state, "PUBLISHED")))
-      .orderBy(sql`${pastSends.publishedAt} DESC NULLS LAST`)
+      .where(eq(pastSends.communityId, opts.communityId))
+      .orderBy(sql`coalesce(${pastSends.publishedAt}, ${pastSends.syncedAt}) DESC`)
       .limit(1);
 
     if (!recent?.hubspotEmailId) return fallback;

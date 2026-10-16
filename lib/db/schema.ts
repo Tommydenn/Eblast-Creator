@@ -18,6 +18,7 @@ import {
   integer,
   boolean,
   jsonb,
+  index,
   primaryKey,
 } from "drizzle-orm/pg-core";
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm";
@@ -292,6 +293,15 @@ export const savedDrafts = pgTable("saved_drafts", {
    */
   pushedAt: timestamp("pushed_at", { withTimezone: true }),
   /**
+   * The HubSpot email this draft became, set when it is pushed or approved.
+   *
+   * HubSpot answers a push with the id of the email it created, and that id
+   * went only into past_sends. Nothing tied it back to the draft, so looking
+   * at a draft there was no way to ask HubSpot what became of it — whether it
+   * is still sitting there or has gone out to recipients.
+   */
+  hubspotEmailId: text("hubspot_email_id"),
+  /**
    * Soft-delete marker. Set when the user deletes a draft from the Saved
    * Drafts list — the row (and its data/images/approval history) stays
    * intact and recoverable via the Deleted Drafts view until the daily
@@ -442,34 +452,46 @@ export const approvalThreads = pgTable("approval_threads", {
 // It's also what the Pending Drafts tab reads: a draft with a row here came
 // from a task rather than from someone uploading a flyer by hand.
 
-export const plannerTasks = pgTable("planner_tasks", {
-  taskId: text("task_id").primaryKey(),
-  planId: text("plan_id").notNull(),
-  /** Resolved from the PLAN's title — task titles name the event, not the community. */
-  communitySlug: varchar("community_slug", { length: 64 }),
-  title: text("title").notNull(),
-  dueAt: timestamp("due_at", { withTimezone: true }),
-  /** Null until a draft exists. Cleared if that draft is hard-deleted. */
-  savedDraftId: text("saved_draft_id").references(() => savedDrafts.id, { onDelete: "set null" }),
-  /** False means the draft exists but Planner wasn't updated — see above. */
-  markedInProgress: boolean("marked_in_progress").notNull().default(false),
-  /** Why it was passed over: no flyer yet, unknown community, generation failed. */
-  skipReason: text("skip_reason"),
-  attempts: integer("attempts").notNull().default(0),
-  /** Set while a run is generating this task. A stale claim means that run died. */
-  claimedAt: timestamp("claimed_at", { withTimezone: true }),
-  claimedBy: text("claimed_by"),
-  /** The draft id this attempt will use, written before generation so an
-   *  interrupted run can be cleaned up exactly rather than guessed at. */
-  pendingDraftId: text("pending_draft_id"),
-  lastError: text("last_error"),
-  /** Three failures: stop retrying, leave unchecked, hand to the marketing team. */
-  abandoned: boolean("abandoned").notNull().default(false),
-  /** Planner s ordering value for the My Tasks list, so Pending Drafts can match it. */
-  assigneePriority: text("assignee_priority"),
-  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
-  draftedAt: timestamp("drafted_at", { withTimezone: true }),
-});
+export const plannerTasks = pgTable(
+  "planner_tasks",
+    {
+    taskId: text("task_id").primaryKey(),
+    planId: text("plan_id").notNull(),
+    /** Resolved from the PLAN's title — task titles name the event, not the community. */
+    communitySlug: varchar("community_slug", { length: 64 }),
+    title: text("title").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    /** Null until a draft exists. Cleared if that draft is hard-deleted. */
+    savedDraftId: text("saved_draft_id").references(() => savedDrafts.id, { onDelete: "set null" }),
+    /** False means the draft exists but Planner wasn't updated — see above. */
+    markedInProgress: boolean("marked_in_progress").notNull().default(false),
+    /** Why it was passed over: no flyer yet, unknown community, generation failed. */
+    skipReason: text("skip_reason"),
+    attempts: integer("attempts").notNull().default(0),
+    /** Set while a run is generating this task. A stale claim means that run died. */
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedBy: text("claimed_by"),
+    /** The draft id this attempt will use, written before generation so an
+     *  interrupted run can be cleaned up exactly rather than guessed at. */
+    pendingDraftId: text("pending_draft_id"),
+    lastError: text("last_error"),
+    /** Three failures: stop retrying, leave unchecked, hand to the marketing team. */
+    abandoned: boolean("abandoned").notNull().default(false),
+    /** Planner s ordering value for the My Tasks list, so Pending Drafts can match it. */
+    assigneePriority: text("assignee_priority"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
+      draftedAt: timestamp("drafted_at", { withTimezone: true }),
+  },
+  // Declared here rather than left to a migration. These existed in the
+  // database and not in this file, so the next schema push dropped them as
+  // things it did not know about — which is what declaring them prevents.
+  (t) => ({
+    // Stale claims, looked for at the start of every run.
+    claimedIdx: index("planner_tasks_claimed_idx").on(t.claimedAt),
+    // The draft a task produced: read to decide what has already been done.
+    draftIdx: index("planner_tasks_draft_idx").on(t.savedDraftId),
+  }),
+);
 
 export type PlannerTaskRow = InferSelectModel<typeof plannerTasks>;
 export type NewPlannerTaskRow = InferInsertModel<typeof plannerTasks>;
@@ -494,26 +516,34 @@ export type AppSettingRow = InferSelectModel<typeof appSettings>;
 // the source of the progress readout, and how a run hands off to a fresh one
 // before Vercel cuts it off at five minutes.
 
-export const plannerRuns = pgTable("planner_runs", {
-  id: text("id").primaryKey(),
-  /** cron | manual | chain */
-  trigger: text("trigger").notNull(),
-  /** running | done | failed */
-  status: text("status").notNull().default("running"),
-  /** How many runs deep this chain is, so a bug cannot loop forever. */
-  chainIndex: integer("chain_index").notNull().default(0),
-  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
-  /** Bumped as work completes. A quiet heartbeat means the run was killed. */
-  heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).defaultNow().notNull(),
-  finishedAt: timestamp("finished_at", { withTimezone: true }),
-  drafted: integer("drafted").notNull().default(0),
-  skipped: integer("skipped").notNull().default(0),
-  failed: integer("failed").notNull().default(0),
-  /** Candidates still waiting when this run handed off. Drives the progress line. */
-  remaining: integer("remaining"),
-  currentTask: text("current_task"),
-  error: text("error"),
-});
+export const plannerRuns = pgTable(
+  "planner_runs",
+    {
+    id: text("id").primaryKey(),
+    /** cron | manual | chain */
+    trigger: text("trigger").notNull(),
+    /** running | done | failed */
+    status: text("status").notNull().default("running"),
+    /** How many runs deep this chain is, so a bug cannot loop forever. */
+    chainIndex: integer("chain_index").notNull().default(0),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    /** Bumped as work completes. A quiet heartbeat means the run was killed. */
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    drafted: integer("drafted").notNull().default(0),
+    skipped: integer("skipped").notNull().default(0),
+    failed: integer("failed").notNull().default(0),
+    /** Candidates still waiting when this run handed off. Drives the progress line. */
+    remaining: integer("remaining"),
+      currentTask: text("current_task"),
+      error: text("error"),
+  },
+  // Runs are read newest-first, and the most recent one decides whether
+  // another may start.
+  (t) => ({
+    startedIdx: index("planner_runs_started_idx").on(t.startedAt),
+  }),
+);
 
 export type PlannerRunRow = InferSelectModel<typeof plannerRuns>;
 

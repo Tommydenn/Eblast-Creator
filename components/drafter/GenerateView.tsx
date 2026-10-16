@@ -88,16 +88,30 @@ function DraftCard({
           <p className="text-[10px] text-[#b0a89f] shrink-0">{relTime}</p>
         </div>
 
-        {draft.dueAt && (
-          <p className="mb-1.5 text-[10px] font-semibold text-[#8a6d3b]">
-            Send by{" "}
-            {new Date(draft.dueAt).toLocaleDateString(undefined, {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            })}
-          </p>
-        )}
+        {draft.dueAt && (() => {
+          // A deadline already behind us. Almost always a task that was
+          // un-ticked by accident and drafted again, so the eblast either went
+          // out weeks ago or is no longer wanted. Said in red and in words,
+          // because the date alone looks the same as any other.
+          const due = new Date(draft.dueAt);
+          const midnight = new Date();
+          midnight.setHours(0, 0, 0, 0);
+          const daysLate = Math.floor((midnight.getTime() - due.getTime()) / 86400000);
+          const overdue = daysLate > 0;
+          return (
+            <p className={`mb-1.5 text-[10px] font-semibold ${overdue ? "text-[#b3312c]" : "text-[#8a6d3b]"}`}>
+              Send by{" "}
+              {due.toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })}
+              {overdue && (
+                <span> &mdash; {daysLate === 1 ? "1 day" : `${daysLate} days`} ago, check this is still wanted</span>
+              )}
+            </p>
+          );
+        })()}
 
         {/* Subject */}
         <p className={`text-sm font-medium leading-snug line-clamp-2 ${isLegacy ? "text-[#7a8c85]" : "text-[#1a1a1a]"}`}>

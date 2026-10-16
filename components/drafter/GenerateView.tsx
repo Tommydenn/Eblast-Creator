@@ -350,29 +350,99 @@ function PlannerControls({ onFinished }: { onFinished: () => void }) {
   );
 }
 
-function NeedsAttentionPanel({ tasks }: { tasks: StuckTask[] }) {
+/**
+ * The tasks the schedule looked at and could not draft.
+ *
+ * Grouped by the reason rather than listed flat. Twelve rows all saying the
+ * same thing about the same plan is one problem, not twelve, and reading the
+ * reason twelve times is what made the list hard to look at. The reason is
+ * said once, with its tasks under it.
+ *
+ * Clearing is per row or all at once. Each run already clears a task that has
+ * been completed or reassigned, so this is for the ones that will sit there
+ * otherwise — a plan that will never be a community, an eblast handled some
+ * other way. A cleared task comes back if a later run still cannot draft it.
+ */
+function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onCleared: () => void }) {
+  const [clearing, setClearing] = React.useState<string | null>(null);
+
   const blocked = tasks.filter((t) => t.kind === "missing_community" || t.kind === "other");
   const waiting = tasks.filter((t) => t.kind === "waiting_on_flyer");
   const when = (d: string | null) =>
     d ? new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "no date";
 
+  async function clear(taskIds: string[], key: string) {
+    setClearing(key);
+    try {
+      await fetch("/api/planner/attention", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskIds }),
+      });
+      onCleared();
+    } finally {
+      setClearing(null);
+    }
+  }
+
+  /** One reason, with every task that gave it. */
+  function byReason(list: StuckTask[]) {
+    const groups = new Map<string, StuckTask[]>();
+    for (const t of list) {
+      const key = t.reason || "No reason recorded";
+      groups.set(key, [...(groups.get(key) ?? []), t]);
+    }
+    return [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+  }
+
+  const clearAll = (list: StuckTask[], key: string) => clear(list.map((t) => t.taskId), key);
+
+  const row = (t: StuckTask, tone: { text: string; meta: string; hover: string }) => (
+    <li key={t.taskId} className="group flex items-baseline gap-2 py-0.5">
+      <span className={`flex-1 min-w-0 truncate text-xs ${tone.text}`}>{t.title}</span>
+      <span className={`shrink-0 text-[11px] tabular-nums ${tone.meta}`}>send by {when(t.dueAt)}</span>
+      <button
+        onClick={() => clear([t.taskId], t.taskId)}
+        disabled={clearing === t.taskId}
+        title="Clear this from the list"
+        className={`shrink-0 w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity ${tone.hover} disabled:opacity-40`}
+      >
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </li>
+  );
+
   return (
     <div className="mb-4 space-y-3">
       {blocked.length > 0 && (
         <div className="rounded-xl border border-[#f0d5d5] bg-[#fdf6f6] px-4 py-3">
-          <p className="text-xs font-semibold text-[#9a3a34]">
-            {blocked.length === 1 ? "1 task needs your attention" : `${blocked.length} tasks need your attention`}
-          </p>
-          <ul className="mt-2 space-y-1.5">
-            {blocked.map((t) => (
-              <li key={t.taskId} className="text-xs text-[#7a4a44] leading-relaxed">
-                <span className="font-medium">{t.title}</span>
-                <span className="text-[#b09a97]"> · send by {when(t.dueAt)}</span>
-                <br />
-                <span className="text-[#9a3a34]">{t.reason}</span>
-              </li>
+          <div className="flex items-baseline gap-3">
+            <p className="text-xs font-semibold text-[#9a3a34]">
+              {blocked.length === 1 ? "1 task needs your attention" : `${blocked.length} tasks need your attention`}
+            </p>
+            <button
+              onClick={() => clearAll(blocked, "blocked")}
+              disabled={clearing === "blocked"}
+              className="ml-auto text-[11px] font-medium text-[#b08a86] hover:text-[#9a3a34] transition-colors disabled:opacity-40"
+            >
+              Clear all
+            </button>
+          </div>
+          <div className="mt-2 space-y-2.5">
+            {byReason(blocked).map(([reason, group]) => (
+              <div key={reason}>
+                <p className="text-[11px] font-medium text-[#9a3a34]">
+                  {reason}
+                  {group.length > 1 && <span className="text-[#b09a97]"> &middot; {group.length} tasks</span>}
+                </p>
+                <ul className="mt-0.5 pl-3 border-l border-[#f0d5d5]">
+                  {group.map((t) => row(t, { text: "text-[#7a4a44]", meta: "text-[#b09a97]", hover: "text-[#b08a86] hover:text-[#9a3a34] hover:bg-[#f7e9e9]" }))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
           <p className="mt-2.5 text-[11px] text-[#9a8582]">
             Add the community on the Communities page and it&rsquo;ll be drafted on the next run.
           </p>
@@ -381,18 +451,22 @@ function NeedsAttentionPanel({ tasks }: { tasks: StuckTask[] }) {
 
       {waiting.length > 0 && (
         <div className="rounded-xl border border-[#e8e3dc] bg-[#faf8f4] px-4 py-3">
-          <p className="text-xs font-semibold text-[#7a8c85]">
-            {waiting.length === 1
-              ? "1 eblast is waiting on a flyer"
-              : `${waiting.length} eblasts are waiting on a flyer`}
-          </p>
-          <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-            {waiting.map((t) => (
-              <li key={t.taskId} className="text-xs text-[#5a6b63] truncate">
-                {t.title}
-                <span className="text-[#b0a89f]"> · {when(t.dueAt)}</span>
-              </li>
-            ))}
+          <div className="flex items-baseline gap-3">
+            <p className="text-xs font-semibold text-[#7a8c85]">
+              {waiting.length === 1
+                ? "1 eblast is waiting on a flyer"
+                : `${waiting.length} eblasts are waiting on a flyer`}
+            </p>
+            <button
+              onClick={() => clearAll(waiting, "waiting")}
+              disabled={clearing === "waiting"}
+              className="ml-auto text-[11px] font-medium text-[#b0a89f] hover:text-[#5a6b63] transition-colors disabled:opacity-40"
+            >
+              Clear all
+            </button>
+          </div>
+          <ul className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-5">
+            {waiting.map((t) => row(t, { text: "text-[#5a6b63]", meta: "text-[#b0a89f]", hover: "text-[#b0a89f] hover:text-[#5a6b63] hover:bg-[#f0ede7]" }))}
           </ul>
           <p className="mt-2.5 text-[11px] text-[#9aaba4]">
             Nothing to do &mdash; each is checked again daily and drafted once a flyer is attached to the task.
@@ -578,7 +652,7 @@ function SavedDraftsView({ view = "saved" }: { view?: "saved" | "pending" }) {
 
       {view === "pending" && <PlannerControls onFinished={reload} />}
 
-      {needsAttention.length > 0 && <NeedsAttentionPanel tasks={needsAttention} />}
+      {needsAttention.length > 0 && <NeedsAttentionPanel tasks={needsAttention} onCleared={reload} />}
 
       {/* Cards grid */}
       {filtered.length === 0 ? (

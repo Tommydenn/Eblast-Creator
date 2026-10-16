@@ -153,14 +153,29 @@ export async function markTaskInProgress(taskId: string, token?: string): Promis
  * about everything else: an unrecognised plan is skipped and reported, never
  * guessed. A draft built for the wrong community is worse than no draft.
  */
+/**
+ * Plans whose name no longer matches the community they belong to.
+ *
+ * A community that gets rebranded keeps its Planner plan under the old name,
+ * and the tasks in it would sit on the needs-attention list forever saying the
+ * plan matches nothing. Keyed and valued in the same normalised form the match
+ * below uses.
+ */
+const PLAN_ALIASES: Record<string, string> = {
+  // The Pillars of Grand Rapids became Talamore Grand Rapids. The plan is
+  // still called the old name, and its eblasts are Talamore's now.
+  pillarsofgrandrapids: "talamoregrandrapids",
+};
+
 export function matchCommunity<T extends { slug: string; displayName: string }>(
   planTitle: string,
   communities: T[],
 ): T | null {
   const norm = (s: string) =>
     s.toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, "");
-  const target = norm(planTitle);
-  if (!target) return null;
+  const named = norm(planTitle);
+  if (!named) return null;
+  const target = PLAN_ALIASES[named] ?? named;
   return communities.find((c) => norm(c.displayName) === target) ?? null;
 }
 

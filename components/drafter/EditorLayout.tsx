@@ -484,7 +484,11 @@ export default function EditorLayout() {
               {/* Exactly the email s width. It was 640 for a 600px email, and
                   the email sits at the left of its box, so the leftover 40px
                   showed as a grey strip down the right-hand side. */}
-              <div className="w-full max-w-[600px] mx-auto shadow-xl rounded-lg overflow-hidden">
+              {/* Square corners. The rounding was the page decorating the
+                  email, and it showed as a curved sliver of grey across the
+                  top and bottom of a message that will arrive with neither.
+                  What is in this box should be what lands in an inbox. */}
+              <div className="w-full max-w-[600px] mx-auto shadow-xl overflow-hidden">
                 <PreviewPanel layoutSignal={`${flyerOpen ? "flyer" : "no-flyer"}:${flyerWidth ?? "auto"}`} />
               </div>
             </div>

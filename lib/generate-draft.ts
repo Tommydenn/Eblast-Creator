@@ -25,6 +25,7 @@ import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render
 import type { Community } from "@/lib/db/queries";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { withParagraphSpacing } from "@/lib/extracted-flyer";
+import { normalizeEventTime, resolveEventDate } from "@/lib/event-datetime";
 import {
   SECTION_COLOR_FIELDS,
   COLORABLE_TEXT_FIELDS,
@@ -122,6 +123,31 @@ function stripHtmlText(html: string): string {
   return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim();
 }
 
+/**
+ * The draft with its dates and times put right.
+ *
+ * Both the hero and the footer carry a date and a time, and the footer falls
+ * back to the hero's when it has none of its own, so each is only touched
+ * where it actually holds something. A flyer that contradicts itself — naming
+ * a weekday its date does not fall on — is recorded rather than resolved.
+ */
+function withEventDateAndTime(draft: ExtractedFlyer, anchor: Date | null): ExtractedFlyer {
+  const when = anchor ?? new Date();
+  const hero = resolveEventDate(draft.eventDate, when);
+  const footer = draft.ctaEventDate ? resolveEventDate(draft.ctaEventDate, when) : null;
+
+  return {
+    ...draft,
+    ...(draft.eventDate ? { eventDate: hero.text } : {}),
+    ...(draft.eventTime ? { eventTime: normalizeEventTime(draft.eventTime) } : {}),
+    ...(draft.ctaEventDate ? { ctaEventDate: footer!.text } : {}),
+    ...(draft.ctaEventTime ? { ctaEventTime: normalizeEventTime(draft.ctaEventTime) } : {}),
+    ...(hero.conflict || footer?.conflict
+      ? { dateConflict: hero.conflict ?? footer!.conflict! }
+      : {}),
+  };
+}
+
 export interface GeneratedDraft {
   extracted: ExtractedFlyer;
   html: string;
@@ -166,6 +192,12 @@ export async function generateDraft(opts: {
   pdf?: Buffer | null;
   /** Free-text event details. */
   notes?: string;
+  /**
+   * The earliest the event could be, used to settle the year on a flyer that
+   * prints a date without one. The send-by date of the task this came from,
+   * since an eblast goes out before the thing it advertises.
+   */
+  eventAnchor?: Date | null;
 }): Promise<GeneratedDraft> {
   const { community, pdf, notes } = opts;
   if (!pdf && !notes?.trim()) {
@@ -228,11 +260,16 @@ export async function generateDraft(opts: {
     ...loop.finalDraft,
     bodyParagraphs: withParagraphSpacing(loop.finalDraft.bodyParagraphs ?? []),
   };
+  // The date and time are settled in code rather than left as the model
+  // wrote them: the weekday is arithmetic and the time has one house style,
+  // and it was getting both wrong often enough to be worth taking off it.
+  const dated = withEventDateAndTime(withSpacing, opts.eventAnchor ?? null);
+
   // Picked up last, over a draft that is otherwise finished, so a colour
   // carried forward can only ever change a colour.
   const extracted: ExtractedFlyer = {
-    ...withSpacing,
-    ...(await colorsFromLastEblast(community.slug, withSpacing)),
+    ...dated,
+    ...(await colorsFromLastEblast(community.slug, dated)),
   };
   // Shrink first, then crop from the shrunk copy.
   //

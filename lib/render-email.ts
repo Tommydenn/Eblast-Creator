@@ -221,9 +221,6 @@ const SCRIPT_SUBHEADLINE_SIZE = FIELD_FONT_SIZES.scriptSubheadline;
 const CTA_DATE_SIZE = FIELD_FONT_SIZES.ctaEventDate;
 const CALL_BUTTON_SIZE = FIELD_FONT_SIZES.ctaButtonLabel;
 
-/** Character between the event date and time. Must match DateTimeField's. */
-const SEPARATOR = "·";
-
 /**
  * Darkest color in a community's brand palette — used for the footer
  * salesperson emails so they read as text rather than as a bright accent link.
@@ -293,7 +290,7 @@ function linkedImage(
 }
 
 /**
- * The "date · time" line: one visual text block, two separate fields.
+ * The date and the time, on their own lines, as two separate fields.
  *
  * Date and time stay distinct data-field spans, so the drafter still extracts
  * them separately, the sidebar keeps its own Event Date and Event Time inputs,
@@ -312,7 +309,6 @@ function dateTimeRow(opts: {
   dateField: string;
   timeHtml: string;
   timeField: string;
-  timeStartsWithSeparator: boolean;
   fontFamily: string;
   fontSize: number;
   /** Alignment chosen for either half of the line, already resolved. */
@@ -321,21 +317,34 @@ function dateTimeRow(opts: {
   marginBottom: number;
 }): string {
   const {
-    dateHtml, dateField, timeHtml, timeField, timeStartsWithSeparator,
+    dateHtml, dateField, timeHtml, timeField,
     fontFamily, fontSize, extraStyle, marginBottom, align,
   } = opts;
 
-  const style = `${align ? `text-align: ${align}; ` : ""}font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle} margin: 0 0 ${marginBottom}px 0;`;
-  // The separator lives INSIDE the time field, never between the two spans as
-  // bare text. Outside, it inherits nothing and keeps the base size while the
-  // date and time restyle around it. The stored time normally already starts
-  // with it; this only adds one for older values that don't.
-  const timeContent = timeStartsWithSeparator ? timeHtml : `${SEPARATOR} ${timeHtml}`;
-  const timePart = timeHtml ? `&nbsp;<span data-field="${timeField}" style="color:#FFFFFF; text-decoration:none;">${timeContent}</span>` : "";
+  const base = `${align ? `text-align: ${align}; ` : ""}font-family: ${fontFamily}; font-size: ${fontSize}px; color: #FFFFFF; ${extraStyle}`;
+  // The time sits under the date rather than beside it, so there is no
+  // separator between them any more — the line break does that job, and a
+  // dot floating mid-line was doing it worse. The date's own margin only has
+  // to clear the time below it; the time carries the gap to whatever follows.
+  const dateStyle = `${base} margin: 0 0 ${timeHtml ? 4 : marginBottom}px 0;`;
+  const timeStyle = `${base} margin: 0 0 ${marginBottom}px 0;`;
 
-  // Both date lines — hero and footer — must hold one line, so the paragraph
-  // carries the no-wrap class and the space before the time is non-breaking.
-  return `<p class="glm-nowrap" style="${style}"><span data-field="${dateField}" style="color:#FFFFFF; text-decoration:none;">${dateHtml}</span>${timePart}</p>`;
+  // Each line must hold together, so both carry the no-wrap class.
+  // Times written before the date and time were split apart begin with the
+  // separator that used to sit between them. On its own line that dot has
+  // nothing to separate and reads as a typo, so it comes off on the way out.
+  // Only here: the stored value is left alone, because a draft that was
+  // already approved keeps the text it was approved with.
+  const timeWithoutSeparator = timeHtml.replace(
+    /^((?:<[^>]+>|s|&nbsp;)*)[·•]s*(?:&nbsp;)?s*/i,
+    "$1",
+  );
+
+  const dateLine = `<p class="glm-nowrap" style="${dateStyle}"><span data-field="${dateField}" style="color:#FFFFFF; text-decoration:none;">${dateHtml}</span></p>`;
+  const timeLine = timeHtml
+    ? `<p class="glm-nowrap" style="${timeStyle}"><span data-field="${timeField}" style="color:#FFFFFF; text-decoration:none;">${timeWithoutSeparator}</span></p>`
+    : "";
+  return `${dateLine}${timeLine}`;
 }
 
 export interface RenderOptions {
@@ -389,7 +398,7 @@ export function buildEblastHtml(
     return value ? `<div style="text-align: ${value};">${html}</div>` : html;
   };
 
-  const eventDateLine = [flyer.eventDate, flyer.eventTime].filter(Boolean).join(" · ");
+  const hasEventDateLine = !!(flyer.eventDate || flyer.eventTime);
 
   const addressLine = flyer.heroAddress ?? communityAddressLine(community);
 
@@ -399,7 +408,7 @@ export function buildEblastHtml(
   const ctaRsvpLabel = (flyer.ctaRsvpLabel ?? flyer.rsvpLabel)?.trim() ?? "";
   const ctaDate = flyer.ctaEventDate ?? flyer.eventDate;
   const ctaTime = flyer.ctaEventTime ?? flyer.eventTime;
-  const ctaDateLine = [ctaDate, ctaTime].filter(Boolean).join(" · ");
+  const hasCtaDateLine = !!(ctaDate || ctaTime);
   /** 600px shell minus a section's 36px side padding. */
   const CONTENT_WIDTH = 600 - 36 * 2;
 
@@ -570,7 +579,7 @@ export function buildEblastHtml(
             ${hasText(rsvpLabel) ? `<p data-field="rsvpLabel" style="${alignStyleFor("rsvpLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.rsvpLabel}px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
             ${hasText(flyer.headline) ? `<p data-field="headline" class="glm-nowrap" style="${alignStyleFor("headline")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.headline}px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
             ${hasText(flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="${alignStyleFor("scriptSubheadline")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}
-            ${eventDateLine ? `
+            ${hasEventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
                  A date line longer than the column made it wider than the
                  600px frame, which is what stretched the email (and, once the
@@ -587,7 +596,6 @@ export function buildEblastHtml(
                     dateField: "eventDate",
                     timeHtml: flyer.eventTime ? renderInlineField(flyer.eventTime) : "",
                     timeField: "eventTime",
-                    timeStartsWithSeparator: stripHtml(flyer.eventTime ?? "").trim().startsWith("·"),
                     fontFamily: fontHeadline,
                     fontSize: FIELD_FONT_SIZES.eventDate,
                     align: flyer.textAlign?.eventDate ?? flyer.textAlign?.eventTime,
@@ -731,12 +739,11 @@ export function buildEblastHtml(
         <tr>
           <td style="padding: 40px 36px;" align="center">
             ${hasText(ctaRsvpLabel) ? `<p data-field="ctaRsvpLabel" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.ctaRsvpLabel}px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
-            ${ctaDateLine ? dateTimeRow({
+            ${hasCtaDateLine ? dateTimeRow({
               dateHtml: renderInlineField(ctaDate ?? ""),
               dateField: "ctaEventDate",
               timeHtml: ctaTime ? renderInlineField(ctaTime) : "",
               timeField: "ctaEventTime",
-              timeStartsWithSeparator: stripHtml(ctaTime ?? "").trim().startsWith("·"),
               fontFamily: fontHeadline,
               fontSize: CTA_DATE_SIZE,
               extraStyle: "line-height: 1.2;",

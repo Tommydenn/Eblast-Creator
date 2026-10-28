@@ -72,6 +72,15 @@ export interface ExtractedFlyer {
 
   /** Override for the address line shown in the hero section beneath the event date. */
   heroAddress?: string;
+  /**
+   * Set when the flyer names a weekday its own date does not fall on.
+   *
+   * One of the two is wrong and nothing here can tell which, so it is carried
+   * on the draft and shown to whoever opens it rather than quietly resolved.
+   * Cleared as soon as the date is edited.
+   */
+  dateConflict?: string;
+
   /** Override for the "Thank You!" text in the email footer. */
   thankYouText?: string;
   /** Override for the "Visit Our Website" button URL in the footer. */

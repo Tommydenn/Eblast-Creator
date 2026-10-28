@@ -76,13 +76,32 @@ export default function HeroSection() {
         label="Event Date & Time"
         date={fields.eventDate}
         time={fields.eventTime}
-        onChange={({ date, time }) => setFields({ eventDate: date, eventTime: time })}
+        onChange={({ date, time }) =>
+          // Editing the date answers the question, so the warning goes with it.
+          setFields({ eventDate: date, eventTime: time, dateConflict: undefined })
+        }
         className={baseInput}
         fieldName="eventDate"
         activeEditorRef={activeEditorRef}
         activeEditorCallback={activeEditorCallback}
         activeFieldNameRef={activeFieldNameRef}
       />
+
+      {/* The flyer named a weekday its own date does not fall on. One of the
+          two is wrong and nothing here can tell which, so it stays put until
+          somebody decides — it cannot be dismissed, only answered. */}
+      {fields.dateConflict && (
+        <div className="-mt-2 rounded-lg border border-[#f0d5d5] bg-[#fdf6f6] px-3 py-2">
+          <p className="text-xs font-semibold text-[#9a3a34]">Check this date</p>
+          <p className="mt-0.5 text-[11px] text-[#7a4a44] leading-relaxed">{fields.dateConflict}</p>
+          <button
+            onClick={() => setField("dateConflict", undefined)}
+            className="mt-1.5 text-[11px] font-medium text-[#9a3a34] hover:underline underline-offset-2"
+          >
+            The date is right
+          </button>
+        </div>
+      )}
 
       <Field label="Address Line" hint="Shown beneath the event date in the hero section. Defaults to the community's address.">
         <RichInput

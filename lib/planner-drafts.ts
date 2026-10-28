@@ -423,7 +423,12 @@ async function draftFromTask(
   const community = await getCommunity(communitySlug);
   if (!community) throw new Error(`Unknown community ${communitySlug}`);
 
-  const generated = await generateDraft({ community, pdf });
+  const generated = await generateDraft({
+    community,
+    pdf,
+    // The eblast goes out before the event, so the event is on or after this.
+    eventAnchor: task.dueDateTime ? new Date(task.dueDateTime) : null,
+  });
 
   const gallery = (generated.galleryImageUrls ?? []).filter((u): u is string => !!u);
   const galleryOriginals = generated.galleryOriginalUrls ?? [];

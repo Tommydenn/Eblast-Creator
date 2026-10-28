@@ -184,11 +184,15 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
           )}
         </div>
 
-        {/* Send for Approval button */}
+        {/* Send for Approval button. Held while the flyer's date and its
+            weekday disagree: a wrong date is the one mistake in an eblast that
+            cannot be fixed after it has gone out. */}
         <button
           onClick={onApproval}
+          disabled={!!fields?.dateConflict}
+          title={fields?.dateConflict ? "Check the event date first — see the Hero tab" : undefined}
           className={[
-            "text-xs font-medium border rounded-lg px-3 py-1.5 transition-colors",
+            "text-xs font-medium border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
             approvalFlash
               ? "text-emerald-700 border-emerald-300 bg-emerald-50"
               : "text-[#1F4538] border-[#1F4538]/40 hover:bg-[#1F4538]/5",

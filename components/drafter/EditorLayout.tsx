@@ -162,6 +162,37 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
           </div>
         )}
 
+        {/* Undo and redo, covering every change to the draft — words,
+            colours, sizes, hidden blocks, and whatever the AI did. Photos are
+            not in it: those are swapped by hand and stay that way.
+
+            Before Save, with a rule after them: these two act on what is in
+            front of you, and everything to their right sends it somewhere. */}
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            title={canUndo ? (lastRefineInstruction ? `Undo: ${lastRefineInstruction}` : "Undo") : "Nothing to undo"}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#7a8c85] hover:text-[#1F4538] hover:bg-[#f0ede7] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 7h11a5 5 0 0 1 0 10H3" /><polyline points="7 3 3 7 7 11" />
+            </svg>
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            title={canRedo ? "Redo" : "Nothing to redo"}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#7a8c85] hover:text-[#1F4538] hover:bg-[#f0ede7] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 7H10a5 5 0 0 0 0 10h11" /><polyline points="17 3 21 7 17 11" />
+            </svg>
+          </button>
+        </div>
+
+        <span className="w-px h-5 bg-[#e8e3dc] mx-1.5" aria-hidden />
+
         {/* Save Draft button + error */}
         <div className="relative">
           <button
@@ -187,32 +218,6 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
               <p className="text-xs text-red-700">{saveError}</p>
             </div>
           )}
-        </div>
-
-        {/* Undo and redo, covering every change to the draft — words,
-            colours, sizes, hidden blocks, and whatever the AI did. Photos are
-            not in it: those are swapped by hand and stay that way. */}
-        <div className="flex items-center gap-0.5 mr-1">
-          <button
-            onClick={undo}
-            disabled={!canUndo}
-            title={canUndo ? (lastRefineInstruction ? `Undo: ${lastRefineInstruction}` : "Undo") : "Nothing to undo"}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#7a8c85] hover:text-[#1F4538] hover:bg-[#f0ede7] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 7h11a5 5 0 0 1 0 10H3" /><polyline points="7 3 3 7 7 11" />
-            </svg>
-          </button>
-          <button
-            onClick={redo}
-            disabled={!canRedo}
-            title={canRedo ? "Redo" : "Nothing to redo"}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#7a8c85] hover:text-[#1F4538] hover:bg-[#f0ede7] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 7H10a5 5 0 0 0 0 10h11" /><polyline points="17 3 21 7 17 11" />
-            </svg>
-          </button>
         </div>
 
         {/* Send for Approval button. Held while the flyer's date and its

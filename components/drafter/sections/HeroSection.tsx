@@ -24,9 +24,6 @@ export default function HeroSection() {
       {fields.heroSectionHidden && (
         <HiddenBanner label="The Hero section" onRestore={() => setField("heroSectionHidden", undefined)} />
       )}
-      {fields.ctaButtonHidden && (
-        <HiddenBanner label="The hero's call button" onRestore={() => setField("ctaButtonHidden", undefined)} />
-      )}
 
       <BlockGap slot="hero:start" />
 

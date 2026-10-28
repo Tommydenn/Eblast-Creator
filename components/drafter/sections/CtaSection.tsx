@@ -54,12 +54,6 @@ export default function CtaSection() {
       {fields.finalCtaSectionHidden && (
         <HiddenBanner label="The Call-to-Action section" onRestore={() => setField("finalCtaSectionHidden", undefined)} />
       )}
-      {fields.finalCtaButtonHidden && (
-        <HiddenBanner label="The bottom call button" onRestore={() => setField("finalCtaButtonHidden", undefined)} />
-      )}
-      {fields.footerButtonHidden && (
-        <HiddenBanner label="The Visit Our Website button" onRestore={() => setField("footerButtonHidden", undefined)} />
-      )}
 
       <BlockGap slot="cta:start" />
 
@@ -109,6 +103,12 @@ export default function CtaSection() {
       </Field>
 
       <BlockGap slot="finalCtaButtonLabel" />
+
+      <div className="flex items-center gap-3 pt-1">
+        <span className="h-px flex-1 bg-[#e8e3dc]" aria-hidden />
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#b0a89f]">Footer</span>
+        <span className="h-px flex-1 bg-[#e8e3dc]" aria-hidden />
+      </div>
 
       <BlockGap slot="top" />
 

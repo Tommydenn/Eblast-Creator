@@ -89,6 +89,9 @@ export interface ClientCommunity {
   websiteUrl?: string | null;
   trackingPhone?: string | null;
   address: CommunityAddress;
+  /** Where it holds events, when that is not where it is. */
+  eventsAddress?: CommunityAddress | null;
+  useEventsAddress?: boolean;
   brand: CommunityBrand;
   logos: CommunityLogo[];
   senders: CommunitySender[];

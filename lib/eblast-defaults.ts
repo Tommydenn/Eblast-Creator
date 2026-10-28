@@ -16,15 +16,20 @@
  * full Community record from the database and the partial one the sidebar
  * holds (which may still be loading) both satisfy it.
  */
+interface AddressForDefaults {
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}
+
 export interface CommunityForDefaults {
   displayName?: string;
   shortName?: string;
-  address?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-  } | null;
+  address?: AddressForDefaults | null;
+  /** Where its events are held, when that is not where the community is. */
+  eventsAddress?: AddressForDefaults | null;
+  useEventsAddress?: boolean;
 }
 
 /**
@@ -36,7 +41,11 @@ export interface CommunityForDefaults {
  * written into them as their own text and so never falls back to this.
  */
 export function communityAddressLine(community: CommunityForDefaults | null | undefined): string {
-  const address = community?.address;
+  // A community that holds its events somewhere else prints that venue. The
+  // switch is separate from the address so turning it off keeps the venue on
+  // file, and an empty venue falls back rather than printing nothing.
+  const venue = community?.useEventsAddress ? community.eventsAddress : null;
+  const address = venue && Object.values(venue).some(Boolean) ? venue : community?.address;
   if (!address) return "";
   const stateZip = [address.state, address.zip].filter(Boolean).join(" ");
   return [address.street, address.city, stateZip].filter(Boolean).join(", ");

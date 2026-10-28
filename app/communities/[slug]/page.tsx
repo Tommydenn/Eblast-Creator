@@ -308,6 +308,8 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 slug={c.slug}
                 initialDisplayName={c.displayName}
                 initialAddress={c.address}
+                initialEventsAddress={c.eventsAddress ?? null}
+                initialUseEventsAddress={c.useEventsAddress ?? false}
                 initialTrackingPhone={c.trackingPhone ?? null}
                 initialWebsiteUrl={c.websiteUrl ?? null}
               />

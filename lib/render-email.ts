@@ -222,6 +222,15 @@ const CTA_DATE_SIZE = FIELD_FONT_SIZES.ctaEventDate;
 const CALL_BUTTON_SIZE = FIELD_FONT_SIZES.ctaButtonLabel;
 
 /**
+ * How round the call and website buttons are.
+ *
+ * Enough to soften the corner, not enough to read as a pill. Outlook on
+ * Windows ignores border-radius and squares them off, which is the same
+ * button and no worse than it was.
+ */
+const BUTTON_RADIUS = 6;
+
+/**
  * Darkest color in a community's brand palette — used for the footer
  * salesperson emails so they read as text rather than as a bright accent link.
  *
@@ -610,7 +619,7 @@ export function buildEblastHtml(
             ${flyer.ctaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
-                <td width="${ctaBtnWidth}" class="glm-bg-herobtn" bgcolor="${ctaButtonBg}" align="center" style="background:${ctaButtonBg};" data-bgfield="ctaButtonBgColor" data-deletefield="ctaButtonHidden">
+                <td width="${ctaBtnWidth}" class="glm-bg-herobtn" bgcolor="${ctaButtonBg}" align="center" style="background:${ctaButtonBg}; border-radius:${BUTTON_RADIUS}px;" data-bgfield="ctaButtonBgColor" data-deletefield="ctaButtonHidden">
                   <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", ctaButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
                 </td>
               </tr>
@@ -752,7 +761,7 @@ export function buildEblastHtml(
             ${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>
-                <td width="${finalCtaLabel.width}" class="glm-bg-finalctabtn" bgcolor="${finalCtaButtonBg}" align="center" style="background:${finalCtaButtonBg};" data-bgfield="finalCtaButtonBgColor" data-deletefield="finalCtaButtonHidden">
+                <td width="${finalCtaLabel.width}" class="glm-bg-finalctabtn" bgcolor="${finalCtaButtonBg}" align="center" style="background:${finalCtaButtonBg}; border-radius:${BUTTON_RADIUS}px;" data-bgfield="finalCtaButtonBgColor" data-deletefield="finalCtaButtonHidden">
                   <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", finalCtaButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:${finalCtaLabel.fontSize}px; letter-spacing:${finalCtaLabel.letterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${finalCtaLabel.displayHtml}</a>
                 </td>
               </tr>
@@ -785,7 +794,7 @@ export function buildEblastHtml(
       ${(websiteHref && !flyer.footerButtonHidden) ? `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
-          <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg};" data-bgfield="footerButtonBgColor" data-deletefield="footerButtonHidden">
+          <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg}; border-radius:${BUTTON_RADIUS}px;" data-bgfield="footerButtonBgColor" data-deletefield="footerButtonHidden">
             <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:${FIELD_FONT_SIZES.footerButtonLabel}px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : escapeHtml(DEFAULT_WEBSITE_BUTTON_LABEL)}</a>
           </td>
         </tr>

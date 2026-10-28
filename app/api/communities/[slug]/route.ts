@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { updateCommunityContact, updateCommunityBrand } from "@/lib/db/queries";
 import type { Address, CommunityBrand } from "@/lib/db/schema";
 
-const CONTACT_ALLOWED = ["displayName", "address", "trackingPhone", "websiteUrl"];
+const CONTACT_ALLOWED = [
+  "displayName",
+  "address",
+  "eventsAddress",
+  "useEventsAddress",
+  "trackingPhone",
+  "websiteUrl",
+];
 const BRAND_ALLOWED = ["primary", "accent", "background", "secondary", "supporting", "fontHeadline", "fontBody"];
 
 export async function PATCH(
@@ -20,6 +27,8 @@ export async function PATCH(
     const ok = await updateCommunityContact(params.slug, contactData as {
       displayName?: string;
       address?: Address;
+      eventsAddress?: Address;
+      useEventsAddress?: boolean;
       trackingPhone?: string | null;
       websiteUrl?: string | null;
     });

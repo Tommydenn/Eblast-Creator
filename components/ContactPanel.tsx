@@ -9,6 +9,9 @@ interface Props {
   slug: string;
   initialDisplayName: string;
   initialAddress: Address;
+  /** Where this community holds its events, when that is not where it is. */
+  initialEventsAddress: Address | null;
+  initialUseEventsAddress: boolean;
   initialTrackingPhone: string | null;
   initialWebsiteUrl: string | null;
 }
@@ -20,6 +23,8 @@ export function ContactPanel({
   slug,
   initialDisplayName,
   initialAddress,
+  initialEventsAddress,
+  initialUseEventsAddress,
   initialTrackingPhone,
   initialWebsiteUrl,
 }: Props) {
@@ -33,6 +38,11 @@ export function ContactPanel({
   const [city, setCity] = useState(initialAddress.city ?? "");
   const [state, setState] = useState(initialAddress.state ?? "");
   const [zip, setZip] = useState(initialAddress.zip ?? "");
+  const [useVenue, setUseVenue] = useState(initialUseEventsAddress);
+  const [venueStreet, setVenueStreet] = useState(initialEventsAddress?.street ?? "");
+  const [venueCity, setVenueCity] = useState(initialEventsAddress?.city ?? "");
+  const [venueState, setVenueState] = useState(initialEventsAddress?.state ?? "");
+  const [venueZip, setVenueZip] = useState(initialEventsAddress?.zip ?? "");
   const [trackingPhone, setTrackingPhone] = useState(initialTrackingPhone ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initialWebsiteUrl ?? "");
 
@@ -42,6 +52,11 @@ export function ContactPanel({
     setCity(initialAddress.city ?? "");
     setState(initialAddress.state ?? "");
     setZip(initialAddress.zip ?? "");
+    setUseVenue(initialUseEventsAddress);
+    setVenueStreet(initialEventsAddress?.street ?? "");
+    setVenueCity(initialEventsAddress?.city ?? "");
+    setVenueState(initialEventsAddress?.state ?? "");
+    setVenueZip(initialEventsAddress?.zip ?? "");
     setTrackingPhone(initialTrackingPhone ?? "");
     setWebsiteUrl(initialWebsiteUrl ?? "");
     setError(null);
@@ -63,6 +78,13 @@ export function ContactPanel({
             state: state.trim() || undefined,
             zip: zip.trim() || undefined,
           },
+          eventsAddress: {
+            street: venueStreet.trim() || undefined,
+            city: venueCity.trim() || undefined,
+            state: venueState.trim() || undefined,
+            zip: venueZip.trim() || undefined,
+          },
+          useEventsAddress: useVenue,
           trackingPhone: trackingPhone.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
         }),
@@ -105,6 +127,18 @@ export function ContactPanel({
           </p>
         </div>
 
+        {useVenue && (
+          <div>
+            <SectionLabel>Events are held at</SectionLabel>
+            <p className="mt-0.5 text-sm text-sand-900">
+              {[venueStreet, venueCity && venueState ? venueCity + ", " + venueState : venueCity || venueState, venueZip]
+                .filter(Boolean)
+                .join(" · ") || na}
+            </p>
+            <p className="mt-0.5 text-xs text-sand-500">Eblasts print this instead of the address above.</p>
+          </div>
+        )}
+
         <div>
           <SectionLabel className="text-forest-700">Tracking phone (CallRail)</SectionLabel>
           <p className="mt-0.5 text-sm font-medium text-forest-700">{trackingPhone || na}</p>
@@ -144,6 +178,33 @@ export function ContactPanel({
             <input className={INPUT} value={zip} onChange={(e) => setZip(e.target.value)} placeholder="ZIP" />
           </div>
         </div>
+      </div>
+
+      {/* A community that runs its events somewhere else — a sales office,
+          a venue down the road — needs the eblast to print where people
+          should actually turn up. Kept separate from the address above so
+          switching it off does not lose it. */}
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={useVenue}
+            onChange={(e) => setUseVenue(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-sand-300 text-forest-600 focus:ring-forest-600/20"
+          />
+          <SectionLabel>Events are held somewhere else</SectionLabel>
+        </label>
+        {useVenue && (
+          <div className="mt-1 space-y-2">
+            <input className={INPUT} value={venueStreet} onChange={(e) => setVenueStreet(e.target.value)} placeholder="Street" />
+            <div className="grid grid-cols-3 gap-2">
+              <input className={INPUT} value={venueCity} onChange={(e) => setVenueCity(e.target.value)} placeholder="City" />
+              <input className={INPUT} value={venueState} onChange={(e) => setVenueState(e.target.value)} placeholder="State" maxLength={2} />
+              <input className={INPUT} value={venueZip} onChange={(e) => setVenueZip(e.target.value)} placeholder="ZIP" />
+            </div>
+            <p className="text-xs text-sand-500">Eblasts print this instead of the address above.</p>
+          </div>
+        )}
       </div>
 
       <div>

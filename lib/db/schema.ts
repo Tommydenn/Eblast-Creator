@@ -159,6 +159,16 @@ export const communities = pgTable("communities", {
 
   /** Physical address (CAN-SPAM, footers). JSONB to preserve existing nested access. */
   address: jsonb("address").$type<Address>().notNull().default({}),
+  /**
+   * Where this community actually holds its events, when that is not where it
+   * is. A couple of communities run everything off site at the same venue, so
+   * the address in the eblast should be that venue rather than the building.
+   *
+   * Kept apart from the switch below so turning it off does not lose it.
+   */
+  eventsAddress: jsonb("events_address").$type<Address>(),
+  /** Whether eblasts print the events address instead of the one above. */
+  useEventsAddress: boolean("use_events_address").notNull().default(false),
 
   websiteUrl: text("website_url"),
   /**

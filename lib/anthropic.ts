@@ -223,7 +223,7 @@ export interface RefineImageLayout {
 }
 
 export interface RefineResult {
-  /** The updated flyer text fields (imageLayout/refineNote stripped out). */
+  /** The updated flyer text fields (refineNote stripped out). */
   flyer: ExtractedFlyer;
   /** Present only when the user explicitly asked to change which photos appear. */
   imageLayout?: RefineImageLayout;
@@ -311,27 +311,13 @@ export async function refineFlyerContent(opts: {
   instruction: string;
   community: Community;
   pastSends?: PastSendForContext[];
-  /** Pre-formatted "[0] hero ..." list of the photos currently in the email.
-   *  When provided, the model may return imageLayout to rearrange them. */
-  imageManifestText?: string;
   /** The part of the email the user is working in, when they are in one. */
   sectionScope?: string;
 }): Promise<RefineResult> {
   const c = client();
 
-  const imageBlock = opts.imageManifestText
-    ? `
-
-Photos in this email
-Each photo has a NAME (in quotes) that the user sees when hovering it in the preview, and an index. The user will refer to photos by these names (e.g. "swap Gallery image 1 and Gallery image 2", "remove the Secondary image"). Map the named photos the user mentions to their indices below:
-${opts.imageManifestText}
-- ONLY change photos if the user explicitly asks to remove, reorder, swap, or change which photo appears. Match the photo NAME(s) in their instruction to the indices above, then return \`imageLayout\` with the desired final arrangement: \`hero\` = the index to show as the hero (or -1 for none), \`secondary\` = the index for the inline image (or -1 for none), \`gallery\` = the list of indices for the gallery grid, in order (leave an index out to remove that photo).
-- REMOVAL MEANS FEWER PHOTOS, PERIOD. If the user asks to remove a photo, \`imageLayout\` must show one fewer photo placed than before. Do NOT promote an "Original image" (an unused full-resolution photo, listed but not currently placed) into the gap left behind, that is adding a photo the user never asked for, which is just as wrong as ignoring the removal request. Only bring an "Original image" into hero/secondary/gallery when the user's instruction explicitly names or clearly points at that specific unused photo (e.g. "use the barbecue photo instead", "swap in the third original photo").
-- If the user does NOT mention photos/images, OMIT \`imageLayout\` entirely, the photos must stay exactly as they are.
-- You can only rearrange, remove, or (when explicitly requested) bring in an already-listed "Original image." You cannot add a photo that isn't in this manifest, recolor a photo, or edit pixels. If the user asks for that, change nothing and say so in \`refineNote\`.
-- If the user asks to crop, reframe, or shift a photo (e.g. "show more of the top", "crop lower"), use BOTH: (1) \`imageLayout\` to place the corresponding "Original image" in the desired slot, AND (2) \`imageCropInstructions\` with that Original image's index and the focus direction. Only reference "Original image" indices (labeled "full-resolution original" above) in \`imageCropInstructions\`, never already-placed indices.`
-    : "";
-
+  // The model is told nothing about the photos, and is given no way to
+  // move them. Asking it to is now answered by the Images tab.
   const response = await c.messages.create({
     model: MODEL,
     max_tokens: 2048,
@@ -348,7 +334,7 @@ You are now in REFINEMENT mode. The user has an existing extracted draft and wan
 ${opts.sectionScope ? `
 WHERE THE USER IS WORKING
 ${opts.sectionScope}
-` : ""}- If the request CANNOT be handled through text/copy editing at all (e.g. "use a different photo", "add a new image", "change the layout", "update the branding"), set \`isOutOfScope=true\` AND return every content field with its current value completely unchanged. Do not attempt any edits when isOutOfScope is true.${imageBlock}`,
+` : ""}- If the request CANNOT be handled through text/copy editing at all (e.g. "use a different photo", "add a new image", "change the layout", "update the branding"), set \`isOutOfScope=true\` AND return every content field with its current value completely unchanged. Do not attempt any edits when isOutOfScope is true.`,
     tools: [
       {
         name: "extract_flyer",

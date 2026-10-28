@@ -5,7 +5,6 @@ import { buildEblastHtml } from "@/lib/render-email";
 import { inlineRelativeImages } from "@/lib/inline-images";
 import { SENTINEL_HERO, SENTINEL_SECONDARY, sentinelGallery } from "@/lib/render-sentinels";
 import { getRecentSendsForCommunity } from "@/lib/past-sends-retrieval";
-import { cropDataUriToFocusAndRatio } from "@/lib/pdf-images";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import { withParagraphSpacing } from "@/lib/extracted-flyer";
 import { boundToSection, isEblastSection, sectionScopeInstruction } from "@/lib/eblast-sections";
@@ -91,23 +90,6 @@ export async function POST(req: NextRequest) {
   try {
     const pastSends = await getRecentSendsForCommunity({ communityId: community.id, limit: 12 });
 
-    // Build a stable photo manifest the model can reference by index. The names
-    // here MUST match the hover labels shown on each image in the preview
-    // (render-email.ts data-img-label) so a user can call a photo out by name
-    // and the model maps it to the right slot. Only currently-placed images are
-    // included — the full image bank is too large to transmit in the request body.
-    const pool: Array<{ url: string; name: string; isOriginal: boolean }> = [];
-    if (body.heroImageUrl) pool.push({ url: body.heroImageUrl, name: "Hero image", isOriginal: false });
-    if (body.secondaryImageUrl) pool.push({ url: body.secondaryImageUrl, name: "Secondary image", isOriginal: false });
-    (body.galleryImageUrls ?? []).forEach((u, i) => pool.push({ url: u, name: `Gallery image ${i + 1}`, isOriginal: false }));
-    const imageManifestText = pool.length
-      ? pool.map((p, i) =>
-          p.isOriginal
-            ? `  [${i}] "${p.name}", full-resolution original, use for imageCropInstructions`
-            : `  [${i}] "${p.name}", already placed and cropped`
-        ).join("\n")
-      : "  (no photos are currently in this email)";
-
     const section = isEblastSection(body.section) ? body.section : null;
 
     const result = await refineFlyerContent({
@@ -115,7 +97,6 @@ export async function POST(req: NextRequest) {
       instruction: body.instruction,
       community,
       pastSends,
-      imageManifestText,
       sectionScope: section ? sectionScopeInstruction(section) : undefined,
     });
 
@@ -137,46 +118,15 @@ export async function POST(req: NextRequest) {
       section,
     ) as unknown as ExtractedFlyer;
 
-    // Resolve the image arrangement. Default: keep exactly what the client sent.
-    let nextHero = body.heroImageUrl;
-    let nextSecondary = body.secondaryImageUrl;
-    let nextGallery = body.galleryImageUrls ?? [];
-    if (result.imageLayout && pool.length) {
-      const at = (idx: number) =>
-        Number.isInteger(idx) && idx >= 0 && idx < pool.length ? pool[idx].url : undefined;
-      const newHero = at(result.imageLayout.hero);
-      const newSecondary = at(result.imageLayout.secondary);
-      const used = new Set([newHero, newSecondary].filter(Boolean) as string[]);
-      const newGallery = (result.imageLayout.gallery ?? [])
-        .map(at)
-        .filter((u): u is string => !!u && !used.has(u))
-        .slice(0, 4);
-      nextHero = newHero;
-      nextSecondary = newSecondary;
-      nextGallery = newGallery;
-    }
-    if (result.imageCropInstructions?.length && pool.length) {
-      const validFoci = ["top", "center", "bottom", "left", "right"] as const;
-      type Focus = typeof validFoci[number];
-      for (const crop of result.imageCropInstructions) {
-        const { imageIndex, focus } = crop;
-        if (!Number.isInteger(imageIndex) || imageIndex < 0 || imageIndex >= pool.length) continue;
-        const safeFocus: Focus = (validFoci as readonly string[]).includes(focus) ? focus as Focus : "center";
-        const url = pool[imageIndex].url;
-        // Use the correct aspect ratio for whichever slot the image occupies.
-        const isInGallery = nextGallery.includes(url);
-        const targetRatio = isInGallery ? 4 / 3 : 16 / 9;
-        const cropped = await cropDataUriToFocusAndRatio(url, targetRatio, safeFocus);
-        if (nextHero === url) nextHero = cropped;
-        if (nextSecondary === url) nextSecondary = cropped;
-        nextGallery = nextGallery.map((u) => (u === url ? cropped : u));
-      }
-    }
-
-    const imagesChanged =
-      nextHero !== body.heroImageUrl ||
-      nextSecondary !== body.secondaryImageUrl ||
-      JSON.stringify(nextGallery) !== JSON.stringify(body.galleryImageUrls ?? []);
+    // Photos are not the AI's to touch. It used to be able to reorder,
+    // remove, swap and re-crop them when asked, and that is now done by hand
+    // in the Images tab, where what happens is visible and undoing it is a
+    // matter of picking the old photo again rather than hoping a refinement
+    // put it back.
+    const nextHero = body.heroImageUrl;
+    const nextSecondary = body.secondaryImageUrl;
+    const nextGallery = body.galleryImageUrls ?? [];
+    const imagesChanged = false;
 
     // Return sentinel HTML — no image data URIs embedded. The client injects
     // images from the `images` field (or its own current state) after receiving.

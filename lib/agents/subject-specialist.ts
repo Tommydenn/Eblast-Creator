@@ -169,6 +169,7 @@ Pick the winner that best balances specificity, performance pattern match, and w
 
 Hard rules
 - Never invent facts. The subject can only reference things actually in the draft / flyer.
+- No dates in the subject. Not "October 22", not "Oct 22", not "this Thursday", not "next week". The email carries the date in its own block where the reader will see it; a subject line spends its sixty characters earning the open, and a date earns nothing. A time-led approach means urgency or season ("while the leaves are still out"), never a calendar date.
 - Subject ≤60 chars. Preview ≤120 chars.
 - The drafter's original subject IS one of your candidates, don't unfairly replace it. It only loses if a stronger one wins on merit.
 - 5 total candidates: 1 drafter-original + 4 alternatives. The winner is whichever is strongest, drafter-original or otherwise.

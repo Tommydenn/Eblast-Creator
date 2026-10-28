@@ -885,7 +885,10 @@ export function buildEblastHtml(
 <body class="glm-bg-outer" style="margin:0; padding:0; background:#f5f5f5;" bgcolor="#f5f5f5">
 <span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(flyer.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</span>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-outer" bgcolor="#f5f5f5" style="background:#f5f5f5;">
-  <tr><td align="center" style="padding:32px 0;">
+  <!-- No padding. This used to hold the email 32px clear of the page,
+       which reads as a band of grey above the logo and below the footer —
+       page decoration on something that should be only the email. -->
+  <tr><td align="center" style="padding:0;">
     <!-- table-layout:fixed makes width:600px binding. Without it the table is
          auto-layout, so any single wide row (a long unwrapped date line, a
          fixed-width button) stretches the whole email past 600px while the

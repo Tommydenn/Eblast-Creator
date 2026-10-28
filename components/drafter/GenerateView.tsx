@@ -548,6 +548,31 @@ function PlannerControls({ onFinished }: { onFinished: () => void }) {
  */
 function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onCleared: () => void }) {
   const [clearing, setClearing] = React.useState<string | null>(null);
+  // Collapsed by hand and remembered, since the flyer list in particular is
+  // long, needs nothing from anyone, and is mostly in the way.
+  const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("eblast_attentionCollapsed");
+      if (saved) setCollapsed(JSON.parse(saved));
+    } catch {}
+  }, []);
+  const toggle = (key: string) =>
+    setCollapsed((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { localStorage.setItem("eblast_attentionCollapsed", JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+  /** The heading is the control, so the whole line is the hit area. */
+  const chevron = (open: boolean, tone: string) => (
+    <svg
+      width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+      className={`${tone} shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
 
   const blocked = tasks.filter((t) => t.kind === "missing_community" || t.kind === "other");
   const waiting = tasks.filter((t) => t.kind === "waiting_on_flyer");
@@ -601,10 +626,14 @@ function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onClear
     <div className="mb-4 space-y-3">
       {blocked.length > 0 && (
         <div className="rounded-xl border border-[#f0d5d5] bg-[#fdf6f6] px-4 py-3">
-          <div className="flex items-baseline gap-3">
-            <p className="text-xs font-semibold text-[#9a3a34]">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => toggle("blocked")}
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#9a3a34]"
+            >
+              {chevron(!collapsed.blocked, "text-[#b08a86]")}
               {blocked.length === 1 ? "1 task needs your attention" : `${blocked.length} tasks need your attention`}
-            </p>
+            </button>
             <button
               onClick={() => clearAll(blocked, "blocked")}
               disabled={clearing === "blocked"}
@@ -613,7 +642,7 @@ function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onClear
               Clear all
             </button>
           </div>
-          <div className="mt-2 space-y-2.5">
+          <div className={`mt-2 space-y-2.5 ${collapsed.blocked ? "hidden" : ""}`}>
             {byReason(blocked).map(([reason, group]) => (
               <div key={reason}>
                 <p className="text-[11px] font-medium text-[#9a3a34]">
@@ -626,18 +655,24 @@ function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onClear
               </div>
             ))}
           </div>
-          <p className="mt-2.5 text-[11px] text-[#9a8582]">Add the community and it drafts on the next run.</p>
+          {!collapsed.blocked && (
+            <p className="mt-2.5 text-[11px] text-[#9a8582]">Add the community and it drafts on the next run.</p>
+          )}
         </div>
       )}
 
       {waiting.length > 0 && (
         <div className="rounded-xl border border-[#e8e3dc] bg-[#faf8f4] px-4 py-3">
-          <div className="flex items-baseline gap-3">
-            <p className="text-xs font-semibold text-[#7a8c85]">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => toggle("waiting")}
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#7a8c85]"
+            >
+              {chevron(!collapsed.waiting, "text-[#b0a89f]")}
               {waiting.length === 1
                 ? "1 eblast is waiting on a flyer"
                 : `${waiting.length} eblasts are waiting on a flyer`}
-            </p>
+            </button>
             <button
               onClick={() => clearAll(waiting, "waiting")}
               disabled={clearing === "waiting"}
@@ -646,10 +681,14 @@ function NeedsAttentionPanel({ tasks, onCleared }: { tasks: StuckTask[]; onClear
               Clear all
             </button>
           </div>
-          <ul className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-5">
-            {waiting.map((t) => row(t, { text: "text-[#5a6b63]", meta: "text-[#b0a89f]", hover: "text-[#b0a89f] hover:text-[#5a6b63] hover:bg-[#f0ede7]" }))}
-          </ul>
-          <p className="mt-2.5 text-[11px] text-[#9aaba4]">Nothing to do &mdash; each drafts once a flyer is attached.</p>
+          {!collapsed.waiting && (
+            <>
+              <ul className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-5">
+                {waiting.map((t) => row(t, { text: "text-[#5a6b63]", meta: "text-[#b0a89f]", hover: "text-[#b0a89f] hover:text-[#5a6b63] hover:bg-[#f0ede7]" }))}
+              </ul>
+              <p className="mt-2.5 text-[11px] text-[#9aaba4]">Nothing to do &mdash; each drafts once a flyer is attached.</p>
+            </>
+          )}
         </div>
       )}
     </div>

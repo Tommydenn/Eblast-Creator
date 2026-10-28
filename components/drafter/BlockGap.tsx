@@ -52,7 +52,7 @@ export function BlockGap({ slot }: { slot: CustomSlot }) {
   return (
     <div className="-my-2 space-y-2">
       {mine.map((line) => (
-        <div key={line.id} className="flex items-start gap-2">
+        <div key={line.id} className="group/line flex items-start gap-2">
           <div className="flex-1">
             <RichInput
               value={line.text}
@@ -70,7 +70,7 @@ export function BlockGap({ slot }: { slot: CustomSlot }) {
           <button
             type="button"
             onClick={() => write(all.filter((l) => l.id !== line.id))}
-            className="mt-1.5 px-1 text-sm leading-none text-[#b9a89a] hover:text-[#a4552f] transition-colors"
+            className="mt-1.5 px-1 text-sm leading-none text-[#9aaba4] opacity-0 transition-all hover:text-[#a4552f] group-hover/line:opacity-100 focus-visible:opacity-100"
             title="Remove this line"
           >
             &times;

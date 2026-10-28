@@ -111,7 +111,7 @@ export function DateTimeField({
   activeEditorRef, activeEditorCallback, activeFieldNameRef,
 }: Props) {
   return (
-    <div>
+    <div className="group/hideable">
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">
           {label}

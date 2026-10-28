@@ -3,7 +3,7 @@
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
-import { HiddenBanner } from "@/components/drafter/HiddenBanner";
+import { SectionHeader } from "@/components/drafter/SectionHeader";
 import { Field } from "@/components/drafter/Field";
 import { BlockGap } from "@/components/drafter/BlockGap";
 import { DateTimeField } from "@/components/drafter/DateTimeField";
@@ -18,12 +18,11 @@ export default function HeroSection() {
 
   return (
     <div className="space-y-5">
-      {fields.headerSectionHidden && (
-        <HiddenBanner label="The Header section" onRestore={() => setField("headerSectionHidden", undefined)} />
-      )}
-      {fields.heroSectionHidden && (
-        <HiddenBanner label="The Hero section" onRestore={() => setField("heroSectionHidden", undefined)} />
-      )}
+      {/* The logo band. It has no fields of its own, so this row is the
+          only place it can be turned off and on. */}
+      <SectionHeader label="Header" flag="headerSectionHidden" />
+
+      <SectionHeader label="Hero" flag="heroSectionHidden" />
 
       <BlockGap slot="hero:start" />
 

@@ -4,7 +4,7 @@ import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField, EmailButtonField, SenderNameField } from "@/components/drafter/RichEditor";
 import { DateTimeField } from "@/components/drafter/DateTimeField";
-import { HiddenBanner } from "@/components/drafter/HiddenBanner";
+import { SectionHeader } from "@/components/drafter/SectionHeader";
 import { Field } from "@/components/drafter/Field";
 import { BlockGap } from "@/components/drafter/BlockGap";
 import {
@@ -48,12 +48,7 @@ export default function CtaSection() {
 
   return (
     <div className="space-y-5">
-      {fields.footerSectionHidden && (
-        <HiddenBanner label="The Footer section" onRestore={() => setField("footerSectionHidden", undefined)} />
-      )}
-      {fields.finalCtaSectionHidden && (
-        <HiddenBanner label="The Call-to-Action section" onRestore={() => setField("finalCtaSectionHidden", undefined)} />
-      )}
+      <SectionHeader label="Call to Action" flag="finalCtaSectionHidden" />
 
       <BlockGap slot="cta:start" />
 
@@ -104,11 +99,7 @@ export default function CtaSection() {
 
       <BlockGap slot="finalCtaButtonLabel" />
 
-      <div className="flex items-center gap-3 pt-1">
-        <span className="h-px flex-1 bg-[#e8e3dc]" aria-hidden />
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#b0a89f]">Footer</span>
-        <span className="h-px flex-1 bg-[#e8e3dc]" aria-hidden />
-      </div>
+      <SectionHeader label="Footer" flag="footerSectionHidden" />
 
       <BlockGap slot="top" />
 
@@ -201,7 +192,7 @@ export default function CtaSection() {
         ) : (
           <div className="space-y-2">
             {additionalEmails.map((email, i) => (
-              <div key={i} className="flex items-start gap-2">
+              <div key={i} className="group/line flex items-start gap-2">
                 <div className="flex-1">
                   <RichInput
                     value={email}
@@ -218,7 +209,7 @@ export default function CtaSection() {
                   type="button"
                   onClick={() => removeAdditionalEmail(i)}
                   title="Remove"
-                  className="mt-2 p-1 rounded-lg text-[#c9c0b8] hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                  className="mt-2 p-1 rounded-lg text-[#9aaba4] opacity-0 transition-all hover:text-[#a4552f] group-hover/line:opacity-100 focus-visible:opacity-100 shrink-0"
                 >
                   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
                     <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round"/>

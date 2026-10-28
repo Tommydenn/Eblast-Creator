@@ -29,9 +29,15 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
     return found;
   }
 
-  // Floating "x" delete button — appended to <body> directly (not inside the
+  // The floating hover control — appended to <body> directly (not inside the
   // hovered element) since some hovered elements are near-zero-height table
   // rows that can't usefully contain an overlay child.
+  //
+  // It is an eye on almost everything, and hiding happens on the click: it is
+  // reversible, the sidebar shows what is hidden, and undo covers it, so there
+  // is nothing for a confirm box to protect. A line somebody added is the one
+  // exception — removing one throws away typed words — so that keeps the x and
+  // the question that goes with it.
   //
   // Show/hide tracking is purely geometric (mousemove + point-in-rect against
   // the target's and button's own rects), not based on which DOM node a
@@ -60,7 +66,7 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   function placeDelBtn(){
     if(!delBtn || !delTarget || !delTarget.isConnected) return;
     var r=delTarget.getBoundingClientRect();
-    delBtn.style.left=(r.right-24)+'px';
+    delBtn.style.left=(r.right-26)+'px';
     delBtn.style.top=(r.top+4)+'px';
   }
   function showDelBtnFor(target){
@@ -73,9 +79,16 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
     hideDelBtn();
     delTarget=target;
     var btn=document.createElement('div');
-    btn.textContent='\\u00d7';
+    var isLine=(target.dataset.deletefield||'').indexOf('footerCustomLine:')===0;
+    if(isLine){
+      btn.textContent='\\u00d7';
+      btn.title='Remove this line';
+    } else {
+      btn.innerHTML='<svg width=\'13\' height=\'13\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\'><path d=\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24\'/><line x1=\'1\' y1=\'1\' x2=\'23\' y2=\'23\'/></svg>';
+      btn.title='Hide this';
+    }
     btn.setAttribute('data-delete-btn','1');
-    btn.style.cssText='position:fixed;width:20px;height:20px;line-height:19px;text-align:center;background:#b3312c;color:#fff;border-radius:50%;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;cursor:pointer;z-index:99999;box-shadow:0 1px 3px rgba(0,0,0,0.35);user-select:none;';
+    btn.style.cssText='position:fixed;width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#ffffff;color:#1F4538;border:1px solid #d9d3ca;border-radius:50%;font-family:Arial,sans-serif;font-size:14px;line-height:1;cursor:pointer;z-index:99999;box-shadow:0 1px 3px rgba(0,0,0,0.18);user-select:none;';
     document.body.appendChild(btn);
     delBtn=btn;
     placeDelBtn();
@@ -155,7 +168,9 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
       // against the thing that was clicked, which is on screen by
       // definition; a section can run several screens tall.
       var r=delBtn.getBoundingClientRect();
-      window.parent.postMessage({type:'delete-click',field:delTarget.dataset.deletefield,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
+      var f=delTarget.dataset.deletefield;
+      var kind=f.indexOf('footerCustomLine:')===0?'delete-click':'hide-click';
+      window.parent.postMessage({type:kind,field:f,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
       hideDelBtn();
       return;
     }
@@ -242,28 +257,6 @@ function defaultForBgField(key: BgFieldKey, community: any): string {
   }
 }
 
-// Every hover-delete target — human label for the confirm popover.
-//
-// The header and the footer are in it now. They used to be left out as
-// always-required branding and sender contact, which decided for everyone
-// that no eblast would ever want to go without them.
-type DeleteFieldKey =
-  | "heroSectionHidden" | "storySectionHidden" | "secondaryImageSectionHidden" | "gallerySectionHidden"
-  | "finalCtaSectionHidden" | "ctaButtonHidden" | "finalCtaButtonHidden" | "footerButtonHidden"
-  | "headerSectionHidden" | "footerSectionHidden";
-
-const DELETE_FIELD_LABELS: Record<DeleteFieldKey, string> = {
-  headerSectionHidden: "the Header section",
-  footerSectionHidden: "the Footer section",
-  heroSectionHidden: "the Hero section",
-  storySectionHidden: "the Story section",
-  secondaryImageSectionHidden: "the secondary image",
-  gallerySectionHidden: "the photo gallery",
-  finalCtaSectionHidden: "the Call-to-Action section",
-  ctaButtonHidden: "the hero's call button",
-  finalCtaButtonHidden: "the bottom call button",
-  footerButtonHidden: "the Visit Our Website button",
-};
 
 // Photo click-through links. galleryImageLinks is positional (index i is the
 // link for gallery photo i), so it carries an index; the other two don't.
@@ -430,6 +423,12 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
   const [bgPopover, setBgPopover] = useState<{ field: BgFieldKey; left: number; top: number } | null>(null);
   const [deletePopover, setDeletePopover] = useState<{ field: string; left: number; top: number } | null>(null);
 
+  // The message handler below is registered once, so it cannot close over
+  // the draft — it would go on hiding things into whatever the draft was
+  // when the preview first loaded.
+  const fieldsRef = useRef(fields);
+  fieldsRef.current = fields;
+
   // Scale the fixed-width email down when the column is narrower than it,
   // instead of letting the container clip it.
   const [linkPopover, setLinkPopover] = useState<
@@ -537,6 +536,18 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
           label: (e.data.label as string) ?? "Photo",
           ...at,
         });
+        return;
+      }
+      // Hiding is reversible, the sidebar shows what is hidden, and undo
+      // covers it — so it happens on the click, with nothing to confirm.
+      if (e.data.type === "hide-click") {
+        const field = e.data.field as string;
+        const block = hiddenBlockName(field);
+        if (block) {
+          setField("hiddenBlocks", [...(fieldsRef.current?.hiddenBlocks ?? []), block]);
+        } else {
+          setField(field as keyof ExtractedFlyer, true as never);
+        }
         return;
       }
       if (e.data.type === "delete-click") {
@@ -747,25 +758,15 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
           <div className="fixed inset-0 z-30" onClick={() => setDeletePopover(null)} />
           <div className="absolute z-40" style={{ left: deletePopover.left, top: deletePopover.top }}>
             <DeleteConfirmPopover
-              label={(DELETE_FIELD_LABELS as Record<string, string>)[deletePopover.field] ?? "this added line"}
+              label="this added line"
               onConfirm={() => {
                 const id = customLineId(deletePopover.field);
-                const block = hiddenBlockName(deletePopover.field);
-                if (id) {
-                  const all = fields ? allCustomLines(fields) : [];
-                  const next = all.filter((l) => l.id !== id);
-                  setFields({
-                    customLines: next.length ? next : undefined,
-                    footerCustomLines: undefined,
-                  });
-                } else if (block) {
-                  setField(
-                    "hiddenBlocks",
-                    [...(fields?.hiddenBlocks ?? []), block],
-                  );
-                } else {
-                  setField(deletePopover.field as keyof ExtractedFlyer, true as never);
-                }
+                const all = fields ? allCustomLines(fields) : [];
+                const next = all.filter((l) => l.id !== id);
+                setFields({
+                  customLines: next.length ? next : undefined,
+                  footerCustomLines: undefined,
+                });
                 setDeletePopover(null);
               }}
               onCancel={() => setDeletePopover(null)}

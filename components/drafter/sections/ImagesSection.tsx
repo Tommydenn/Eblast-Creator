@@ -3,19 +3,27 @@
 import React, { useRef } from "react";
 import { downscaleInBrowser } from "@/lib/crop-image-client";
 import { useDraft } from "@/context/DraftContext";
-import { HiddenBanner } from "@/components/drafter/HiddenBanner";
+import { HideToggle } from "@/components/drafter/HideToggle";
 
 function SlotCard({
   label,
   url,
   loading,
   repositionState,
+  hideFlag,
   onAssign,
   onRemove,
   onReposition,
 }: {
   label: string;
   url?: string | null;
+  /**
+   * The section this slot is the whole of, when it is one.
+   *
+   * The secondary image is a section of the email in its own right. Its
+   * hide control belongs next to the photo rather than on another tab.
+   */
+  hideFlag?: string;
   /** This slot holds a photo that is still downloading. */
   loading?: boolean;
   /** Whether the full-size original this would re-crop from is available. */
@@ -25,7 +33,7 @@ function SlotCard({
   onReposition?: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-[#e8e3dc] bg-white overflow-hidden">
+    <div className="group/hideable rounded-xl border border-[#e8e3dc] bg-white overflow-hidden">
       <div className="px-3 py-2 border-b border-[#f0ede7] flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">{label}</span>
         <div className="flex items-center gap-2">
@@ -42,11 +50,12 @@ function SlotCard({
           {url && onRemove && (
             <button
               onClick={onRemove}
-              className="text-xs text-red-400 hover:text-red-600 transition-colors"
+              className="text-xs text-[#9aaba4] hover:text-[#a4552f] transition-colors"
             >
               Remove
             </button>
           )}
+          {hideFlag && <HideToggle flag={hideFlag} what={`the ${label.toLowerCase()}`} />}
         </div>
       </div>
       {loading ? (
@@ -345,9 +354,6 @@ export default function ImagesSection() {
 
   return (
     <div className="space-y-4">
-      {fields?.gallerySectionHidden && (
-        <HiddenBanner label="The photo gallery" onRestore={() => setField("gallerySectionHidden", undefined)} />
-      )}
 
       {imagesError && (
         <p className="rounded-lg bg-[#fdf2f2] border border-[#f0d5d5] px-3 py-2 text-xs text-[#9a3a34]">
@@ -367,6 +373,7 @@ export default function ImagesSection() {
 
       <SlotCard
         label="Secondary Image"
+        hideFlag="secondaryImageSectionHidden"
         url={images.secondary?.url}
         loading={imagesLoading && !!images.secondary && !images.secondary.url}
         repositionState={repositionState(images.secondary, originalsLoading)}
@@ -375,9 +382,11 @@ export default function ImagesSection() {
         onReposition={images.secondary ? () => setReposition({ slot: "secondary", originalUrl: images.secondary!.originalUrl }) : undefined}
       />
 
-      <div>
-        <div className="flex items-center justify-between mb-2">
+      <div className="group/hideable">
+        <div className="flex items-center justify-between gap-2 mb-2">
           <span className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">Gallery ({images.gallery.length}/4)</span>
+          <HideToggle flag="gallerySectionHidden" what="the photo gallery" />
+          <span className="flex-1" aria-hidden />
           {images.gallery.length < 4 && (
             <button
               onClick={() => setPicker({ slot: "gallery", galleryIdx: images.gallery.length })}

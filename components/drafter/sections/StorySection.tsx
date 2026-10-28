@@ -3,7 +3,7 @@
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, RichBodyEditor } from "@/components/drafter/RichEditor";
-import { HiddenBanner } from "@/components/drafter/HiddenBanner";
+import { SectionHeader } from "@/components/drafter/SectionHeader";
 import { Field } from "@/components/drafter/Field";
 import { BlockGap } from "@/components/drafter/BlockGap";
 import { defaultGalleryLabel } from "@/lib/eblast-defaults";
@@ -21,12 +21,7 @@ export default function StorySection() {
 
   return (
     <div className="space-y-5">
-      {fields.storySectionHidden && (
-        <HiddenBanner label="The Story section" onRestore={() => setField("storySectionHidden", undefined)} />
-      )}
-      {fields.secondaryImageSectionHidden && (
-        <HiddenBanner label="The secondary image" onRestore={() => setField("secondaryImageSectionHidden", undefined)} />
-      )}
+      <SectionHeader label="Story" flag="storySectionHidden" />
 
       <BlockGap slot="story:start" />
 

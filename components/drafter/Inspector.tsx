@@ -388,10 +388,15 @@ function SectionPanel({ name, onBack }: { name: string; onBack: () => void }) {
               fieldName="eventDate"
               value={combineDateTime(fields!.eventDate, fields!.eventTime)}
               placeholder="Wednesday, May 13"
-              onValueChange={(html) =>
+              onValueChange={(html) => {
+                // Named one at a time rather than spread: splitDateTime answers
+                // in `date` and `time`, the draft holds `eventDate` and
+                // `eventTime`, and a spread of the one into the other type-
+                // checks while writing to two fields that do not exist.
+                const { date, time } = splitDateTime(html);
                 // Editing the date answers the question, so the warning goes with it.
-                setFields({ ...splitDateTime(html), dateConflict: undefined })
-              }
+                setFields({ eventDate: date, eventTime: time, dateConflict: undefined });
+              }}
             />
             <p className="mt-1 text-[11px] leading-snug text-[#6A736F]">The date, then the time on the next line.</p>
             {fields!.dateConflict && (

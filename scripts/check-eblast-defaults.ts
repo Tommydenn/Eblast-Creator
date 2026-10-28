@@ -217,7 +217,22 @@ for (const file of EDITOR_FILES) {
   }
 }
 
-// ── 6. Every colourable surface is reachable from a section's panel ────────
+// ── 6. Nothing writes to the draft through a spread ────────────────────────
+//
+// `setFields` takes a Partial<ExtractedFlyer>, and TypeScript checks the key
+// names of an object literal against it — but not the keys that arrive in a
+// spread. `setFields({ ...splitDateTime(html) })` compiled cleanly while
+// writing to fields called `date` and `time`, which the draft does not have,
+// so the hero's date box took every keystroke and kept none of them. Naming
+// each field puts the check back.
+for (const file of EDITOR_FILES) {
+  const src = fs.readFileSync(file, "utf8");
+  if (/setFields\(\s*\{\s*\.\.\./.test(src)) {
+    fail(`${file} spreads into setFields — name each field, or a wrong key is written silently`);
+  }
+}
+
+// ── 7. Every colourable surface is reachable from a section's panel ────────
 //
 // Background colour had no control at all for a while: the only way to change
 // one was to hover the right part of the preview and click. Each colour now

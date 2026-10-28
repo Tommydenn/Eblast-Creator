@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { SectionOrder } from "@/components/drafter/SectionOrder";
 import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
 import SubjectSection from "./sections/SubjectSection";
@@ -77,6 +78,11 @@ export default function EditorPanel() {
           </button>
         ))}
       </div>
+
+      {/* The order of the email's parts. Blocks are rearranged where they
+          are edited; sections cannot be, because they are spread across
+          these tabs, so they are rearranged here. */}
+      <SectionOrder />
 
       {/* Content */}
       <div className="eb-scroll flex-1 overflow-y-auto">

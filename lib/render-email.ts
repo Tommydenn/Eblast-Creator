@@ -3,7 +3,8 @@
 // One template, every community gets it with their own brand variables.
 
 import type { Community } from "@/data/communities";
-import { allCustomLines, type CustomSlot } from "@/lib/extracted-flyer";
+import { allCustomLines } from "@/lib/extracted-flyer";
+import { orderedBlocks, orderedSections } from "@/lib/eblast-blocks";
 import logoDimensions from "@/lib/logo-dimensions.json";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import {
@@ -429,7 +430,7 @@ export function buildEblastHtml(
    * Deliberately quiet — smaller and a touch lighter than the lines
    * the template puts there — so adding one does not compete with them.
    */
-  const linesAfter = (slot: CustomSlot, color = "#4A4A4A") =>
+  const linesAfter = (slot: string, color = "#4A4A4A") =>
     allCustomLines(flyer)
       .filter((line) => line.after === slot)
       .map((line) => {
@@ -614,26 +615,13 @@ export function buildEblastHtml(
     </td>
   </tr>`;
 
-  const hero = flyer.heroSectionHidden ? "" : `
-  <tr data-section="Hero" data-deletefield="heroSectionHidden">
-    <td>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-        ${heroImg ? `
-        <tr>
-          <td style="padding: 0; line-height: 0; font-size: 0; overflow: hidden;">
-            ${linkedImage(`<img src="${heroImg}" data-img-label="Hero image" width="600" height="340" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:600px; max-width:100%; height:auto; border:0;">`, flyer.heroImageLink, "heroImageLink")}
-          </td>
-        </tr>` : ""}
-        <tr>
-          <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
-            ${linesAfter("hero:start", "#F0E2C0")}
-            ${shows("rsvpLabel", rsvpLabel) ? `<p data-field="rsvpLabel" data-deletefield="block:rsvpLabel" style="${alignStyleFor("rsvpLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.rsvpLabel}px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
-            ${linesAfter("rsvpLabel", "#F0E2C0")}
-            ${shows("headline", flyer.headline) ? `<p data-field="headline" data-deletefield="block:headline" class="glm-nowrap" style="${alignStyleFor("headline")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.headline}px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
-            ${linesAfter("headline", "#F0E2C0")}
-            ${shows("scriptSubheadline", flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" data-deletefield="block:scriptSubheadline" class="glm-nowrap" style="${alignStyleFor("scriptSubheadline")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}
-            ${linesAfter("scriptSubheadline", "#F0E2C0")}
-            ${hasEventDateLine ? `
+  // The hero's blocks, by name. They all share one table cell, so drawing
+  // them in a different sequence is all rearranging them takes.
+  const heroBlocks: Record<string, string> = {
+    rsvpLabel: `${shows("rsvpLabel", rsvpLabel) ? `<p data-field="rsvpLabel" data-deletefield="block:rsvpLabel" style="${alignStyleFor("rsvpLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.rsvpLabel}px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}`,
+    headline: `${shows("headline", flyer.headline) ? `<p data-field="headline" data-deletefield="block:headline" class="glm-nowrap" style="${alignStyleFor("headline")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.headline}px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}`,
+    scriptSubheadline: `${shows("scriptSubheadline", flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" data-deletefield="block:scriptSubheadline" class="glm-nowrap" style="${alignStyleFor("scriptSubheadline")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}`,
+    eventDateTime: `${hasEventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
                  A date line longer than the column made it wider than the
                  600px frame, which is what stretched the email (and, once the
@@ -661,16 +649,34 @@ export function buildEblastHtml(
                   ${shows("heroAddress", addressLine) ? `<p data-field="heroAddress" data-deletefield="block:heroAddress" class="glm-nowrap" style="${alignStyleFor("heroAddress")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.heroAddress}px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
                 </td>
               </tr>
-            </table>` : ""}
-            ${linesAfter("heroAddress", "#F0E2C0")}
-            ${flyer.ctaButtonHidden ? "" : `
+            </table>` : ""}`,
+    ctaButtonLabel: `${flyer.ctaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
                 <td width="${ctaBtnWidth}" class="glm-bg-herobtn" bgcolor="${ctaButtonBg}" align="center" style="background:${ctaButtonBg}; border-radius:${BUTTON_RADIUS}px;" data-bgfield="ctaButtonBgColor" data-deletefield="ctaButtonHidden">
                   <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", ctaButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:${ctaBtnFontSize}px; letter-spacing:${ctaBtnLetterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${ctaDisplayHtml}</a>
                 </td>
               </tr>
-            </table>`}
+            </table>`}`,
+  };
+  const heroPieces = () =>
+    orderedBlocks(flyer, "Hero")
+      .map((b) => `${heroBlocks[b.name] ?? ""}\n            ${linesAfter(b.slot, "#F0E2C0")}`)
+      .join("\n            ");
+  const hero = flyer.heroSectionHidden ? "" : `
+  <tr data-section="Hero" data-deletefield="heroSectionHidden">
+    <td>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        ${heroImg ? `
+        <tr>
+          <td style="padding: 0; line-height: 0; font-size: 0; overflow: hidden;">
+            ${linkedImage(`<img src="${heroImg}" data-img-label="Hero image" width="600" height="340" alt="${escapeHtml(flyer.heroImageAlt)}" style="display:block; width:600px; max-width:100%; height:auto; border:0;">`, flyer.heroImageLink, "heroImageLink")}
+          </td>
+        </tr>` : ""}
+        <tr>
+          <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
+            ${linesAfter("hero:start", "#F0E2C0")}
+            ${heroPieces()}
           </td>
         </tr>
       </table>
@@ -711,16 +717,25 @@ export function buildEblastHtml(
   const secondaryShown = !!secondaryImg && !flyer.secondaryImageSectionHidden;
   const galleryFollowsContent = storyBodyShown || secondaryShown;
 
+  // Story's heading, by name — the eyebrow and the title share a
+  // table cell, so drawing them in a different sequence is all it takes.
+  // The body copy has a cell of its own, carrying the padding that sets the
+  // section off from the one above, so it stays below them.
+  const storyHeadBlocks: Record<string, string> = {
+    storyEyebrow: `${storyEyebrowHtml ? `<p data-field="storyEyebrow" data-deletefield="block:storyEyebrow" class="glm-nowrap" style="${alignStyleFor("storyEyebrow")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.storyEyebrow}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}`,
+    storyScriptTitle: `${storyTitleHtml ? `<p data-field="storyScriptTitle" data-deletefield="block:storyScriptTitle" class="glm-nowrap" style="${alignStyleFor("storyScriptTitle")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${FIELD_FONT_SIZES.storyScriptTitle}px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}`,
+  };
+  const storyHeadPieces = () =>
+    orderedBlocks(flyer, "Story")
+      .map((b) => `${storyHeadBlocks[b.name] ?? ""}\n      ${linesAfter(b.slot)}`)
+      .join("\n      ");
   const story = `
   ${flyer.storySectionHidden ? "" : `
   ${storyHeadShown ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td class="glm-bg-story" bgcolor="${storyBg}" style="background:${storyBg}; padding: 44px 36px 12px 36px;" data-bgfield="storyBgColor">
       ${storyStartLines}
-      ${storyEyebrowHtml ? `<p data-field="storyEyebrow" data-deletefield="block:storyEyebrow" class="glm-nowrap" style="${alignStyleFor("storyEyebrow")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.storyEyebrow}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
-      ${storyEyebrowLines}
-      ${storyTitleHtml ? `<p data-field="storyScriptTitle" data-deletefield="block:storyScriptTitle" class="glm-nowrap" style="${alignStyleFor("storyScriptTitle")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${FIELD_FONT_SIZES.storyScriptTitle}px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
-      ${storyTitleLines}
+      ${storyHeadPieces()}
     </td>
   </tr>` : ""}
   ${(storyBodyHtml || storyBodyLines) ? `
@@ -729,15 +744,14 @@ export function buildEblastHtml(
       <p data-field="bodyParagraphs" data-deletefield="block:bodyParagraphs" style="${alignStyleFor("bodyParagraphs")}font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${storyBodyHtml}</p>
       ${linesAfter("bodyParagraphs")}
     </td>
-  </tr>` : ""}`}
-  ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
+  </tr>` : ""}`}`;
+
+  const secondary = (secondaryImg && !flyer.secondaryImageSectionHidden) ? `
   <tr data-section="Secondary Image" data-deletefield="secondaryImageSectionHidden">
     <td class="glm-bg-secondary" bgcolor="${secondaryImageBg}" style="background:${secondaryImageBg}; padding: 0 36px 28px 36px;" data-bgfield="secondaryImageBgColor">
       ${linkedImage(`<img src="${secondaryImg}" data-img-label="Secondary image" width="528" height="300" alt="${escapeHtml(flyer.secondaryImageAlt ?? "")}" style="display:block; width:528px; max-width:100%; height:auto; border:0;">`, flyer.secondaryImageLink, "secondaryImageLink")}
     </td>
-  </tr>` : ""}
-  `;
-
+  </tr>` : "";
 
   // Gallery: 2- or 4-up grid of additional photos extracted from the flyer.
   // Sits between the story and the final CTA.
@@ -799,16 +813,11 @@ export function buildEblastHtml(
   </tr>`;
   })();
 
-  const finalCta = flyer.finalCtaSectionHidden ? "" : `
-  <tr data-section="Call to Action" data-deletefield="finalCtaSectionHidden">
-    <td>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
-        <tr>
-          <td style="padding: 40px 36px;" align="center">
-            ${linesAfter("cta:start", "#FFFFFF")}
-            ${shows("ctaRsvpLabel", ctaRsvpLabel) ? `<p data-field="ctaRsvpLabel" data-deletefield="block:ctaRsvpLabel" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.ctaRsvpLabel}px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
-            ${linesAfter("ctaRsvpLabel", "#FFFFFF")}
-            ${hasCtaDateLine ? dateTimeRow({
+  // Call to Action's blocks, by name. They share one table cell, so drawing
+  // them in a different sequence is all rearranging them takes.
+  const finalCtaBlocks: Record<string, string> = {
+    ctaRsvpLabel: `${shows("ctaRsvpLabel", ctaRsvpLabel) ? `<p data-field="ctaRsvpLabel" data-deletefield="block:ctaRsvpLabel" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.ctaRsvpLabel}px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}`,
+    ctaEventDateTime: `${hasCtaDateLine ? dateTimeRow({
               dateHtml: showCtaDate ? renderInlineField(ctaDate ?? "") : "",
               dateField: "ctaEventDate",
               timeHtml: showCtaTime ? renderInlineField(ctaTime!) : "",
@@ -817,17 +826,28 @@ export function buildEblastHtml(
               fontSize: CTA_DATE_SIZE,
               extraStyle: "line-height: 1.2;",
               marginBottom: 22,
-            }) : ""}
-            ${linesAfter("ctaEventTime", "#FFFFFF")}
-            ${flyer.finalCtaButtonHidden ? "" : `
+            }) : ""}`,
+    finalCtaButtonLabel: `${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>
                 <td width="${finalCtaLabel.width}" class="glm-bg-finalctabtn" bgcolor="${finalCtaButtonBg}" align="center" style="background:${finalCtaButtonBg}; border-radius:${BUTTON_RADIUS}px;" data-bgfield="finalCtaButtonBgColor" data-deletefield="finalCtaButtonHidden">
                   <a href="${escapeHtml(ctaHref)}" style="display:block; padding:16px 36px; text-align:center; color:${buttonTextColor("#FFFFFF", finalCtaButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:${finalCtaLabel.fontSize}px; letter-spacing:${finalCtaLabel.letterSpacing}; text-transform:uppercase; font-weight:700; line-height:1.4;">${finalCtaLabel.displayHtml}</a>
                 </td>
               </tr>
-            </table>`}
-            ${linesAfter("finalCtaButtonLabel", "#FFFFFF")}
+            </table>`}`,
+  };
+  const finalCtaPieces = () =>
+    orderedBlocks(flyer, "Call to Action")
+      .map((b) => `${finalCtaBlocks[b.name] ?? ""}\n            ${linesAfter(b.slot, "#FFFFFF")}`)
+      .join("\n            ");
+  const finalCta = flyer.finalCtaSectionHidden ? "" : `
+  <tr data-section="Call to Action" data-deletefield="finalCtaSectionHidden">
+    <td>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
+        <tr>
+          <td style="padding: 40px 36px;" align="center">
+            ${linesAfter("cta:start", "#FFFFFF")}
+            ${finalCtaPieces()}
           </td>
         </tr>
       </table>
@@ -850,30 +870,52 @@ export function buildEblastHtml(
   const secondarySenderEmails = (community.senders ?? [])
     .flatMap((s) => (s !== primarySender && s.email?.trim() ? [s.email.trim()] : []));
 
-  const footer = flyer.footerSectionHidden ? "" : `
-  <tr data-section="Footer" data-deletefield="footerSectionHidden">
-    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center" data-bgfield="footerBgColor">${linesAfter("top")}
-      ${(websiteHref && !flyer.footerButtonHidden) ? `
+  // Footer's blocks, by name. They share one table cell, so drawing
+  // them in a different sequence is all rearranging them takes.
+  const footerBlocks: Record<string, string> = {
+    footerButtonLabel: `${(websiteHref && !flyer.footerButtonHidden) ? `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
           <td width="220" class="glm-bg-footerbtn" bgcolor="${footerButtonBg}" align="center" style="background:${footerButtonBg}; border-radius:${BUTTON_RADIUS}px;" data-bgfield="footerButtonBgColor" data-deletefield="footerButtonHidden">
             <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:${FIELD_FONT_SIZES.footerButtonLabel}px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : escapeHtml(DEFAULT_WEBSITE_BUTTON_LABEL)}</a>
           </td>
         </tr>
-      </table>` : ""}${linesAfter("button")}
-      ${deletableLine(flyer.thankYouText, DEFAULT_THANK_YOU_TEXT, (inner) => `<p data-field="thankYouText" data-deletefield="block:thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.thankYouText}px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`, isHidden(flyer, "thankYouText"))}${linesAfter("thankYou")}
-      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" data-deletefield="block:footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderName}px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`, isHidden(flyer, "footerSenderName")) : ""}${linesAfter("senderName")}
-      ${deletableLine(flyer.footerName, escapeHtml(defaultFooterName(community)), (inner) => `<p data-field="footerName" data-deletefield="block:footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerName}px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`, isHidden(flyer, "footerName"))}${linesAfter("footerName")}
-      ${primarySenderEmail ? alignWrap("footerSenderEmail", deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" data-deletefield="block:footerSenderEmail" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderEmail}px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`, isHidden(flyer, "footerSenderEmail"))) : ""}
+      </table>` : ""}`,
+    thankYouText: `${deletableLine(flyer.thankYouText, DEFAULT_THANK_YOU_TEXT, (inner) => `<p data-field="thankYouText" data-deletefield="block:thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.thankYouText}px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`, isHidden(flyer, "thankYouText"))}`,
+    footerSenderName: `${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" data-deletefield="block:footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderName}px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`, isHidden(flyer, "footerSenderName")) : ""}`,
+    footerName: `${deletableLine(flyer.footerName, escapeHtml(defaultFooterName(community)), (inner) => `<p data-field="footerName" data-deletefield="block:footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerName}px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`, isHidden(flyer, "footerName"))}`,
+    footerSenderEmail: `${primarySenderEmail ? alignWrap("footerSenderEmail", deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" data-deletefield="block:footerSenderEmail" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderEmail}px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`, isHidden(flyer, "footerSenderEmail"))) : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
         .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)
-        .join("")}${linesAfter("senderEmail")}
+        .join("")}`,
+  };
+  const footerPieces = () =>
+    orderedBlocks(flyer, "Footer")
+      .map((b) => `${footerBlocks[b.name] ?? ""}\n      ${linesAfter(b.slot)}`)
+      .join("\n      ");
+  const footer = flyer.footerSectionHidden ? "" : `
+  <tr data-section="Footer" data-deletefield="footerSectionHidden">
+    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center" data-bgfield="footerBgColor">${linesAfter("top")}
+      ${footerPieces()}
     </td>
   </tr>`;
 
+  // The sections, by name, drawn in whatever order this draft asks for.
+  // Rearranging one takes its blocks with it: a block lives in a section and
+  // has nowhere else to be written down.
+  const bySection: Record<string, string> = {
+    Header: header,
+    Hero: hero,
+    Story: story,
+    "Secondary Image": secondary,
+    "Photo Gallery": gallery,
+    "Call to Action": finalCta,
+    Footer: footer,
+  };
+
   // Everything hidden is a state worth naming rather than a blank page.
-  const sections = [header, hero, story, gallery, finalCta, footer];
+  const sections = orderedSections(flyer).map((def) => bySection[def.name] ?? "");
   const body = sections.some((section) => section.trim())
     ? sections.join("\n      ")
     : options.forPreview

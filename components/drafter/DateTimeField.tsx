@@ -3,6 +3,8 @@
 import React from "react";
 import { RichInput } from "@/components/drafter/RichEditor";
 import { HideToggle } from "@/components/drafter/HideToggle";
+import { Reorderable } from "@/components/drafter/Reorderable";
+import { sectionOfBlock } from "@/lib/eblast-blocks";
 
 /**
  * One box holding the event's date and time, on two lines.
@@ -95,6 +97,14 @@ interface Props {
    */
   dateBlock?: string;
   timeBlock?: string;
+  /**
+   * The block this box moves as.
+   *
+   * The email draws the date, the time and (in the hero) the address
+   * together inside one bordered box. That box is what moves, so the
+   * name here is the band's, not the date's.
+   */
+  orderBlock?: string;
   date?: string;
   time?: string;
   onChange: (next: { date?: string; time?: string }) => void;
@@ -107,11 +117,13 @@ interface Props {
 }
 
 export function DateTimeField({
-  label, hint, dateBlock, timeBlock, date, time, onChange, className, fieldName,
+  label, hint, dateBlock, timeBlock, orderBlock, date, time, onChange, className, fieldName,
   activeEditorRef, activeEditorCallback, activeFieldNameRef,
 }: Props) {
-  return (
-    <div className="group/hideable">
+  const section = orderBlock ? sectionOfBlock(orderBlock) : undefined;
+
+  const inner = (
+    <>
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">
           {label}
@@ -134,6 +146,15 @@ export function DateTimeField({
         fieldName={fieldName}
       />
       {hint && <p className="mt-1 text-xs text-[#9aaba4]">{hint}</p>}
-    </div>
+    </>
   );
+
+  if (section && orderBlock) {
+    return (
+      <Reorderable section={section.name} name={orderBlock}>
+        {inner}
+      </Reorderable>
+    );
+  }
+  return <div className="group/hideable">{inner}</div>;
 }

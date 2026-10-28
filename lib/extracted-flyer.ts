@@ -36,6 +36,24 @@ export interface ExtractedFlyer {
    */
   textAlign?: Record<string, "left" | "center" | "right">;
   /**
+   * The order of the email's sections, when it is not the template's.
+   *
+   * Names from lib/eblast-blocks. Absent means the template decides, which
+   * is what every eblast written so far relies on. A name the template no
+   * longer has is ignored and one it has gained is put back beside its
+   * neighbour, so a stale list can never lose a section.
+   */
+  sectionOrder?: string[];
+  /**
+   * The order of one section's blocks, when it is not the template's,
+   * keyed by section name.
+   *
+   * A block only ever appears under the section it belongs to. That is how
+   * a block is kept from leaving its section: there is nowhere else to
+   * write it down.
+   */
+  blockOrder?: Record<string, string[]>;
+  /**
    * Extra lines someone added, anywhere in the email.
    *
    * Each names the gap it sits in, and a gap belongs to exactly one

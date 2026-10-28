@@ -2,13 +2,16 @@
 
 import React from "react";
 import { HideToggle, useHidden } from "@/components/drafter/HideToggle";
+import { Reorderable } from "@/components/drafter/Reorderable";
+import { sectionOfBlock } from "@/lib/eblast-blocks";
 
 /**
- * One labelled box in the sidebar, and the control that hides what it writes.
+ * One labelled box in the sidebar, with the controls that hide what it writes
+ * and move it within its section.
  *
  * Every section used to carry its own copy of this wrapper. They are one now
- * because the hide control has to behave identically in all of them: hiding is
- * a property of a block, not of the section it happens to sit in.
+ * because the controls have to behave identically in all of them: hiding and
+ * ordering are properties of a block, not of the section it happens to sit in.
  *
  * A hidden box says so once — it dims, and its eye wears a slash. It used to
  * say so three times over, in two shades of red, which made an ordinary
@@ -26,6 +29,7 @@ export function Field({
   hint,
   block,
   flag,
+  orderBlock,
   children,
 }: {
   label: string;
@@ -34,12 +38,22 @@ export function Field({
   block?: string;
   /** A hide flag of its own, for the buttons and sections that carry one. */
   flag?: string;
+  /**
+   * The name this box moves under, when that is not `block`.
+   *
+   * The buttons are hidden by a flag rather than by name, and the hero's date
+   * band is one block that the sidebar splits across two boxes — so what a box
+   * writes and what it moves are not always the same thing.
+   */
+  orderBlock?: string;
   children: React.ReactNode;
 }) {
   const hidden = useHidden(block, flag);
+  const movable = orderBlock ?? block;
+  const section = movable ? sectionOfBlock(movable) : undefined;
 
-  return (
-    <div className="group/hideable">
+  const inner = (
+    <>
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">
           {label}
@@ -54,6 +68,15 @@ export function Field({
       </div>
 
       {hint && !hidden && <p className="mt-1 text-xs text-[#9aaba4]">{hint}</p>}
-    </div>
+    </>
   );
+
+  if (section && movable) {
+    return (
+      <Reorderable section={section.name} name={movable}>
+        {inner}
+      </Reorderable>
+    );
+  }
+  return <div className="group/hideable">{inner}</div>;
 }

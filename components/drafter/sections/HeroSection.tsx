@@ -74,6 +74,7 @@ export default function HeroSection() {
       {/* One box, two underlying fields — see DateTimeField. */}
       <DateTimeField
         label="Event Date & Time"
+        orderBlock="eventDateTime"
         dateBlock="eventDate"
         timeBlock="eventTime"
         date={fields.eventDate}
@@ -122,7 +123,7 @@ export default function HeroSection() {
 
       <BlockGap slot="heroAddress" />
 
-      <Field label="Call Button Label" flag="ctaButtonHidden" hint="Text on the hero's call-to-action button. Independent from the bottom Call Button Label — select text to format it (bold, color, size…), the number stays locked.">
+      <Field label="Call Button Label" flag="ctaButtonHidden" orderBlock="ctaButtonLabel" hint="Text on the hero's call-to-action button. Independent from the bottom Call Button Label — select text to format it (bold, color, size…), the number stays locked.">
         <CallButtonField
           value={fields.ctaButtonLabel ?? ""}
           onValueChange={(html) => setField("ctaButtonLabel", html)}

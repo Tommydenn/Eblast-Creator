@@ -70,6 +70,7 @@ export default function CtaSection() {
       {/* One box, two underlying fields — see DateTimeField. */}
       <DateTimeField
         label="Event Date & Time"
+        orderBlock="ctaEventDateTime"
         dateBlock="ctaEventDate"
         timeBlock="ctaEventTime"
         hint="Edit to differ from the Hero section"
@@ -85,7 +86,7 @@ export default function CtaSection() {
 
       <BlockGap slot="ctaEventTime" />
 
-      <Field label="Call Button Label" flag="finalCtaButtonHidden" hint="The action button at the bottom of the email. Generates the same as the Hero's button, but is independently editable/formattable from here on — the number stays locked.">
+      <Field label="Call Button Label" flag="finalCtaButtonHidden" orderBlock="finalCtaButtonLabel" hint="The action button at the bottom of the email. Generates the same as the Hero's button, but is independently editable/formattable from here on — the number stays locked.">
         <CallButtonField
           value={fields.finalCtaButtonLabel ?? fields.ctaButtonLabel ?? ""}
           onValueChange={(html) => setField("finalCtaButtonLabel", html || undefined)}
@@ -103,7 +104,7 @@ export default function CtaSection() {
 
       <BlockGap slot="top" />
 
-      <Field label="Visit Our Website Button" flag="footerButtonHidden" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
+      <Field label="Visit Our Website Button" flag="footerButtonHidden" orderBlock="footerButtonLabel" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
         <RichInput
           value={fields.footerButtonLabel ?? DEFAULT_WEBSITE_BUTTON_LABEL}
           onValueChange={(html) => setField("footerButtonLabel", html || undefined)}

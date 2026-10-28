@@ -4,14 +4,27 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDraft } from "@/context/DraftContext";
-import { FormatToolbar } from "@/components/drafter/RichEditor";
 import { AiBar } from "@/components/drafter/AiBar";
 import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
+import { SaveStatus } from "@/components/drafter/SaveStatus";
+import { btn } from "@/components/drafter/ui";
 import EditorPanel from "./EditorPanel";
 import PreviewPanel from "./PreviewPanel";
 import ApprovalModal from "./ApprovalModal";
 import { CopyPromptModal } from "./CopyPromptModal";
 import { FlyerPanel, useHasFlyer } from "./FlyerPanel";
+
+/**
+ * The editor's shell: one bar across the top, the outline on the left, the
+ * email on the right, the AI underneath it.
+ *
+ * There used to be three bars stacked above the email — this one, a second
+ * that said "LIVE PREVIEW" and held two view toggles, and the formatting
+ * toolbar — before any of the email was visible. The second bar is gone: its
+ * label described what anyone could see, its toggles have moved to the things
+ * they act on, and the toolbar has gone to the sidebar, next to the fields it
+ * formats.
+ */
 
 // Error code generator — gives each error a short stable identifier
 function errorCode(msg: string): string {
@@ -20,160 +33,159 @@ function errorCode(msg: string): string {
   return "ERR_" + Math.abs(h).toString(36).toUpperCase().slice(0, 5);
 }
 
-function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () => void; onTestApproval: () => void; autoSaveLabel: string | null }) {
+/**
+ * Whatever the editor last has to say, in one place under the bar.
+ *
+ * A failed save, a failed push and a successful push each used to appear
+ * somewhere different, in a shape of their own: two popovers pinned under two
+ * different buttons and a green strip that pushed the buttons along as it came
+ * and went. They are the same kind of thing — the result of something you
+ * asked for — so they look the same and arrive in the same place.
+ */
+function Notice({
+  tone,
+  code,
+  children,
+  onDismiss,
+}: {
+  tone: "good" | "bad";
+  code?: string;
+  children: React.ReactNode;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-2 z-50 flex justify-center">
+      <div
+        className={[
+          "eb-rise pointer-events-auto flex max-w-xl items-start gap-2.5 rounded-lg border px-3.5 py-2 shadow-md",
+          tone === "good"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+            : "border-red-200 bg-red-50 text-red-700",
+        ].join(" ")}
+      >
+        <p className="text-xs leading-relaxed">
+          {code && <span className="mr-1.5 font-semibold tracking-wider opacity-60">{code}</span>}
+          {children}
+        </p>
+        <button
+          onClick={onDismiss}
+          title="Dismiss"
+          className="mt-0.5 shrink-0 opacity-50 transition-opacity hover:opacity-100"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CommandBar({
+  onApproval,
+  autoSaving,
+  flyerOpen,
+  hasFlyer,
+  onToggleFlyer,
+}: {
+  onApproval: () => void;
+  autoSaving: boolean;
+  flyerOpen: boolean;
+  hasFlyer: boolean;
+  onToggleFlyer: () => void;
+}) {
   const router = useRouter();
   const {
     community,
     fields,
-    isSaving,
-    saveError,
     isPushing,
-    pushResult,
-    pushError,
-    approvalStatus,
     imagesLoading,
-    waitingForImages,
-    save,
     push,
     discard,
-    dismissPushResult,
     canUndo,
     canRedo,
     undo,
     redo,
     lastRefineInstruction,
+    waitingForImages,
   } = useDraft();
 
-  // ── Button flash states ────────────────────────────────────────────────────
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [pushFlash, setPushFlash] = useState(false);
-  const [approvalFlash, setApprovalFlash] = useState(false);
-
-  // ── Error auto-dismiss (4.5s) ─────────────────────────────────────────────
-  const [hideSaveError, setHideSaveError] = useState(false);
-  const [hidePushError, setHidePushError] = useState(false);
-
-  useEffect(() => {
-    if (!saveError) { setHideSaveError(false); return; }
-    setHideSaveError(false);
-    const id = setTimeout(() => setHideSaveError(true), 4500);
-    return () => clearTimeout(id);
-  }, [saveError]);
-
-  useEffect(() => {
-    if (!pushError) { setHidePushError(false); return; }
-    setHidePushError(false);
-    const id = setTimeout(() => setHidePushError(true), 4500);
-    return () => clearTimeout(id);
-  }, [pushError]);
-
-  // Track isSaving transitions to detect successful saves
-  const prevIsSaving = useRef(false);
-  useEffect(() => {
-    if (prevIsSaving.current && !isSaving && !saveError) {
-      setSavedFlash(true);
-      const id = setTimeout(() => setSavedFlash(false), 2500);
-      return () => clearTimeout(id);
-    }
-    prevIsSaving.current = isSaving;
-  }, [isSaving, saveError]);
-
-  // Track isPushing transitions to detect successful pushes
-  const prevIsPushing = useRef(false);
-  useEffect(() => {
-    if (prevIsPushing.current && !isPushing && !pushError) {
-      setPushFlash(true);
-      const id = setTimeout(() => setPushFlash(false), 2500);
-      return () => clearTimeout(id);
-    }
-    prevIsPushing.current = isPushing;
-  }, [isPushing, pushError]);
-
-  // Track approvalStatus transitions to detect successful approval sends
-  const prevApprovalStatus = useRef(approvalStatus);
-  useEffect(() => {
-    if (!prevApprovalStatus.current && approvalStatus) {
-      setApprovalFlash(true);
-      const id = setTimeout(() => setApprovalFlash(false), 2500);
-      return () => clearTimeout(id);
-    }
-    prevApprovalStatus.current = approvalStatus;
-  }, [approvalStatus]);
-
   return (
-    <div className="h-14 flex items-center justify-between px-4 bg-white border-b border-[#e8e3dc] shrink-0 gap-3">
-      {/* Left: logo + New Draft button + community name / subject */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <Link href="/" className="shrink-0">
-          <span className="grid h-7 w-7 place-items-center rounded-md bg-[#1F4538] text-[10px] font-bold uppercase tracking-wider text-white">E</span>
+    <div className="flex h-14 shrink-0 items-center gap-3 border-b border-[#e8e3dc] bg-white px-4">
+      {/* What you are working on. */}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <Link href="/" title="All drafts" className="shrink-0">
+          <span className="grid h-7 w-7 place-items-center rounded-md bg-[#1F4538] text-[10px] font-bold uppercase tracking-wider text-white">
+            E
+          </span>
         </Link>
 
-        <div className="w-px h-5 bg-[#e8e3dc] shrink-0" />
-
+        {/* This saves the draft on its way out — see discard() — so it is a
+            move, not a discard, and it no longer claims to be one. */}
         <button
           onClick={() => { discard(); router.push("/"); }}
-          className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-[#1F4538] border border-[#1F4538]/30 hover:bg-[#1F4538] hover:text-white rounded-lg px-3 py-1.5 transition-all"
-          title="Discard and start a new draft"
+          title="Save this one and start another"
+          className={btn.secondary + " shrink-0"}
         >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          New Draft
+          New draft
         </button>
 
         {community && (
-          <div className="flex flex-col min-w-0 leading-none">
-            <span className="text-xs font-semibold text-[#1a1a1a] truncate">{community.displayName}</span>
+          <div className="flex min-w-0 flex-col leading-none">
+            <span className="truncate text-xs font-semibold text-[#1a1a1a]">{community.displayName}</span>
             {fields?.subject && (
-              <span className="text-[10.5px] text-[#9aaba4] truncate mt-0.5 max-w-[280px]">{fields.subject}</span>
+              <span className="mt-0.5 max-w-[300px] truncate text-[10.5px] text-[#9aaba4]">{fields.subject}</span>
             )}
           </div>
         )}
 
-        {autoSaveLabel && (
-          <span className="text-xs text-[#7a8c85] italic shrink-0 flex items-center gap-1.5 bg-[#f0ede7] border border-[#e8e3dc] rounded-md px-2.5 py-1">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
-              <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-              <path d="M12 2a10 10 0 0 1 10 10"/>
+        {/* Reopened drafts pull their photos in after the text, so say so
+            rather than letting the eblast look like it has none. */}
+        {imagesLoading && (
+          <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-[#9aaba4]">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+              <circle cx="12" cy="12" r="10" strokeOpacity="0.25" /><path d="M12 2a10 10 0 0 1 10 10" />
             </svg>
-            {autoSaveLabel}
+            Loading photos…
           </span>
         )}
       </div>
 
-      {/* Right: action buttons */}
-      <div className="flex items-center gap-2 shrink-0">
-        {/* Reopened drafts pull their photos in after the text, so say so
-            rather than letting the eblast look like it has none. */}
-        {imagesLoading && (
-          <span className="flex items-center gap-1.5 text-xs text-[#7a8c85]">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10"/></svg>
-            Loading photos…
-          </span>
-        )}
-        {/* Push success banner */}
-        {pushResult && !pushError && !pushFlash && (
-          <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            Pushed to HubSpot
-            <button onClick={dismissPushResult} className="ml-1 text-emerald-500 hover:text-emerald-700">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
+      {/* The right-hand side runs left to right by how far a click commits
+          you: what you are looking at, what you have changed, whether it is
+          safe, and then the two things that send it somewhere. */}
+      <div className="flex shrink-0 items-center gap-2">
+        {hasFlyer && (
+          <button
+            onClick={onToggleFlyer}
+            title="The flyer this eblast was written from"
+            className={[
+              btn.secondary,
+              flyerOpen ? "border-[#1F4538]/40 bg-[#f0f5f2] text-[#1F4538]" : "",
+            ].join(" ")}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            Flyer
+          </button>
         )}
 
-        {/* Undo and redo, covering every change to the draft — words,
-            colours, sizes, hidden blocks, and whatever the AI did. Photos are
-            not in it: those are swapped by hand and stay that way.
+        <span className="mx-1 h-5 w-px bg-[#e8e3dc]" aria-hidden />
 
-            Before Save, with a rule after them: these two act on what is in
-            front of you, and everything to their right sends it somewhere. */}
+        {/* Undo and redo cover every change to the draft — words, colours,
+            sizes, hidden blocks, and whatever the AI did. Photos are not in
+            it: those are swapped by hand and stay that way. */}
         <div className="flex items-center gap-0.5">
           <button
             onClick={undo}
             disabled={!canUndo}
             title={canUndo ? (lastRefineInstruction ? `Undo: ${lastRefineInstruction}` : "Undo") : "Nothing to undo"}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#7a8c85] hover:text-[#1F4538] hover:bg-[#f0ede7] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            className={btn.icon}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 7h11a5 5 0 0 1 0 10H3" /><polyline points="7 3 3 7 7 11" />
@@ -183,7 +195,7 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
             onClick={redo}
             disabled={!canRedo}
             title={canRedo ? "Redo" : "Nothing to redo"}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#7a8c85] hover:text-[#1F4538] hover:bg-[#f0ede7] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            className={btn.icon}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 7H10a5 5 0 0 0 0 10h11" /><polyline points="17 3 21 7 17 11" />
@@ -191,102 +203,39 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
           </button>
         </div>
 
-        <span className="w-px h-5 bg-[#e8e3dc] mx-1.5" aria-hidden />
+        <SaveStatus autoSaving={autoSaving} />
 
-        {/* Save Draft button + error */}
-        <div className="relative">
-          <button
-            onClick={save}
-            disabled={isSaving}
-            className={[
-              "text-xs font-medium border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 bg-white",
-              savedFlash
-                ? "text-emerald-700 border-emerald-300 bg-emerald-50"
-                : "text-[#5a6b63] hover:text-[#1F4538] border-[#ddd8d0] hover:border-[#1F4538]/40",
-            ].join(" ")}
-          >
-            {waitingForImages ? "Adding photos…" : isSaving ? "Saving…" : savedFlash ? (
-              <span className="flex items-center gap-1">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                Saved
-              </span>
-            ) : "Save Draft"}
-          </button>
-          {saveError && !hideSaveError && (
-            <div className="absolute top-full right-0 mt-1.5 z-50 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shadow-md w-64 animate-fade-out">
-              <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-0.5">{errorCode(saveError)}</p>
-              <p className="text-xs text-red-700">{saveError}</p>
-            </div>
-          )}
-        </div>
+        <span className="mx-1 h-5 w-px bg-[#e8e3dc]" aria-hidden />
 
-        {/* Send for Approval button. Held while the flyer's date and its
-            weekday disagree: a wrong date is the one mistake in an eblast that
-            cannot be fixed after it has gone out. */}
+        {/* Held while the flyer's date and its weekday disagree: a wrong date
+            is the one mistake in an eblast that cannot be fixed after it has
+            gone out. */}
         <button
           onClick={onApproval}
           disabled={!!fields?.dateConflict}
-          title={fields?.dateConflict ? "Check the event date first — see the Hero tab" : undefined}
-          className={[
-            "text-xs font-medium border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-            approvalFlash
-              ? "text-emerald-700 border-emerald-300 bg-emerald-50"
-              : "text-[#1F4538] border-[#1F4538]/40 hover:bg-[#1F4538]/5",
-          ].join(" ")}
+          title={fields?.dateConflict ? "Check the event date first — it is in the Hero section" : undefined}
+          className={btn.secondary}
         >
-          {approvalFlash ? (
-            <span className="flex items-center gap-1">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Sent
-            </span>
-          ) : "Send for Approval"}
+          Approval
         </button>
 
-        {/* Test run of the same flow — nothing it does is recorded. */}
-        <button
-          onClick={onTestApproval}
-          title="Send yourself the approval email and walk the whole flow. Approving it creates a [TEST] email in HubSpot but changes nothing in the drafter."
-          className="text-xs font-medium border border-dashed border-[#9aaba4] text-[#5a6b63] rounded-lg px-3 py-1.5 hover:bg-[#5a6b63]/5 transition-colors"
-        >
-          Send Test
-        </button>
-
-        {/* Push to HubSpot button + error */}
-        <div className="relative">
-          <button
-            onClick={push}
-            disabled={isPushing}
-            className={[
-              "text-xs font-semibold rounded-lg px-4 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5",
-              pushFlash
-                ? "text-emerald-700 border border-emerald-300 bg-emerald-50"
-                : "text-white bg-[#1F4538] hover:bg-[#173829]",
-            ].join(" ")}
-          >
-            {isPushing ? (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10"/></svg>
-                {waitingForImages ? "Adding photos…" : "Pushing…"}
-              </>
-            ) : pushFlash ? (
-              <>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                Pushed
-              </>
-            ) : (
-              <>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                Push to HubSpot
-              </>
-            )}
-          </button>
-          {pushError && !hidePushError && (
-            <div className="absolute top-full right-0 mt-1.5 z-50 bg-red-50 border border-red-200 rounded-lg px-3 py-2 shadow-md w-72">
-              <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-0.5">{errorCode(pushError)}</p>
-              <p className="text-xs text-red-700">{pushError}</p>
-            </div>
+        <button onClick={push} disabled={isPushing} className={btn.primary}>
+          {isPushing ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                <circle cx="12" cy="12" r="10" strokeOpacity="0.25" /><path d="M12 2a10 10 0 0 1 10 10" />
+              </svg>
+              {waitingForImages ? "Adding photos…" : "Pushing…"}
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 2L11 13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+              Push to HubSpot
+            </>
           )}
-        </div>
+        </button>
       </div>
     </div>
   );
@@ -294,13 +243,13 @@ function TopBar({ onApproval, onTestApproval, autoSaveLabel }: { onApproval: () 
 
 export default function EditorLayout() {
   const router = useRouter();
-  const [previewWidth, setPreviewWidth] = useState<"half" | "full">("half");
+  const [editorOpen, setEditorOpen] = useState(true);
   const [approvalOpen, setApprovalOpen] = useState(false);
-  const [approvalMode, setApprovalMode] = useState<"real" | "test">("real");
-  const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
+  const [autoSaving, setAutoSaving] = useState(false);
   const {
-    isSaving, fields, autoSave, lastEditTimestamp, activeEditorRef, activeEditorCallback, activeFieldNameRef, community,
+    isSaving, fields, autoSave, lastEditTimestamp,
     lockInfo, copyPromptOpen, isMakingCopy, makeCopy, cancelCopyPrompt, draftId, resetColors,
+    community, saveError, pushError, pushResult, dismissPushResult, imagesError,
   } = useDraft();
 
   // The flyer this draft was written from, for checking the copy against.
@@ -318,6 +267,31 @@ export default function EditorLayout() {
   const FLYER_MIN = 360;
   // What the preview keeps for itself no matter how far the handle is dragged.
   const PREVIEW_MIN = 280;
+
+  // The one thing the editor last had to say, and whether it has been read.
+  //
+  // What has been read is remembered as the value itself rather than as a
+  // name for it: every push produces a new pushResult, so remembering that
+  // "pushed" had been dismissed once would have swallowed every push after
+  // the first.
+  const [dismissed, setDismissed] = useState<unknown>(null);
+  const notice: { of: unknown; tone: "good" | "bad"; code?: string; text: string } | null = pushError
+    ? { of: pushError, tone: "bad", code: errorCode(pushError), text: pushError }
+    : saveError
+      ? { of: saveError, tone: "bad", code: errorCode(saveError), text: saveError }
+      : imagesError
+        ? { of: imagesError, tone: "bad", text: imagesError }
+        : pushResult
+          ? { of: pushResult, tone: "good", text: "Pushed to HubSpot." }
+          : null;
+  const showNotice = !!notice && dismissed !== notice.of;
+
+  // Good news reads itself and goes; bad news waits to be read.
+  useEffect(() => {
+    if (!showNotice || notice?.tone !== "good") return;
+    const id = setTimeout(() => setDismissed(notice.of), 4500);
+    return () => clearTimeout(id);
+  }, [showNotice, notice?.of, notice?.tone]);
 
   useEffect(() => {
     try {
@@ -367,16 +341,17 @@ export default function EditorLayout() {
     handle.addEventListener("pointercancel", stop);
   }
 
-  // Opening the flyer narrows the preview column, and the email is a fixed
-  // 600px that has to scale down to fit or it gets clipped on the right.
-  // The preview re-measures on window resize, so say so once the new layout
-  // has actually settled — measuring in the same tick reads the old width.
+  // Opening the flyer, or collapsing the outline, narrows the preview column,
+  // and the email is a fixed 600px that has to scale down to fit or it gets
+  // clipped on the right. The preview re-measures on window resize, so say so
+  // once the new layout has actually settled — measuring in the same tick
+  // reads the old width.
   useEffect(() => {
     const id = requestAnimationFrame(() =>
       requestAnimationFrame(() => window.dispatchEvent(new Event("resize"))),
     );
     return () => cancelAnimationFrame(id);
-  }, [flyerOpen]);
+  }, [flyerOpen, editorOpen]);
 
   const isSavingRef = useRef(isSaving);
   const fieldsRef2 = useRef(fields);
@@ -390,146 +365,85 @@ export default function EditorLayout() {
     if (!lastEditTimestamp) return;
     const id = setTimeout(async () => {
       if (!isSavingRef.current && fieldsRef2.current) {
-        setAutoSaveLabel("Auto-saving…");
+        setAutoSaving(true);
         const start = Date.now();
         await autoSaveRef.current();
         const elapsed = Date.now() - start;
         if (elapsed < 1000) {
           await new Promise<void>((r) => setTimeout(r, 1000 - elapsed));
         }
-        setAutoSaveLabel(null);
+        setAutoSaving(false);
       }
     }, 5000);
     return () => clearTimeout(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastEditTimestamp]);
 
-  // All brand colors: primary, accent, background, secondary, plus supporting[]
-  const brandColors = [
-    community?.brand?.primary,
-    community?.brand?.accent,
-    community?.brand?.background,
-    community?.brand?.secondary,
-    ...(community?.brand?.supporting ?? []),
-  ].filter(Boolean) as string[];
-
-  // Brand fonts: headline + body from community profile
-  const brandFonts = [
-    community?.brand?.fontHeadline,
-    community?.brand?.fontBody,
-    community?.brand?.fonts?.script?.name,
-  ].filter(Boolean) as string[];
-
   return (
-    <div className="h-screen flex flex-col bg-[#f5f3ef]">
-      <TopBar
-        onApproval={() => { setApprovalMode("real"); setApprovalOpen(true); }}
-        onTestApproval={() => { setApprovalMode("test"); setApprovalOpen(true); }}
-        autoSaveLabel={autoSaveLabel}
+    <div className="flex h-screen flex-col bg-[#f5f3ef]">
+      <CommandBar
+        onApproval={() => setApprovalOpen(true)}
+        autoSaving={autoSaving}
+        flyerOpen={flyerOpen}
+        hasFlyer={hasFlyer}
+        onToggleFlyer={() => setFlyerOpen((o) => !o)}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left: editor panel */}
+      <div className="relative flex flex-1 overflow-hidden">
+        {showNotice && notice && (
+          <Notice
+            tone={notice.tone}
+            code={notice.code}
+            onDismiss={() => {
+              setDismissed(notice.of);
+              if (notice.tone === "good") dismissPushResult();
+            }}
+          >
+            {notice.text}
+          </Notice>
+        )}
+
+        {/* Left: the email's outline, and the fields of whichever section is
+            open in it. */}
         <div
           className={[
-            "h-full overflow-hidden transition-all duration-300",
-            previewWidth === "full" ? "w-0 opacity-0 pointer-events-none" : "w-[400px] min-w-[340px] max-w-[460px]",
+            "h-full overflow-hidden transition-[width,opacity] duration-200",
+            editorOpen ? "w-[400px] min-w-[340px] max-w-[460px]" : "w-0 opacity-0",
           ].join(" ")}
         >
-          <EditorPanel />
+          <EditorPanel onResetColors={() => setResetColorsOpen(true)} />
         </div>
 
-        {/* Right: preview */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-          {/* Preview header */}
-          <div className="h-9 relative flex items-center justify-between px-4 bg-[#f0ede7] border-b border-[#e8e3dc] shrink-0">
-            {/* The control that collapses the editor sits against the editor,
-                at this header's left edge, with its chevron pointing at the
-                panel it hides. It used to sit at the far right, the width of
-                the preview away from what it acted on. */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setPreviewWidth((w) => (w === "full" ? "half" : "full"))}
-                className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1"
-              >
-                {previewWidth === "full" ? (
-                  <>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-                    Show editor
-                  </>
-                ) : (
-                  <>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-                    Full preview
-                  </>
-                )}
-              </button>
-            </div>
-            {/* Centred on the header itself rather than placed between the two
-                groups of buttons, so it stays put as their labels change
-                length — "Show flyer" to "Hide flyer", "Full preview" to
-                "Show editor". Not a click target, so it sits above nothing. */}
-            <span className="absolute left-1/2 -translate-x-1/2 text-[10px] font-semibold uppercase tracking-widest text-[#9aaba4] pointer-events-none">
-              Live Preview
-            </span>
-            <div className="flex items-center gap-4">
-            <button
-              onClick={() => setResetColorsOpen(true)}
-              title="Put every colour back to this community's own"
-              className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1"
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="13.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="14" r="2.5" />
-                <circle cx="8.5" cy="7.5" r="2.5" /><circle cx="6.5" cy="12.5" r="2.5" />
-                <path d="M12 2a10 10 0 0 0 0 20c.9 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16a6 6 0 0 0 6-6c0-5-4.5-9-10-9z" />
-              </svg>
-              Reset colors
-            </button>
-            {hasFlyer && (
-              <button
-                onClick={() => setFlyerOpen((o) => !o)}
-                title="The flyer this eblast was written from"
-                className="text-[10px] font-medium text-[#7a8c85] hover:text-[#1F4538] transition-colors flex items-center gap-1"
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                </svg>
-                {flyerOpen ? "Hide flyer" : "Show flyer"}
-              </button>
-            )}
-            </div>
-          </div>
+        {/* The control that collapses the outline sits on the edge between the
+            two, which is the edge it moves. It used to be a labelled button in
+            a bar of its own, the width of the preview away from the panel it
+            acted on. */}
+        <div className="group/divider relative w-3 shrink-0">
+          <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[#e8e3dc]" aria-hidden />
+          <button
+            onClick={() => setEditorOpen((o) => !o)}
+            title={editorOpen ? "Hide the outline" : "Show the outline"}
+            className="absolute left-1/2 top-3 z-20 grid h-6 w-6 -translate-x-1/2 place-items-center rounded-full border border-[#e8e3dc] bg-white text-[#9aaba4] opacity-60 shadow-sm transition-all hover:text-[#1F4538] hover:opacity-100 group-hover/divider:opacity-100"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d={editorOpen ? "M15 18l-6-6 6-6" : "M9 18l6-6-6-6"} />
+            </svg>
+          </button>
+        </div>
 
-          {/* Formatting toolbar — always visible above the email preview */}
-          <div className="border-b border-[#e8e3dc] bg-white px-3 py-1.5 shrink-0">
-            <FormatToolbar
-              editorRef={activeEditorRef}
-              brandColors={brandColors}
-              brandFonts={brandFonts}
-              onInput={() => activeEditorCallback.current?.()}
-              activeFieldNameRef={activeFieldNameRef}
-              className="flex items-center gap-0.5 flex-wrap"
-            />
-          </div>
-
-          {/* Preview, with the flyer alongside it when asked for */}
-          <div className="flex-1 flex overflow-hidden">
+        {/* Right: the email, with the flyer alongside it when asked for. */}
+        <div className="flex h-full flex-1 flex-col overflow-hidden">
+          <div className="flex flex-1 overflow-hidden">
             {/* min-w-0 so this column can actually give way. A flex item
                 defaults to min-width:auto and will not shrink past its
                 content, which here is a 600px email — without it the flyer
                 beside it is pushed out of the row and clipped rather than
                 getting the width it asks for. */}
-            <div className="eb-scroll flex-1 min-w-0 overflow-y-auto bg-[#e8e3dc] py-6 px-4">
-              {/* Exactly the email s width. It was 640 for a 600px email, and
-                  the email sits at the left of its box, so the leftover 40px
-                  showed as a grey strip down the right-hand side. */}
-              {/* Square corners. The rounding was the page decorating the
-                  email, and it showed as a curved sliver of grey across the
-                  top and bottom of a message that will arrive with neither.
-                  What is in this box should be what lands in an inbox. */}
-              <div className="w-full max-w-[600px] mx-auto shadow-xl overflow-hidden">
-                <PreviewPanel layoutSignal={`${flyerOpen ? "flyer" : "no-flyer"}:${flyerWidth ?? "auto"}`} />
+            <div className="eb-scroll flex-1 min-w-0 overflow-y-auto bg-[#e8e3dc] px-4 py-6">
+              {/* Exactly the email's width, and square-cornered: what is in
+                  this box should be what lands in an inbox. */}
+              <div className="mx-auto w-full max-w-[600px] overflow-hidden shadow-xl">
+                <PreviewPanel layoutSignal={`${flyerOpen ? "flyer" : "no-flyer"}:${editorOpen ? "wide" : "full"}:${flyerWidth ?? "auto"}`} />
               </div>
             </div>
 
@@ -552,7 +466,7 @@ export default function EditorLayout() {
                 <div
                   onPointerDown={startFlyerResize}
                   title="Drag to resize"
-                  className="absolute inset-y-0 -left-1 w-2 z-10 cursor-col-resize hover:bg-[#1F4538]/25 active:bg-[#1F4538]/40 transition-colors"
+                  className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize transition-colors hover:bg-[#1F4538]/25 active:bg-[#1F4538]/40"
                 />
                 <FlyerPanel draftId={draftId} />
               </div>
@@ -572,7 +486,7 @@ export default function EditorLayout() {
       {resetColorsOpen && (
         <>
           <div className="fixed inset-0 z-50" onClick={() => setResetColorsOpen(false)} />
-          <div className="fixed top-24 right-6 z-50">
+          <div className="fixed bottom-24 left-6 z-50">
             <DeleteConfirmPopover
               label="colors"
               message={<>Put every color back to <span className="font-semibold">{community?.displayName ?? "this community"}</span>&rsquo;s own?</>}
@@ -585,7 +499,7 @@ export default function EditorLayout() {
         </>
       )}
 
-      {approvalOpen && <ApprovalModal mode={approvalMode} onClose={() => setApprovalOpen(false)} />}
+      {approvalOpen && <ApprovalModal onClose={() => setApprovalOpen(false)} />}
 
       {copyPromptOpen && lockInfo && (
         <CopyPromptModal

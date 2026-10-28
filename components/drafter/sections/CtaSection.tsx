@@ -4,26 +4,87 @@ import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField, EmailButtonField, SenderNameField } from "@/components/drafter/RichEditor";
 import { DateTimeField } from "@/components/drafter/DateTimeField";
-import { SectionHeader } from "@/components/drafter/SectionHeader";
 import { Field } from "@/components/drafter/Field";
 import { BlockGap } from "@/components/drafter/BlockGap";
+import { input, quiet } from "@/components/drafter/ui";
 import {
   defaultFooterName,
   DEFAULT_THANK_YOU_TEXT,
   DEFAULT_WEBSITE_BUTTON_LABEL,
 } from "@/lib/eblast-defaults";
 
-
-const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
-
-
+/**
+ * The call to action, and the footer under it.
+ *
+ * They were one tab called "Footer", which named one of them and hid the
+ * other. They are two sections of the email, so they are two sections here —
+ * each with its own row in the outline, its own eye, and its own place in the
+ * order.
+ */
 export default function CtaSection() {
-  const { fields, setField, setFields, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
+  const { fields, setField, setFields, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   if (!fields) return null;
 
-  // Pre-fill boxes with the value the email would use by default, so nothing is
-  // blank when there's a sensible default. These stay undefined in storage until
-  // the user actually edits them (so date/time/rsvp keep mirroring the Hero).
+  return (
+    <>
+      <BlockGap slot="cta:start" />
+
+      <Field label="RSVP label" block="ctaRsvpLabel" hint="Follows the hero unless you change it.">
+        <RichInput
+          value={fields.ctaRsvpLabel ?? fields.rsvpLabel ?? ""}
+          onValueChange={(html) => setField("ctaRsvpLabel", html)}
+          placeholder="e.g. RSVP Required"
+          className={input}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+          fieldName="ctaRsvpLabel"
+        />
+      </Field>
+
+      <BlockGap slot="ctaRsvpLabel" />
+
+      {/* One box, two underlying fields — see DateTimeField. */}
+      <DateTimeField
+        label="Date & time"
+        hint="Follows the hero unless you change it."
+        orderBlock="ctaEventDateTime"
+        dateBlock="ctaEventDate"
+        timeBlock="ctaEventTime"
+        date={fields.ctaEventDate ?? fields.eventDate}
+        time={fields.ctaEventTime ?? fields.eventTime}
+        onChange={({ date, time }) => setFields({ ctaEventDate: date, ctaEventTime: time })}
+        className={input}
+        fieldName="ctaEventDate"
+        activeEditorRef={activeEditorRef}
+        activeEditorCallback={activeEditorCallback}
+        activeFieldNameRef={activeFieldNameRef}
+      />
+
+      <BlockGap slot="ctaEventTime" />
+
+      {/* The field prints the locked number under itself. It starts as a copy
+          of the hero's button and goes its own way from the first edit. */}
+      <Field label="Call button" flag="finalCtaButtonHidden" orderBlock="finalCtaButtonLabel" hint="Starts as a copy of the hero's.">
+        <CallButtonField
+          value={fields.finalCtaButtonLabel ?? fields.ctaButtonLabel ?? ""}
+          onValueChange={(html) => setField("finalCtaButtonLabel", html || undefined)}
+          fieldName="finalCtaButtonLabel"
+          className={input}
+          activeEditorRef={activeEditorRef}
+          activeEditorCallback={activeEditorCallback}
+          activeFieldNameRef={activeFieldNameRef}
+        />
+      </Field>
+
+      <BlockGap slot="finalCtaButtonLabel" />
+    </>
+  );
+}
+
+export function FooterSection() {
+  const { fields, setField, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
+  if (!fields) return null;
 
   // Secondary senders from the Communities page prefill these boxes (email only —
   // the primary sender is the only name on the eblast, and their email stays above).
@@ -37,9 +98,6 @@ export default function CtaSection() {
     next[idx] = html;
     setField("additionalFooterEmails", next);
   }
-  function addAdditionalEmail() {
-    setField("additionalFooterEmails", [...additionalEmails, ""]);
-  }
   function removeAdditionalEmail(idx: number) {
     // Keep an empty array rather than undefined — undefined would fall back to
     // the community's secondary senders and the removal wouldn't stick.
@@ -47,69 +105,15 @@ export default function CtaSection() {
   }
 
   return (
-    <div className="space-y-5">
-      <SectionHeader label="Call to Action" flag="finalCtaSectionHidden" />
-
-      <BlockGap slot="cta:start" />
-
-      <Field label="RSVP Label" block="ctaRsvpLabel" hint="Edit to differ from the Hero section">
-        <RichInput
-          value={fields.ctaRsvpLabel ?? fields.rsvpLabel ?? ""}
-          onValueChange={(html) => setField("ctaRsvpLabel", html)}
-          placeholder="e.g. RSVP Required"
-          className={baseInput}
-          activeEditorRef={activeEditorRef}
-          activeEditorCallback={activeEditorCallback}
-          activeFieldNameRef={activeFieldNameRef}
-          fieldName="ctaRsvpLabel"
-        />
-      </Field>
-
-      <BlockGap slot="ctaRsvpLabel" />
-
-      {/* One box, two underlying fields — see DateTimeField. */}
-      <DateTimeField
-        label="Event Date & Time"
-        orderBlock="ctaEventDateTime"
-        dateBlock="ctaEventDate"
-        timeBlock="ctaEventTime"
-        hint="Edit to differ from the Hero section"
-        date={fields.ctaEventDate ?? fields.eventDate}
-        time={fields.ctaEventTime ?? fields.eventTime}
-        onChange={({ date, time }) => setFields({ ctaEventDate: date, ctaEventTime: time })}
-        className={baseInput}
-        fieldName="ctaEventDate"
-        activeEditorRef={activeEditorRef}
-        activeEditorCallback={activeEditorCallback}
-        activeFieldNameRef={activeFieldNameRef}
-      />
-
-      <BlockGap slot="ctaEventTime" />
-
-      <Field label="Call Button Label" flag="finalCtaButtonHidden" orderBlock="finalCtaButtonLabel" hint="The action button at the bottom of the email. Generates the same as the Hero's button, but is independently editable/formattable from here on — the number stays locked.">
-        <CallButtonField
-          value={fields.finalCtaButtonLabel ?? fields.ctaButtonLabel ?? ""}
-          onValueChange={(html) => setField("finalCtaButtonLabel", html || undefined)}
-          fieldName="finalCtaButtonLabel"
-          className={baseInput}
-          activeEditorRef={activeEditorRef}
-          activeEditorCallback={activeEditorCallback}
-          activeFieldNameRef={activeFieldNameRef}
-        />
-      </Field>
-
-      <BlockGap slot="finalCtaButtonLabel" />
-
-      <SectionHeader label="Footer" flag="footerSectionHidden" />
-
+    <>
       <BlockGap slot="top" />
 
-      <Field label="Visit Our Website Button" flag="footerButtonHidden" orderBlock="footerButtonLabel" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
+      <Field label="Website button" flag="footerButtonHidden" orderBlock="footerButtonLabel" hint="Always links to the community's website.">
         <RichInput
           value={fields.footerButtonLabel ?? DEFAULT_WEBSITE_BUTTON_LABEL}
           onValueChange={(html) => setField("footerButtonLabel", html || undefined)}
           placeholder="Visit Our Website"
-          className={baseInput}
+          className={input}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -119,12 +123,12 @@ export default function CtaSection() {
 
       <BlockGap slot="button" />
 
-      <Field label="Thank You Text" block="thankYouText" hint="Closing salutation displayed in the email footer.">
+      <Field label="Thank you" block="thankYouText">
         <RichInput
           value={fields.thankYouText ?? DEFAULT_THANK_YOU_TEXT}
           onValueChange={(html) => setField("thankYouText", html)}
           placeholder="Thank You!"
-          className={baseInput}
+          className={input}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -134,12 +138,14 @@ export default function CtaSection() {
 
       <BlockGap slot="thankYou" />
 
-      <Field label="Salesperson Name" block="footerSenderName" hint="The community's primary sender, set on the Community page. Select text to format it — the name itself can't be changed here.">
+      {/* These two print where their text comes from, and that it is locked,
+          under the box itself — so the label above says only what it is. */}
+      <Field label="Salesperson name" block="footerSenderName">
         <SenderNameField
           value={fields.footerSenderName ?? ""}
           onValueChange={(html) => setField("footerSenderName", html)}
           fieldName="footerSenderName"
-          className={baseInput}
+          className={input}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -148,12 +154,12 @@ export default function CtaSection() {
 
       <BlockGap slot="senderName" />
 
-      <Field label="Footer Signature" block="footerName" hint="Name appearing below 'Thank You!' in the email footer.">
+      <Field label="Signature" block="footerName">
         <RichInput
           value={fields.footerName ?? defaultFooterName(community)}
           onValueChange={(html) => setField("footerName", html)}
           placeholder="Community name"
-          className={baseInput}
+          className={input}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -163,12 +169,12 @@ export default function CtaSection() {
 
       <BlockGap slot="footerName" />
 
-      <Field label="Salesperson Email" block="footerSenderEmail" hint="The community's primary sender, set on the Community page. Select text to format it — the address itself can't be changed here.">
+      <Field label="Salesperson email" block="footerSenderEmail">
         <EmailButtonField
           value={fields.footerSenderEmail ?? ""}
           onValueChange={(html) => setField("footerSenderEmail", html)}
           fieldName="footerSenderEmail"
-          className={baseInput}
+          className={input}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -177,50 +183,45 @@ export default function CtaSection() {
 
       <BlockGap slot="senderEmail" />
 
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">Additional Emails</label>
+      {/* Unlike the two above, these are free text and belong to nobody's
+          record, so they are added and removed here. */}
+      <Field label="More emails" hint={additionalEmails.length ? undefined : "Shown under the salesperson's."}>
+        <div className="space-y-2">
+          {additionalEmails.map((email, i) => (
+            <div key={i} className="group/line flex items-start gap-2">
+              <div className="flex-1">
+                <RichInput
+                  value={email}
+                  onValueChange={(html) => updateAdditionalEmail(i, html)}
+                  placeholder="e.g. jane@greatlakesmc.com"
+                  className={input}
+                  activeEditorRef={activeEditorRef}
+                  activeEditorCallback={activeEditorCallback}
+                  activeFieldNameRef={activeFieldNameRef}
+                  fieldName={`additionalFooterEmails-${i}`}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => removeAdditionalEmail(i)}
+                title="Remove this address"
+                className="mt-2 shrink-0 rounded-lg p-1 text-[#9aaba4] opacity-0 transition-all hover:text-[#a4552f] focus-visible:opacity-100 group-hover/line:opacity-100"
+              >
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+          ))}
           <button
             type="button"
-            onClick={addAdditionalEmail}
-            className="text-xs text-[#1F4538] hover:underline font-medium"
+            onClick={() => setField("additionalFooterEmails", [...additionalEmails, ""])}
+            className={quiet}
           >
-            + Add email
+            + Add an address
           </button>
         </div>
-        {additionalEmails.length === 0 ? (
-          <p className="text-xs text-[#9aaba4]">Shown under the primary email above. Freely editable — not tied to a community record.</p>
-        ) : (
-          <div className="space-y-2">
-            {additionalEmails.map((email, i) => (
-              <div key={i} className="group/line flex items-start gap-2">
-                <div className="flex-1">
-                  <RichInput
-                    value={email}
-                    onValueChange={(html) => updateAdditionalEmail(i, html)}
-                    placeholder="e.g. jane@greatlakesmc.com"
-                    className={baseInput}
-                    activeEditorRef={activeEditorRef}
-                    activeEditorCallback={activeEditorCallback}
-                    activeFieldNameRef={activeFieldNameRef}
-                    fieldName={`additionalFooterEmails-${i}`}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeAdditionalEmail(i)}
-                  title="Remove"
-                  className="mt-2 p-1 rounded-lg text-[#9aaba4] opacity-0 transition-all hover:text-[#a4552f] group-hover/line:opacity-100 focus-visible:opacity-100 shrink-0"
-                >
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M3 4h10M6.5 4V2.5h3V4M5 4l.5 9h5l.5-9" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+      </Field>
+    </>
   );
 }

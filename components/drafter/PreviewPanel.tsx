@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useDraft } from "@/context/DraftContext";
-import type { EditorSection } from "@/context/DraftContext";
 import { allCustomLines, type ExtractedFlyer } from "@/lib/extracted-flyer";
 import { buildEblastHtml } from "@/lib/render-email";
 import { IMAGE_LOADING_PLACEHOLDER } from "@/lib/image-bank";
@@ -10,6 +9,7 @@ import { ColorPickerPopover } from "@/components/drafter/ColorPickerPopover";
 import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
 import type { SectionColorField } from "@/lib/eblast-defaults";
 import { ImageLinkPopover } from "@/components/drafter/ImageLinkPopover";
+import { OUTLINE_SCOPE } from "@/lib/editor-outline";
 
 const PREVIEW_SCRIPT = /* javascript */`(function(){
   // Walk from the event target up to <body>, returning the innermost element
@@ -206,15 +206,7 @@ const PREVIEW_SCRIPT = /* javascript */`(function(){
   },true);
 })();`;
 
-const SECTION_MAP: Record<string, EditorSection> = {
-  "Header": "hero",
-  "Hero": "hero",
-  "Story": "story",
-  "Secondary Image": "story",
-  "Photo Gallery": "images",
-  "Call to Action": "cta",
-  "Footer": "cta",
-};
+
 
 // Every clickable background field, its human label, and how to compute its
 // current effective value (override if set, else the same brand default
@@ -516,8 +508,13 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
     function handler(e: MessageEvent) {
       if (!e.data) return;
       if (e.data.type === "section-click") {
-        const section = SECTION_MAP[e.data.section as string];
+        const name = e.data.section as string;
+        const section = OUTLINE_SCOPE[name];
         if (section) setActiveSection(section);
+        // The sidebar is told the section by its real name rather than by
+        // which of the AI's coarser scopes it falls into: the Header and the
+        // Hero share a scope, and clicking one should not open the other.
+        if (name) window.dispatchEvent(new CustomEvent("eblast:open-section", { detail: name }));
         return;
       }
       if (e.data.type === "bg-click") {

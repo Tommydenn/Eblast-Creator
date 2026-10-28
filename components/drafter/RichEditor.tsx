@@ -554,11 +554,11 @@ export function CallButtonField({
         fieldName={fieldName}
       />
       {formatted && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#7a8c85]">
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[#9aaba4]">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
           </svg>
-          <span><span className="font-semibold text-[#5a6b63]">{formatted}</span> is locked — you can format it, but the digits can&rsquo;t be changed.</span>
+          <span><span className="font-semibold text-[#5a6b63]">{formatted}</span> is locked. Formatting still applies.</span>
         </div>
       )}
     </div>
@@ -623,14 +623,14 @@ export function EmailButtonField({
         fieldName={fieldName}
       />
       {email ? (
-        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#7a8c85]">
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[#9aaba4]">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" />
           </svg>
-          <span><span className="font-semibold text-[#5a6b63]">{email}</span> is locked — you can format it, but the address can&rsquo;t be changed.</span>
+          <span><span className="font-semibold text-[#5a6b63]">{email}</span> is locked. Formatting still applies.</span>
         </div>
       ) : (
-        <p className="mt-1.5 text-xs text-amber-600">No primary sender is set for this community yet — add one on the Community page.</p>
+        <p className="mt-1.5 text-[11px] text-[#a4552f]">No primary sender yet — add one on the Community page.</p>
       )}
     </div>
   );
@@ -689,14 +689,14 @@ export function SenderNameField({
         fieldName={fieldName}
       />
       {name ? (
-        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-[#7a8c85]">
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[#9aaba4]">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
           </svg>
-          <span><span className="font-semibold text-[#5a6b63]">{name}</span> is locked &mdash; you can format it, but the name can&rsquo;t be changed.</span>
+          <span><span className="font-semibold text-[#5a6b63]">{name}</span> is locked. Formatting still applies.</span>
         </div>
       ) : (
-        <p className="mt-1.5 text-xs text-amber-600">No primary sender is set for this community yet — add one on the Community page.</p>
+        <p className="mt-1.5 text-[11px] text-[#a4552f]">No primary sender yet — add one on the Community page.</p>
       )}
     </div>
   );
@@ -967,12 +967,12 @@ export function FormatToolbar({
   }
 
   const btn = (active: boolean, extra = "") =>
-    `w-7 h-6 rounded text-[13px] transition-colors ${
+    `w-6 h-6 rounded text-[13px] leading-none transition-colors ${
       active ? "bg-[#1F4538] text-white" : "text-[#5a6b63] hover:bg-white hover:text-[#1F4538]"
     } ${extra}`;
 
   return (
-    <div className={className ?? "flex items-center gap-0.5 px-2 py-1.5 bg-[#f5f3ef] rounded-t-lg border border-b-0 border-[#ddd8d0] flex-wrap"}>
+    <div className={"relative " + (className ?? "flex items-center gap-0.5 px-2 py-1.5 bg-[#f5f3ef] rounded-t-lg border border-b-0 border-[#ddd8d0] flex-wrap")}>
       <button
         type="button"
         onMouseDown={(e) => { e.preventDefault(); toggle("bold"); }}
@@ -1012,18 +1012,18 @@ export function FormatToolbar({
       <div className="w-px h-4 bg-[#ddd8d0] mx-0.5" />
 
       {/* Color picker */}
-      <div className="relative" ref={colorPanelRef}>
+      <div ref={colorPanelRef}>
         <button
           type="button"
           onMouseDown={(e) => { e.preventDefault(); saveSelection(); setColorOpen((v) => !v); setFontOpen(false); }}
-          className="w-7 h-6 rounded text-[13px] font-bold text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center justify-center"
+          className="w-6 h-6 rounded text-[13px] font-bold text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center justify-center"
           title="Font color"
         >
           <span style={{ borderBottom: `2.5px solid ${state.color ?? "#c0392b"}`, lineHeight: 1 }}>A</span>
         </button>
 
         {colorOpen && (
-          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 p-2.5 w-52">
+          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 p-2.5 w-[200px]">
             {customColors.length > 0 && (
               <>
                 <p className="text-[9px] font-semibold uppercase tracking-wider text-[#9aaba4] mb-1.5">Custom</p>
@@ -1109,24 +1109,23 @@ export function FormatToolbar({
       </div>
 
       {/* Font family */}
-      <div className="relative" ref={fontPanelRef}>
+      <div ref={fontPanelRef}>
         <button
           type="button"
           onMouseDown={(e) => { e.preventDefault(); saveSelection(); setFontOpen((v) => !v); setColorOpen(false); }}
-          className="h-6 px-2 rounded text-[10px] font-medium text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center gap-1"
-          title="Font family"
+          className="h-6 px-1.5 rounded text-[#5a6b63] hover:bg-white hover:text-[#1F4538] transition-colors flex items-center gap-0.5"
+          title="Font"
         >
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="4 7 4 4 20 4 20 7"/>
             <line x1="9" y1="20" x2="15" y2="20"/>
             <line x1="12" y1="4" x2="12" y2="20"/>
           </svg>
-          Font
           <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
 
         {fontOpen && (
-          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 overflow-hidden w-52">
+          <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-[#e8e3dc] shadow-lg z-30 overflow-hidden w-[200px]">
             {fontOptions.map((f) => (
               <button
                 key={f.name}
@@ -1169,8 +1168,8 @@ export function FormatToolbar({
           if (!isNaN(px) && px >= 6 && px <= 120) applyFontSize(px);
         }}
         onMouseDown={(e) => { saveSelection(); e.stopPropagation(); }}
-        className="w-14 h-6 text-center text-[11px] border border-[#ddd8d0] rounded bg-white text-[#1a1a1a] outline-none focus:border-[#1F4538] focus:ring-1 focus:ring-[#1F4538]/20"
-        title="Font size (px) — shows the current selection's size; type to change"
+        className="w-11 h-6 text-center text-[11px] border border-[#ddd8d0] rounded bg-white text-[#1a1a1a] outline-none focus:border-[#1F4538] focus:ring-1 focus:ring-[#1F4538]/20"
+        title="Size in pixels — the selection's own; type to change it"
       />
 
       <div className="w-px h-4 bg-[#ddd8d0] mx-0.5" />
@@ -1178,10 +1177,13 @@ export function FormatToolbar({
       <button
         type="button"
         onMouseDown={(e) => { e.preventDefault(); run({ type: "clear" }); }}
-        className="h-6 px-2 rounded text-[10px] font-medium text-[#9aaba4] hover:bg-white hover:text-[#5a6b63] transition-colors"
-        title="Clear all formatting"
+        className="w-6 h-6 rounded text-[#9aaba4] hover:bg-white hover:text-[#5a6b63] transition-colors flex items-center justify-center"
+        title="Clear formatting"
       >
-        Clear
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M6 5h12M11 5v9" />
+          <line x1="15" y1="14" x2="21" y2="20" /><line x1="21" y1="14" x2="15" y2="20" />
+        </svg>
       </button>
     </div>
   );

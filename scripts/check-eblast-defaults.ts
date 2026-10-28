@@ -185,18 +185,42 @@ if (!COLORABLE_TEXT_FIELDS.includes("bodyParagraphs")) {
 }
 
 // ── 5. No sidebar field has grown a second copy of a default ───────────────
-const SIDEBAR_COPIES: Array<[string, RegExp, string]> = [
-  ["components/drafter/sections/HeroSection.tsx", /displayName.*address\?\.street/s, "builds its own address line"],
-  ["components/drafter/sections/StorySection.tsx", /`A Look Around \$\{/, "hardcodes the gallery label"],
-  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*"Visit Our Website"/, "hardcodes the website button label"],
-  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*"Thank You!"/, "hardcodes the thank-you text"],
-  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*community\?\.displayName/, "hardcodes the footer signature"],
-  ["components/drafter/RichEditor.tsx", /const FIELD_FONT_SIZES/, "keeps its own font-size table"],
-  ["components/drafter/PreviewPanel.tsx", /type BgFieldKey =\s*\n?\s*\|/, "keeps its own list of colourable sections"],
+/**
+ * A default written out a second time, anywhere in the editor.
+ *
+ * These used to be checked file by file, by name. That held only as long as
+ * nobody moved anything: the gallery label was typed in the Story tab when
+ * this was written and is edited beside the photo grid now, so a check
+ * pinned to StorySection.tsx would have gone on passing while looking at the
+ * wrong file. The whole editor is read instead, so a copy cannot be hidden
+ * by moving it.
+ */
+const SIDEBAR_COPIES: Array<[RegExp, string]> = [
+  [/displayName.*address\?\.street/s, "builds its own address line"],
+  [/`A Look Around \$\{/, "hardcodes the gallery label"],
+  [/\?\?\s*"Visit Our Website"/, "hardcodes the website button label"],
+  [/\?\?\s*"Thank You!"/, "hardcodes the thank-you text"],
+  [/\?\?\s*community\?\.displayName/, "hardcodes the footer signature"],
+  [/const FIELD_FONT_SIZES/, "keeps its own font-size table"],
+  [/type BgFieldKey =\s*\n?\s*\|/, "keeps its own list of colourable sections"],
 ];
-for (const [file, pattern, what] of SIDEBAR_COPIES) {
-  if (pattern.test(fs.readFileSync(file, "utf8"))) {
-    fail(`${file} ${what} — it should read lib/eblast-defaults.ts instead`);
+
+/** Every file in the editor, however the folders are arranged today. */
+function editorFiles(dir = "components/drafter"): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return editorFiles(full);
+    return /\.tsx?$/.test(entry.name) ? [full] : [];
+  });
+}
+
+const EDITOR_FILES = editorFiles();
+for (const file of EDITOR_FILES) {
+  const src = fs.readFileSync(file, "utf8");
+  for (const [pattern, what] of SIDEBAR_COPIES) {
+    if (pattern.test(src)) {
+      fail(`${file} ${what} — it should read lib/eblast-defaults.ts instead`);
+    }
   }
 }
 
@@ -210,5 +234,5 @@ if (failures.length) {
 console.log(
   `\nSidebar and preview agree: ${Object.keys(FIELD_FONT_SIZES).length} field sizes, ` +
   `${Object.keys(expected).length} text defaults, ${SECTION_COLOR_FIELDS.length} colourable sections, ` +
-  `${COLOR_CASES.length} colour-carrying cases, ${SIDEBAR_COPIES.length} duplicate-copy guards.`,
+  `${COLOR_CASES.length} colour-carrying cases, ${SIDEBAR_COPIES.length} duplicate-copy guards over ${EDITOR_FILES.length} editor files.`,
 );

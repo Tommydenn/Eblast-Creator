@@ -4,6 +4,7 @@ import React from "react";
 import { HideToggle, useHidden } from "@/components/drafter/HideToggle";
 import { Reorderable } from "@/components/drafter/Reorderable";
 import { sectionOfBlock } from "@/lib/eblast-blocks";
+import { label as labelCls, hint as hintCls } from "@/components/drafter/ui";
 
 /**
  * One labelled box in the sidebar, with the controls that hide what it writes
@@ -54,10 +55,8 @@ export function Field({
 
   const inner = (
     <>
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">
-          {label}
-        </label>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label className={labelCls}>{label}</label>
         {(block || flag) && <HideToggle block={block} flag={flag} what={label.toLowerCase()} />}
       </div>
 
@@ -67,7 +66,7 @@ export function Field({
         {children}
       </div>
 
-      {hint && !hidden && <p className="mt-1 text-xs text-[#9aaba4]">{hint}</p>}
+      {hint && !hidden && <p className={hintCls + " mt-1"}>{hint}</p>}
     </>
   );
 

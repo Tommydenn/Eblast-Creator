@@ -17,7 +17,10 @@ export const SECTION_LABELS: Record<EblastSection, string> = {
   hero: "Hero",
   story: "Story",
   images: "Photos",
-  cta: "Footer",
+  // One scope covering two sections of the email. It was called "Footer",
+  // which named one of them: asking for a change while editing the call to
+  // action said it was about the footer, and then changed the call to action.
+  cta: "Footer & CTA",
 };
 
 /**

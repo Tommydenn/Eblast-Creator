@@ -2,328 +2,71 @@
 
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useDraft } from "@/context/DraftContext";
-import type { EditorSection } from "@/context/DraftContext";
-import { allCustomLines, type ExtractedFlyer } from "@/lib/extracted-flyer";
 import { buildEblastHtml } from "@/lib/render-email";
 import { IMAGE_LOADING_PLACEHOLDER } from "@/lib/image-bank";
-import { ColorPickerPopover } from "@/components/drafter/ColorPickerPopover";
-import { DeleteConfirmPopover } from "@/components/drafter/DeleteConfirmPopover";
-import type { SectionColorField } from "@/lib/eblast-defaults";
-import { ImageLinkPopover } from "@/components/drafter/ImageLinkPopover";
 
+/**
+ * The email, which is also the way around it.
+ *
+ * There used to be four things a click in here could mean — open a tab, open
+ * a colour picker, open a link box, or hide a line — decided by which of four
+ * data attributes happened to be nearest the cursor. Three of them were
+ * invisible until hovered, so the only way to learn any of it was by accident.
+ *
+ * A click means one thing now: open this part of the email in the panel.
+ * Everything that was reachable only from here — colour, photo links, hiding
+ * a line — is in that panel, named, where it can be read without hovering
+ * anything.
+ */
 const PREVIEW_SCRIPT = /* javascript */`(function(){
-  // Walk from the event target up to <body>, returning the innermost element
-  // matching each of the given dataset keys (bgfield/deletefield checked
-  // first/innermost since a button's data-bgfield/data-deletefield sits
-  // inside its section's).
-  function findAncestors(target, keys){
-    var found={};
+  var style=document.createElement('style');
+  style.textContent=
+    '[data-section]{cursor:pointer}'+
+    '[data-section][data-hover]{outline:2px solid rgba(31,69,56,0.30);outline-offset:-2px}'+
+    '[data-section][data-selected]{outline:2px solid #1F4538;outline-offset:-2px}';
+  // The head survives the body being replaced on every edit, so this is
+  // written once and never has to be put back.
+  (document.head||document.documentElement).appendChild(style);
+
+  function sectionAt(target){
     var el=target;
     while(el&&el!==document.body){
-      for(var i=0;i<keys.length;i++){
-        var k=keys[i];
-        if(!found[k]&&el.dataset&&el.dataset[k]) found[k]=el;
-      }
+      if(el.dataset&&el.dataset.section) return el;
       el=el.parentElement;
     }
-    return found;
+    return null;
   }
 
-  // The floating hover control — appended to <body> directly (not inside the
-  // hovered element) since some hovered elements are near-zero-height table
-  // rows that can't usefully contain an overlay child.
-  //
-  // It is an eye on almost everything, and hiding happens on the click: it is
-  // reversible, the sidebar shows what is hidden, and undo covers it, so there
-  // is nothing for a confirm box to protect. A line somebody added is the one
-  // exception — removing one throws away typed words — so that keeps the x and
-  // the question that goes with it.
-  //
-  // Show/hide tracking is purely geometric (mousemove + point-in-rect against
-  // the target's and button's own rects), not based on which DOM node a
-  // mouseover/mouseout event reports as its target. The button lives outside
-  // the target's own DOM subtree, in a deeply nested table-based email layout
-  // — relying on discrete mouseover/mouseout event identity across that gap
-  // proved unreliable with a real mouse (it worked under synthetic dispatched
-  // events, which bypass real hit-testing, but not for an actual cursor).
-  // Testing "is the real cursor currently within the target OR button
-  // rectangle" on every mousemove sidesteps that entirely.
-  var delBtn=null;
-  var delTarget=null;
-  var removeTimer=null;
-  function cancelRemove(){
-    if(removeTimer){ clearTimeout(removeTimer); removeTimer=null; }
-  }
-  function hideDelBtn(){
-    cancelRemove();
-    if(delBtn){ delBtn.remove(); delBtn=null; }
-    delTarget=null;
-  }
-  function scheduleHideDelBtn(){
-    cancelRemove();
-    removeTimer=setTimeout(function(){ removeTimer=null; hideDelBtn(); },200);
-  }
-  function placeDelBtn(){
-    if(!delBtn || !delTarget || !delTarget.isConnected) return;
-    var r=delTarget.getBoundingClientRect();
-    delBtn.style.left=(r.right-26)+'px';
-    delBtn.style.top=(r.top+4)+'px';
-  }
-  function showDelBtnFor(target){
-    cancelRemove();
-    // Reuse the button when it is still on screen, but always move it.
-    // Hiding a section shifts everything below it, and a button left at
-    // the coordinates it was created with ends up sitting over whatever
-    // has moved into that spot — the hero photo, usually.
-    if(delTarget===target && delBtn && delBtn.isConnected){ placeDelBtn(); return; }
-    hideDelBtn();
-    delTarget=target;
-    var btn=document.createElement('div');
-    var isLine=(target.dataset.deletefield||'').indexOf('footerCustomLine:')===0;
-    if(isLine){
-      btn.textContent='\\u00d7';
-      btn.title='Remove this line';
-    } else {
-      btn.innerHTML='<svg width=\'13\' height=\'13\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\'><path d=\'M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24\'/><line x1=\'1\' y1=\'1\' x2=\'23\' y2=\'23\'/></svg>';
-      btn.title='Hide this';
-    }
-    btn.setAttribute('data-delete-btn','1');
-    btn.style.cssText='position:fixed;width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#ffffff;color:#1F4538;border:1px solid #d9d3ca;border-radius:50%;font-family:Arial,sans-serif;font-size:14px;line-height:1;cursor:pointer;z-index:99999;box-shadow:0 1px 3px rgba(0,0,0,0.18);user-select:none;';
-    document.body.appendChild(btn);
-    delBtn=btn;
-    placeDelBtn();
-  }
-  // Called by the editor right after it swaps the body out.
-  document.__glmResetOverlay=function(){ hideDelBtn(); };
-
-  // The button is placed from its target's rectangle, which is only re-read on
-  // mouse movement. A photo added to an eblast that generated without one
-  // decodes a moment after the markup lands, and everything below it drops by
-  // the height of the image while the cursor sits still. The button stayed
-  // where it was put and ended up over the hero photo, pointing at a section
-  // that had moved on — so the confirm box it opened appeared nowhere near it.
-  // Re-placing on every reflow keeps the two together without waiting for the
-  // mouse.
-  if(window.ResizeObserver){
-    new ResizeObserver(function(){ placeDelBtn(); }).observe(document.body);
-  }
-  // Images report their size only once decoded, and a decode that changes no
-  // other element's size is not a resize of the body.
-  document.addEventListener('load',function(){ placeDelBtn(); },true);
-
-  function pointInRect(x,y,rect,pad){
-    pad=pad||0;
-    return x>=rect.left-pad && x<=rect.right+pad && y>=rect.top-pad && y<=rect.bottom+pad;
+  var hovered=null;
+  function hover(el){
+    if(hovered===el) return;
+    if(hovered&&hovered.isConnected) hovered.removeAttribute('data-hover');
+    hovered=el;
+    if(el) el.setAttribute('data-hover','');
   }
 
   document.addEventListener('mousemove',function(e){
-    var x=e.clientX, y=e.clientY;
-    // Editing re-renders the preview by replacing the whole body, which
-    // throws this button away. Left unchecked, the script goes on holding
-    // a node that is no longer on the page and the click below can never
-    // match it, so the x stops responding entirely.
-    if(delBtn && !delBtn.isConnected){ delBtn=null; delTarget=null; }
-    if(delTarget && !delTarget.isConnected){ hideDelBtn(); }
-    if(delBtn && pointInRect(x,y,delBtn.getBoundingClientRect(),4)){ cancelRemove(); return; }
-    var el=document.elementFromPoint(x,y);
-    var found=el?findAncestors(el,['bgfield','deletefield','section','linkfield']):{};
-    document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield],[data-linkfield]').forEach(function(s){
-      s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
-    });
-    if(found.deletefield){ showDelBtnFor(found.deletefield); } else { scheduleHideDelBtn(); }
-    if(found.linkfield){
-      found.linkfield.style.outline='2px dashed rgba(31,69,56,0.55)';
-      found.linkfield.style.outlineOffset='-2px';
-      found.linkfield.style.cursor='pointer';
-    } else if(found.bgfield){
-      found.bgfield.style.outline='2px dashed rgba(31,69,56,0.55)';
-      found.bgfield.style.outlineOffset='-2px';
-      found.bgfield.style.cursor='pointer';
-    } else if(found.section){
-      found.section.style.outline='2px solid rgba(31,69,56,0.35)';
-      found.section.style.outlineOffset='0px';
-      found.section.style.cursor='pointer';
-    }
+    hover(sectionAt(document.elementFromPoint(e.clientX,e.clientY)));
   },true);
 
-  document.addEventListener('mouseleave',function(){
-    document.querySelectorAll('[data-section],[data-bgfield],[data-deletefield],[data-linkfield]').forEach(function(s){
-      s.style.outline='';s.style.cursor='';s.style.outlineOffset='';
-    });
-    hideDelBtn();
-  },true);
-
-  document.addEventListener('mousedown',function(e){
-    if(delBtn && pointInRect(e.clientX,e.clientY,delBtn.getBoundingClientRect(),4)){
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  },true);
+  document.addEventListener('mouseleave',function(){ hover(null); },true);
 
   document.addEventListener('click',function(e){
-    if(delBtn && delBtn.isConnected && delTarget && delTarget.isConnected && pointInRect(e.clientX,e.clientY,delBtn.getBoundingClientRect(),4)){
-      e.preventDefault();
-      e.stopPropagation();
-      // The x's own rectangle, not the section's. The confirm box opens
-      // against the thing that was clicked, which is on screen by
-      // definition; a section can run several screens tall.
-      var r=delBtn.getBoundingClientRect();
-      var f=delTarget.dataset.deletefield;
-      var kind=f.indexOf('footerCustomLine:')===0?'delete-click':'hide-click';
-      window.parent.postMessage({type:kind,field:f,left:r.left,bottom:r.bottom,top:r.top,width:r.width},'*');
-      hideDelBtn();
-      return;
-    }
-    var found=findAncestors(e.target,['bgfield','section','linkfield']);
-    // Photos first: a linked photo is an <a>, and in the editor clicking it
-    // must ALWAYS open the link editor rather than navigating. preventDefault
-    // here is what stops the anchor from being followed.
-    if(found.linkfield){
-      e.preventDefault();
-      e.stopPropagation();
-      var lr=found.linkfield.getBoundingClientRect();
-      window.parent.postMessage({
-        type:'link-click',
-        field:found.linkfield.dataset.linkfield,
-        index:found.linkfield.dataset.linkindex,
-        label:found.linkfield.getAttribute('data-img-label')||'Photo',
-        left:lr.left,bottom:lr.bottom,top:lr.top,width:lr.width
-      },'*');
-      return;
-    }
-    if(found.bgfield){
-      e.preventDefault();
-      e.stopPropagation();
-      var rect=found.bgfield.getBoundingClientRect();
-      window.parent.postMessage({type:'bg-click',field:found.bgfield.dataset.bgfield,left:rect.left,bottom:rect.bottom,top:rect.top,width:rect.width},'*');
-      return;
-    }
-    if(found.section){
-      e.preventDefault();
-      e.stopPropagation();
-      window.parent.postMessage({type:'section-click',section:found.section.dataset.section},'*');
-    }
+    // Nothing in the editor's copy of the email navigates. A linked photo is
+    // an <a>, and following it here would replace the preview with the
+    // community's website.
+    e.preventDefault();
+    e.stopPropagation();
+    var el=sectionAt(e.target);
+    window.parent.postMessage({type:'section-click',section:el?el.dataset.section:null},'*');
   },true);
 })();`;
 
-const SECTION_MAP: Record<string, EditorSection> = {
-  "Header": "hero",
-  "Hero": "hero",
-  "Story": "story",
-  "Secondary Image": "story",
-  "Photo Gallery": "images",
-  "Call to Action": "cta",
-  "Footer": "cta",
-};
-
-// Every clickable background field, its human label, and how to compute its
-// current effective value (override if set, else the same brand default
-// render-email.ts uses). Kept in sync with lib/render-email.ts by hand — the
-// header's true default also factors in a light/dark/gray classifier that's
-// approximated here as brand.background, same simplification the sidebar
-// pickers already use.
-// The one list of colourable sections, shared with the reset and with the
-// carry-forward from a community's last eblast — so a colour added there is
-// pickable here without anyone remembering to add it twice.
-type BgFieldKey = SectionColorField;
-
-const BG_FIELD_LABELS: Record<BgFieldKey, string> = {
-  headerBgColor: "Header Background",
-  heroBgColor: "Hero Background",
-  finalCtaBgColor: "Call-to-Action Background",
-  footerBgColor: "Footer Background",
-  storyBgColor: "Story Background",
-  secondaryImageBgColor: "Second Photo Background",
-  galleryLabelBgColor: "Gallery Label Background",
-  galleryBgColor: "Photo Gallery Background",
-  ctaButtonBgColor: "Call Button Color",
-  finalCtaButtonBgColor: "Call Button Color",
-  footerButtonBgColor: "Visit Our Website Button Color",
-};
-
-function defaultForBgField(key: BgFieldKey, community: any): string {
-  switch (key) {
-    case "headerBgColor": return community?.brand.background ?? "#ffffff";
-    case "heroBgColor": return community?.brand.primary ?? "#000000";
-    case "finalCtaBgColor": return community?.brand.accent ?? "#000000";
-    case "footerBgColor": return "#FFFFFF";
-    case "storyBgColor": return "#FFFFFF";
-    case "secondaryImageBgColor": return "#FFFFFF";
-    case "galleryLabelBgColor": return "#FFFFFF";
-    case "galleryBgColor": return "#FFFFFF";
-    case "ctaButtonBgColor": return community?.brand.accent ?? "#000000";
-    case "finalCtaButtonBgColor": return community?.brand.primary ?? "#000000";
-    case "footerButtonBgColor": return community?.brand.primary ?? "#000000";
-  }
-}
-
-
-// Photo click-through links. galleryImageLinks is positional (index i is the
-// link for gallery photo i), so it carries an index; the other two don't.
-type LinkFieldKey = "heroImageLink" | "secondaryImageLink" | "galleryImageLinks";
-
-/**
- * The id inside an added footer line's field key, or null for anything else.
- *
- * Added lines live in a list rather than in a field of their own, so deleting
- * one removes it from that list instead of setting a hidden flag.
- */
-function customLineId(field: string): string | null {
-  return field.startsWith("footerCustomLine:") ? field.slice("footerCustomLine:".length) : null;
-}
-
-/**
- * The block a delete target names, or null for anything else.
- *
- * Most of the email's lines have no flag of their own — they are hidden by
- * name, in hiddenBlocks. The "block:" prefix is what tells the two apart in
- * the one attribute the preview reads.
- */
-function hiddenBlockName(field: string): string | null {
-  return field.startsWith("block:") ? field.slice("block:".length) : null;
-}
-
-/** Current link for the photo the popover is editing, "" when unset. */
-function currentPhotoLink(
-  fields: ExtractedFlyer | null,
-  field: LinkFieldKey,
-  index: number | null,
-): string {
-  if (!fields) return "";
-  if (field === "galleryImageLinks") {
-    return (fields.galleryImageLinks ?? [])[index ?? 0] ?? "";
-  }
-  return (fields[field] as string | undefined) ?? "";
-}
-
-/**
- * Write a photo link back. Gallery links are positional, so the array is
- * padded rather than compacted — removing photo 1's link must not shift
- * photo 2's link onto photo 1.
- */
-function withPhotoLink(
-  fields: ExtractedFlyer | null,
-  field: LinkFieldKey,
-  index: number | null,
-  url: string | undefined,
-): string[] | string | undefined {
-  if (field !== "galleryImageLinks") return url;
-  const next = [...(fields?.galleryImageLinks ?? [])];
-  const i = index ?? 0;
-  while (next.length <= i) next.push("");
-  next[i] = url ?? "";
-  return next.some((v) => v) ? next : undefined;
-}
-
 function injectScript(doc: Document) {
-  // Guarded on the Document itself (not a DOM node under <body>) because
-  // patchIframe() below replaces doc.body.innerHTML wholesale on every edit,
-  // which would otherwise wipe out the previous <script> tag and make this
-  // look "uninjected" again — causing a second, independent copy of the
-  // script to run with its own event listeners stacked on top of the first.
-  // The listeners registered by the first copy are on `document`, which
-  // survives a body.innerHTML swap, so they keep working fine — the script
-  // only ever needs to run once per iframe document.
+  // Guarded on the Document itself (not a node under <body>) because the body
+  // is replaced wholesale on every edit, which would otherwise make this look
+  // uninjected again and stack a second copy of the listeners. The listeners
+  // are on `document`, which survives that swap, so once is enough.
   if ((doc as any).__glmPreviewScriptInjected) return;
   (doc as any).__glmPreviewScriptInjected = true;
   const s = doc.createElement("script");
@@ -334,14 +77,6 @@ function injectScript(doc: Document) {
 
 /** The email's fixed design width, matching the 600px shell in render-email.ts. */
 const EMAIL_WIDTH = 600;
-// DeleteConfirmPopover's own size (w-56, and about this tall once its message,
-// buttons and footnote are laid out), needed because the box is positioned
-// rather than flowed. GAP is its distance from the x; GUTTER keeps it off the
-// container's edges.
-const CONFIRM_WIDTH = 224;
-const CONFIRM_HEIGHT = 112;
-const GAP = 6;
-const GUTTER = 8;
 
 /**
  * Size the iframe to its content, then scale the whole thing down if the
@@ -355,11 +90,10 @@ function resizeIframe(iframe: HTMLIFrameElement) {
   const doc = iframe.contentDocument;
   if (!doc?.body) return;
   // Measured from the body, not documentElement. documentElement.scrollHeight
-  // is never less than the iframe is tall, so once the frame had been sized
-  // it could only ever report that size back — the height ratcheted up and
-  // never came down, leaving blank page below a short eblast and keeping the
-  // room a long one had needed after switching away from it. The body is a
-  // plain block with no height of its own, so it measures its contents.
+  // is never less than the iframe is tall, so once the frame had been sized it
+  // could only ever report that size back — the height ratcheted up and never
+  // came down. The body is a plain block with no height of its own, so it
+  // measures its contents.
   const h = doc.body.scrollHeight || doc.documentElement.scrollHeight;
   if (h > 0) iframe.style.height = h + "px";
 
@@ -374,66 +108,59 @@ function resizeIframe(iframe: HTMLIFrameElement) {
   container.style.height = h > 0 ? `${Math.ceil(h * scale)}px` : "";
 }
 
-/**
- * Where the delete confirm box opens, in the preview container's coordinates.
- *
- * It used to be anchored to the bottom edge of the section being deleted. The
- * x sits at that section's top corner, so on a hero running several screens
- * tall the box opened far below the fold — the user never saw it, and the
- * click read as having done nothing. The x is on screen by definition, so the
- * box follows it instead: tucked under it with their right edges aligned, so
- * it opens inward over the email, and flipped above when there is no room
- * below. Pure, so the arithmetic can be checked without a browser.
- */
-export function confirmBoxPosition(
-  /** The x's rectangle, in the iframe's own unscaled coordinates. */
-  btn: { left: number; top: number; bottom: number; width: number },
-  geom: {
-    /** How far down the iframe is drawn from its natural size. */
-    scale: number;
-    /** The iframe's origin within the container. */
-    offsetX: number;
-    offsetY: number;
-    /** The container's own position and width on the page. */
-    containerTop: number;
-    containerWidth: number;
-    viewportHeight: number;
-  },
-): { left: number; top: number } {
-  const right = geom.offsetX + (btn.left + btn.width) * geom.scale;
-  const left = Math.min(
-    Math.max(GUTTER, right - CONFIRM_WIDTH),
-    Math.max(GUTTER, geom.containerWidth - CONFIRM_WIDTH - GUTTER),
-  );
-
-  const below = geom.offsetY + btn.bottom * geom.scale + GAP;
-  const above = geom.offsetY + btn.top * geom.scale - CONFIRM_HEIGHT - GAP;
-  // Measured against the window, which is what the user can actually see —
-  // the container itself is as tall as the whole email.
-  const fitsBelow = geom.containerTop + below + CONFIRM_HEIGHT <= geom.viewportHeight - GUTTER;
-  const fitsAbove = geom.containerTop + above >= GUTTER;
-  return { left, top: fitsBelow || !fitsAbove ? below : above };
+/** Draw the selection on whichever row of the email it belongs to. */
+function markSelected(doc: Document | null | undefined, selected: string | null) {
+  if (!doc?.body) return;
+  doc.querySelectorAll("[data-selected]").forEach((el) => el.removeAttribute("data-selected"));
+  if (!selected) return;
+  doc.querySelectorAll("[data-section]").forEach((el) => {
+    if ((el as HTMLElement).dataset.section === selected) el.setAttribute("data-selected", "");
+  });
 }
 
-export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown } = {}) {
-  const { setActiveSection, fields, setField, setFields, images, community, imagesLoading } = useDraft();
+export default function PreviewPanel({
+  layoutSignal,
+  selected,
+  onSelect,
+  onSectionsDrawn,
+  scrollerRef,
+}: {
+  layoutSignal?: unknown;
+  /** The section the panel is showing, outlined here so the two agree. */
+  selected?: string | null;
+  onSelect?: (section: string | null) => void;
+  /**
+   * Which sections the email actually drew this time.
+   *
+   * A section with nothing in it draws nothing — an empty gallery, a second
+   * photo that was never chosen — so there is no row to click and no way back
+   * to it. Saying which ones are here is what lets the editor offer the rest.
+   */
+  onSectionsDrawn?: (names: string[]) => void;
+  /** The column this scrolls in, so selecting a section can bring it into view. */
+  scrollerRef?: React.RefObject<HTMLElement>;
+} = {}) {
+  const { fields, images, community, imagesLoading } = useDraft();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const [bgPopover, setBgPopover] = useState<{ field: BgFieldKey; left: number; top: number } | null>(null);
-  const [deletePopover, setDeletePopover] = useState<{ field: string; left: number; top: number } | null>(null);
 
-  // The message handler below is registered once, so it cannot close over
-  // the draft — it would go on hiding things into whatever the draft was
-  // when the preview first loaded.
-  const fieldsRef = useRef(fields);
-  fieldsRef.current = fields;
+  // The message handler below is registered once, so it reads the callback
+  // through a ref rather than closing over whichever one it first saw.
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const onDrawnRef = useRef(onSectionsDrawn);
+  onDrawnRef.current = onSectionsDrawn;
 
-  // Scale the fixed-width email down when the column is narrower than it,
-  // instead of letting the container clip it.
-  const [linkPopover, setLinkPopover] = useState<
-    { field: LinkFieldKey; index: number | null; label: string; left: number; top: number } | null
-  >(null);
+  const reportDrawn = useCallback((doc: Document | null | undefined) => {
+    if (!doc?.body) return;
+    const names = new Set<string>();
+    doc.querySelectorAll("[data-section]").forEach((el) => {
+      const name = (el as HTMLElement).dataset.section;
+      if (name) names.add(name);
+    });
+    onDrawnRef.current?.([...names]);
+  }, []);
 
   const html = useMemo(() => {
     if (!fields || !community) return "";
@@ -449,8 +176,8 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
     });
   }, [fields, images, community, imagesLoading]);
 
-  // srcDoc is set once when the draft first loads, then never changed via React.
-  // Subsequent updates go directly into the iframe DOM to avoid reload flicker.
+  // srcDoc is set once when the draft first loads, then never changed via
+  // React. Later updates go straight into the iframe DOM to avoid reloading.
   const [initSrc, setInitSrc] = useState("");
   const initDone = useRef(false);
   useEffect(() => {
@@ -461,8 +188,11 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!html]);
 
-  // Patch the iframe body in-place whenever html changes (debounced 150ms so
-  // fast typing doesn't thrash, but changes appear nearly instantly).
+  const selectedRef = useRef<string | null>(selected ?? null);
+  selectedRef.current = selected ?? null;
+
+  // Patch the iframe body in place whenever the html changes (debounced 150ms
+  // so fast typing doesn't thrash, but changes appear nearly instantly).
   const updateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const patchIframe = useCallback((newHtml: string) => {
     const iframe = iframeRef.current;
@@ -472,12 +202,13 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
       const parser = new DOMParser();
       const parsed = parser.parseFromString(newHtml, "text/html");
       doc.body.innerHTML = parsed.body.innerHTML;
-      // The hover-delete button lived in the body that was just replaced.
-      (doc as any).__glmResetOverlay?.();
       injectScript(doc);
+      // The selection lived on a node in the body that was just replaced.
+      markSelected(doc, selectedRef.current);
+      reportDrawn(doc);
       resizeIframe(iframe);
     } catch {}
-  }, []);
+  }, [reportDrawn]);
 
   useEffect(() => {
     if (!initDone.current) return; // don't patch before first load
@@ -488,90 +219,32 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
     };
   }, [html, patchIframe]);
 
-  // Where a point inside the preview sits in the container's own coordinates.
-  //
-  // The iframe is a fixed 600px wide and drawn scaled down whenever the column
-  // is narrower than that, so a coordinate measured inside it is in unscaled
-  // pixels while the iframe's own rectangle is post-scale. Reading one straight
-  // into the other put every popover further from its element the further down
-  // the email it was — far enough, on a narrow column, that clicking the delete
-  // x looked like it did nothing at all.
-  const anchorInContainer = (x: number, y: number) => {
-    const iframe = iframeRef.current;
-    const iframeRect = iframe?.getBoundingClientRect();
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    if (!iframe || !iframeRect || !containerRect) return null;
-    const scale = iframeRect.width / (iframe.offsetWidth || EMAIL_WIDTH);
-    return {
-      left: iframeRect.left - containerRect.left + x * scale,
-      top: iframeRect.top - containerRect.top + y * scale,
-    };
-  };
-
-  // Handle section-click and bg-click messages from the iframe. bg-click opens
-  // the same color picker used in the sidebar, anchored under the clicked
-  // element — clicking a section/button background edits its color directly
-  // instead of just switching tabs.
   useEffect(() => {
     function handler(e: MessageEvent) {
-      if (!e.data) return;
-      if (e.data.type === "section-click") {
-        const section = SECTION_MAP[e.data.section as string];
-        if (section) setActiveSection(section);
-        return;
-      }
-      if (e.data.type === "bg-click") {
-        const at = anchorInContainer(e.data.left as number, e.data.bottom as number);
-        if (!at) return;
-        setBgPopover({ field: e.data.field as BgFieldKey, ...at });
-        return;
-      }
-      if (e.data.type === "link-click") {
-        const at = anchorInContainer(e.data.left as number, e.data.bottom as number);
-        if (!at) return;
-        const rawIndex = e.data.index;
-        setLinkPopover({
-          field: e.data.field as LinkFieldKey,
-          index: rawIndex === undefined || rawIndex === null || rawIndex === "" ? null : Number(rawIndex),
-          label: (e.data.label as string) ?? "Photo",
-          ...at,
-        });
-        return;
-      }
-      // Hiding is reversible, the sidebar shows what is hidden, and undo
-      // covers it — so it happens on the click, with nothing to confirm.
-      if (e.data.type === "hide-click") {
-        const field = e.data.field as string;
-        const block = hiddenBlockName(field);
-        if (block) {
-          setField("hiddenBlocks", [...(fieldsRef.current?.hiddenBlocks ?? []), block]);
-        } else {
-          setField(field as keyof ExtractedFlyer, true as never);
-        }
-        return;
-      }
-      if (e.data.type === "delete-click") {
-        const iframe = iframeRef.current;
-        const iframeRect = iframe?.getBoundingClientRect();
-        const container = containerRef.current;
-        const containerRect = container?.getBoundingClientRect();
-        if (!iframe || !iframeRect || !container || !containerRect) return;
-        setDeletePopover({
-          field: e.data.field as string,
-          ...confirmBoxPosition(e.data as { left: number; top: number; bottom: number; width: number }, {
-            scale: iframeRect.width / (iframe.offsetWidth || EMAIL_WIDTH),
-            offsetX: iframeRect.left - containerRect.left,
-            offsetY: iframeRect.top - containerRect.top,
-            containerTop: containerRect.top,
-            containerWidth: container.clientWidth,
-            viewportHeight: window.innerHeight,
-          }),
-        });
-      }
+      if (!e.data || e.data.type !== "section-click") return;
+      onSelectRef.current?.((e.data.section as string | null) ?? null);
     }
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [setActiveSection]);
+  }, []);
+
+  // Outline the selected section, and bring it into view when the selection
+  // came from somewhere other than a click on the email itself.
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    markSelected(doc, selected ?? null);
+    if (!selected || !doc || !iframe) return;
+    const el = doc.querySelector(`[data-section="${selected.replace(/"/g, '\\"')}"]`) as HTMLElement | null;
+    const scroller = scrollerRef?.current;
+    if (!el || !scroller) return;
+    const scale = iframe.getBoundingClientRect().width / (iframe.offsetWidth || EMAIL_WIDTH);
+    const top = iframe.offsetTop + el.offsetTop * scale;
+    const bottom = top + el.offsetHeight * scale;
+    if (top < scroller.scrollTop || bottom > scroller.scrollTop + scroller.clientHeight) {
+      scroller.scrollTo({ top: Math.max(0, top - 24), behavior: "smooth" });
+    }
+  }, [selected, scrollerRef]);
 
   function handleLoad() {
     const iframe = iframeRef.current;
@@ -579,24 +252,14 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
     if (!doc?.body || !iframe) return;
     resizeIframe(iframe);
     injectScript(doc);
+    markSelected(doc, selectedRef.current);
+    reportDrawn(doc);
 
-    // A single point-in-time measurement isn't enough: images (the hero slot
-    // especially, which is intentionally left height:auto so a differently-
-    // cropped photo can flex slightly) can still be decoding after this
-    // synchronous call returns, and every subsequent edit fully replaces
-    // doc.body's children (see patchIframe), destroying and re-creating every
-    // <img> — each replacement re-enters that same decode race. Both
-    // symptoms this was causing — the preview being cropped short right
-    // after loading a saved draft until *something else* happened to
-    // re-measure, and the whole preview visibly resizing (and the page's
-    // scroll position jumping with it) right after clicking a section to
-    // change its color — trace back to this: the iframe's own height
-    // lagging behind its actual content height. Watching doc.body with a
-    // ResizeObserver keeps it continuously accurate instead of relying on
-    // one-off calls timed around actions that happen to also trigger a
-    // reflow. doc.body itself is stable across patchIframe (only its
-    // children are replaced), so this only needs to attach once per real
-    // iframe document load.
+    // A single point-in-time measurement isn't enough: images can still be
+    // decoding after this call returns, and every edit replaces every <img>,
+    // re-entering that same decode race. Watching doc.body keeps the height
+    // continuously accurate instead. doc.body itself survives patchIframe
+    // (only its children are replaced), so this attaches once per real load.
     resizeObserverRef.current?.disconnect();
     const ro = new ResizeObserver(() => resizeIframe(iframe));
     ro.observe(doc.body);
@@ -605,12 +268,10 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
 
   useEffect(() => () => resizeObserverRef.current?.disconnect(), []);
 
-  // Re-scale when the column width changes (window resize, sidebar toggling).
-  // Content-height changes are already covered by the ResizeObserver on
-  // doc.body in handleLoad, which calls the same resizeIframe.
-  // Depends on initSrc: before the first draft loads this component renders a
-  // placeholder and containerRef is null, so an effect with an empty dep array
-  // would attach nothing and never re-run, leaving the scale stale on resize.
+  // Re-scale when the column width changes. Content-height changes are already
+  // covered by the ResizeObserver on doc.body in handleLoad. Depends on
+  // initSrc: before the first draft loads this renders a placeholder and
+  // containerRef is null, so an empty dep array would attach nothing.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -620,15 +281,10 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
     };
     const ro = new ResizeObserver(rescale);
     // Watch the column the preview sits in, not just the container: rescale
-    // sets the container's own height, and an observer on an element the
-    // callback resizes gets its notifications suppressed as a loop. That is
-    // why opening the flyer panel beside the preview left the email clipped
-    // until something else forced a re-measure.
+    // sets the container's own height, and an observer on an element its
+    // callback resizes gets its notifications suppressed as a loop.
     ro.observe(container);
     if (container.parentElement) ro.observe(container.parentElement);
-    // A ResizeObserver alone proved unreliable for viewport changes, so listen
-    // for window resize too. Both call the same function and it is idempotent,
-    // so firing twice is harmless.
     window.addEventListener("resize", rescale);
     rescale();
     return () => {
@@ -639,20 +295,11 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
 
   // Told directly when the surrounding layout changes — opening the flyer
   // beside the preview narrows this column, and the email is a fixed 600px
-  // that has to scale down or it gets clipped on the right. A ResizeObserver
-  // did not reliably catch it, and a clipped preview is exactly the bug this
-  // scaling exists to prevent, so the signal is explicit. Two frames so the
-  // new widths are settled before measuring.
+  // that has to scale down or it is clipped on the right, which is the exact
+  // bug this scaling exists to prevent. Measured a few times rather than once:
+  // the first read can land before the new widths have settled, and
+  // resizeIframe is idempotent so repeating it costs nothing.
   useEffect(() => {
-    // Re-measure when the surrounding layout changes — opening the flyer beside
-    // the preview narrows this column, and the email is a fixed 600px that has
-    // to scale down or it is clipped on the right, which is the exact bug this
-    // scaling exists to prevent.
-    //
-    // Measured a few times rather than once: the first read can land before the
-    // new widths have settled, and a single animation frame proved unreliable
-    // (its cleanup cancelled it before it ever ran). resizeIframe is idempotent,
-    // so repeating it costs nothing.
     const timers = [0, 80, 250, 600].map((delay) =>
       setTimeout(() => {
         const iframe = iframeRef.current;
@@ -664,29 +311,19 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
 
   if (!initSrc) {
     return (
-      <div className="flex items-center justify-center py-20 text-sm text-[#9aaba4]">
-        Preview will appear here
+      <div className="flex items-center justify-center py-20 text-[13px] text-[#6A736F]">
+        The email will appear here
       </div>
     );
   }
-
-  const brandColors = community
-    ? ([community.brand.primary, community.brand.accent, community.brand.background, community.brand.secondary, ...(community.brand.supporting ?? [])].filter(Boolean) as string[])
-    : [];
 
   return (
     <div ref={containerRef} className="relative">
       {/*
         The email is a fixed EMAIL_WIDTH design. The iframe is that width
         exactly and is scaled down when the surrounding column is narrower,
-        rather than being given a percentage width.
-
-        Before, the iframe was w-full inside a container with overflow-hidden
-        and scrolling="no": whenever the column was narrower than the email,
-        the right-hand side was silently cut off with no scrollbar and no
-        indication. Larger fonts pushed more text into the cut-off zone, which
-        made it look like the text was overflowing when the preview was
-        clipping it. Scaling keeps the whole email visible at any width.
+        rather than being given a percentage width — a percentage width inside
+        an overflow-hidden box silently cut the right-hand side off.
       */}
       <iframe
         ref={iframeRef}
@@ -705,75 +342,6 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
         onLoad={handleLoad}
         scrolling="no"
       />
-
-      {bgPopover && (
-        <>
-          {/* Click-outside-to-close backdrop */}
-          <div className="fixed inset-0 z-30" onClick={() => setBgPopover(null)} />
-          <div className="absolute z-40" style={{ left: bgPopover.left, top: bgPopover.top + 4 }}>
-            <ColorPickerPopover
-              brandColors={brandColors}
-              currentValue={(fields && (fields as any)[bgPopover.field]) ?? defaultForBgField(bgPopover.field, community)}
-              currentLabel={BG_FIELD_LABELS[bgPopover.field]}
-              onPick={(hex) => setField(bgPopover.field as keyof ExtractedFlyer, hex as never)}
-              onReset={
-                fields?.[bgPopover.field]
-                  ? () => setField(bgPopover.field as keyof ExtractedFlyer, undefined as never)
-                  : undefined
-              }
-              resetLabel={`Reset ${BG_FIELD_LABELS[bgPopover.field]} to default`}
-              onClose={() => setBgPopover(null)}
-            />
-          </div>
-        </>
-      )}
-
-      {linkPopover && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setLinkPopover(null)} />
-          <div className="absolute z-40" style={{ left: linkPopover.left, top: linkPopover.top + 4 }}>
-            <ImageLinkPopover
-              label={linkPopover.label}
-              currentValue={currentPhotoLink(fields, linkPopover.field, linkPopover.index)}
-              onSave={(url) =>
-                setField(
-                  linkPopover.field as keyof ExtractedFlyer,
-                  withPhotoLink(fields, linkPopover.field, linkPopover.index, url) as never,
-                )
-              }
-              onRemove={() =>
-                setField(
-                  linkPopover.field as keyof ExtractedFlyer,
-                  withPhotoLink(fields, linkPopover.field, linkPopover.index, undefined) as never,
-                )
-              }
-              onClose={() => setLinkPopover(null)}
-            />
-          </div>
-        </>
-      )}
-
-      {deletePopover && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setDeletePopover(null)} />
-          <div className="absolute z-40" style={{ left: deletePopover.left, top: deletePopover.top }}>
-            <DeleteConfirmPopover
-              label="this added line"
-              onConfirm={() => {
-                const id = customLineId(deletePopover.field);
-                const all = fields ? allCustomLines(fields) : [];
-                const next = all.filter((l) => l.id !== id);
-                setFields({
-                  customLines: next.length ? next : undefined,
-                  footerCustomLines: undefined,
-                });
-                setDeletePopover(null);
-              }}
-              onCancel={() => setDeletePopover(null)}
-            />
-          </div>
-        </>
-      )}
     </div>
   );
 }

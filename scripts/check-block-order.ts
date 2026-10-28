@@ -17,7 +17,7 @@
  */
 import fs from "node:fs";
 import { buildEblastHtml } from "@/lib/render-email";
-import { SECTIONS, SECTION_NAMES, allSlots, applyOrder, orderedBlocks } from "@/lib/eblast-blocks";
+import { SECTIONS, SECTION_NAMES, allSlots, applyOrder, orderedBlocks, sectionSlots } from "@/lib/eblast-blocks";
 
 const failures: string[] = [];
 const fail = (msg: string) => failures.push(msg);
@@ -185,7 +185,15 @@ for (const section of SECTIONS) {
   else if (secondAt > hdrAt) fail("the secondary image would not move above the header");
 }
 
-// ── Every gap the sidebar offers is one the email draws ────────────────────
+// ── Every gap the editor offers is one the email draws ─────────────────────
+//
+// The editor used to carry a standing "+ line" control in every gap, and this
+// check read those controls out of the section components to compare the two
+// lists. A line is added at the foot of its section now and moved from there,
+// so the gaps it can reach are sectionSlots() — derived from the same block
+// list the renderer reads, which is stronger than scraping a component for
+// them. What is left to check is that the derived list is whole, and that the
+// email really draws every gap in it.
 {
   const known = new Set(allSlots());
 
@@ -200,17 +208,38 @@ for (const section of SECTIONS) {
   }
 
   const offered = new Set<string>();
-  for (const file of fs.readdirSync("components/drafter/sections")) {
-    const src = fs.readFileSync(`components/drafter/sections/${file}`, "utf8");
-    for (const m of src.matchAll(/BlockGap slot="([^"]+)"/g)) offered.add(m[1]);
+  for (const section of SECTIONS) {
+    for (const slot of sectionSlots({}, section.name)) {
+      if (offered.has(slot)) fail(`the gap "${slot}" is offered twice`);
+      offered.add(slot);
+    }
   }
 
   for (const slot of offered) {
-    if (!known.has(slot)) fail(`the sidebar offers a gap "${slot}" that is not in the block list`);
-    if (!drawn.has(slot)) fail(`the sidebar offers a gap "${slot}" the email never draws`);
+    if (!known.has(slot)) fail(`the editor offers a gap "${slot}" that is not in the block list`);
+    if (!drawn.has(slot)) fail(`the editor offers a gap "${slot}" the email never draws`);
   }
   for (const slot of known) {
-    if (!offered.has(slot)) fail(`the block list has a gap "${slot}" the sidebar never offers`);
+    if (!offered.has(slot)) fail(`the block list has a gap "${slot}" no section offers`);
+  }
+
+  // A gap belongs to one section, which is what keeps a line from wandering
+  // out of the section it was added in.
+  for (const slot of known) {
+    const owners = SECTIONS.filter((s) => sectionSlots({}, s.name).includes(slot));
+    if (owners.length !== 1) fail(`the gap "${slot}" belongs to ${owners.length} sections`);
+  }
+
+  // Rearranging a section's blocks carries their gaps with them, so the gaps
+  // a section offers are the same set whatever order it is in.
+  for (const section of SECTIONS) {
+    if (section.blocks.length < 2) continue;
+    const reversed = { blockOrder: { [section.name]: section.blocks.map((b) => b.name).reverse() } };
+    const before = [...sectionSlots({}, section.name)].sort();
+    const after = [...sectionSlots(reversed, section.name)].sort();
+    if (before.join("|") !== after.join("|")) {
+      fail(`rearranging ${section.name} changed which gaps it offers`);
+    }
   }
 }
 
@@ -224,5 +253,6 @@ const movable = SECTIONS.filter((s) => s.blocks.length > 1);
 console.log(
   `\n${movable.length} sections rearrange their blocks (${movable.map((s) => s.blocks.length).reduce((a, b) => a + b, 0)} in all),\n` +
   "no block can be drawn outside the section it belongs to, and a stale order\n" +
-  `neither loses nor duplicates one. All ${allSlots().length} gaps the sidebar offers are gaps the email draws.`,
+  `neither loses nor duplicates one. All ${allSlots().length} gaps the editor offers are gaps
+the email draws, each belonging to exactly one section however that section is ordered.`,
 );

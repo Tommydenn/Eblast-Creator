@@ -23,13 +23,14 @@ export const SECTION_LABELS: Record<EblastSection, string> = {
 /**
  * The fields each section owns, named as they are on the draft.
  *
- * Grouped by where a field is edited rather than by where it renders, because
- * that is what someone has in front of them when they ask for a change. The
- * gallery label is the one that could go either way — it draws above the photo
- * grid but is typed in the Story tab, so it counts as Story.
+ * Grouped by where a field is edited, which is now the same thing as where it
+ * renders: clicking a part of the email opens that part, so a field belongs to
+ * whichever section draws it. The gallery label is the one that used to go the
+ * other way — it draws above the photo grid and was typed in the Story tab —
+ * and it has moved to Photos along with the grid itself.
  *
- * Photos own no text. A request made there can still rearrange the photos,
- * which the model handles separately from the fields.
+ * Photos own that one line and nothing else. A request made there can also
+ * rearrange the photos, which the model handles separately from the fields.
  */
 export const SECTION_FIELDS: Record<EblastSection, readonly string[]> = {
   subject: ["subject", "previewText"],
@@ -50,11 +51,10 @@ export const SECTION_FIELDS: Record<EblastSection, readonly string[]> = {
     "storyEyebrow",
     "storyScriptTitle",
     "bodyParagraphs",
-    "galleryLabel",
     "secondaryImageAlt",
     "secondaryImageDescription",
   ],
-  images: [],
+  images: ["galleryLabel"],
   cta: [
     "ctaEyebrow",
     "ctaHeadline",
@@ -114,10 +114,12 @@ export function isEblastSection(value: unknown): value is EblastSection {
 export function sectionScopeInstruction(section: EblastSection): string {
   const fields = SECTION_FIELDS[section];
   const label = SECTION_LABELS[section];
-  if (fields.length === 0) {
+  if (section === "images") {
     return [
-      `The user is working on the ${label} and their instruction is about those photos.`,
-      `No text field may change. If they are asking for something other than which photos appear, or how they are arranged, change nothing and say so in refineNote.`,
+      `The user is working on the ${label} of the email, so read their instruction as being about those photos and the line above them.`,
+      `Only these fields may change: ${fields.join(", ")}.`,
+      `Return every other field exactly as it was given to you. A change outside this list will be discarded, so spending the reply on one helps nobody.`,
+      `Anything else they ask for here is about which photos appear or how they are arranged. If it is neither, leave everything alone and say which part of the email it belongs to in refineNote.`,
     ].join("\n");
   }
   return [

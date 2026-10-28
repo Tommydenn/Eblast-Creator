@@ -921,7 +921,7 @@ export function buildEblastHtml(
     : options.forPreview
       ? `
       <tr><td style="padding:72px 36px; text-align:center; font-family:${fontBody}; font-size:15px; color:#8a8a8a;">
-        Every section is hidden. Turn one back on in the sidebar to see it here.
+        Every section is hidden. Turn one back on to see it here.
       </td></tr>`
       : "";
 

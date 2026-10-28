@@ -29,6 +29,8 @@ import {
   DEFAULT_THANK_YOU_TEXT,
   DEFAULT_WEBSITE_BUTTON_LABEL,
 } from "@/lib/eblast-defaults";
+import { SECTION_PANELS, UNREACHABLE_COLORS } from "@/lib/eblast-inspector";
+import { SECTION_NAMES } from "@/lib/eblast-blocks";
 
 const failures: string[] = [];
 const notes: string[] = [];
@@ -184,20 +186,57 @@ if (!COLORABLE_TEXT_FIELDS.includes("bodyParagraphs")) {
   fail("bodyParagraphs is missing from COLORABLE_TEXT_FIELDS");
 }
 
-// ── 5. No sidebar field has grown a second copy of a default ───────────────
-const SIDEBAR_COPIES: Array<[string, RegExp, string]> = [
-  ["components/drafter/sections/HeroSection.tsx", /displayName.*address\?\.street/s, "builds its own address line"],
-  ["components/drafter/sections/StorySection.tsx", /`A Look Around \$\{/, "hardcodes the gallery label"],
-  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*"Visit Our Website"/, "hardcodes the website button label"],
-  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*"Thank You!"/, "hardcodes the thank-you text"],
-  ["components/drafter/sections/CtaSection.tsx", /\?\?\s*community\?\.displayName/, "hardcodes the footer signature"],
-  ["components/drafter/RichEditor.tsx", /const FIELD_FONT_SIZES/, "keeps its own font-size table"],
-  ["components/drafter/PreviewPanel.tsx", /type BgFieldKey =\s*\n?\s*\|/, "keeps its own list of colourable sections"],
+// ── 5. No part of the editor has grown a second copy of a default ──────────
+//
+// Named by what the copy would look like rather than by which file it would
+// be in: the editor's files move, and a guard that names them stops guarding
+// the moment one is renamed. Every file under components/drafter is read.
+const SIDEBAR_COPIES: Array<[RegExp, string]> = [
+  [/displayName.*address\?\.street/s, "builds its own address line"],
+  [/`A Look Around \$\{/, "hardcodes the gallery label"],
+  [/\?\?\s*"Visit Our Website"/, "hardcodes the website button label"],
+  [/\?\?\s*"Thank You!"/, "hardcodes the thank-you text"],
+  [/\?\?\s*community\?\.displayName/, "hardcodes the footer signature"],
+  [/const FIELD_FONT_SIZES/, "keeps its own font-size table"],
+  [/type BgFieldKey\b/, "keeps its own list of colourable sections"],
 ];
-for (const [file, pattern, what] of SIDEBAR_COPIES) {
-  if (pattern.test(fs.readFileSync(file, "utf8"))) {
-    fail(`${file} ${what} — it should read lib/eblast-defaults.ts instead`);
+
+function editorFiles(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return editorFiles(path);
+    return entry.name.endsWith(".tsx") || entry.name.endsWith(".ts") ? [path] : [];
+  });
+}
+
+const EDITOR_FILES = editorFiles("components/drafter");
+for (const file of EDITOR_FILES) {
+  const src = fs.readFileSync(file, "utf8");
+  for (const [pattern, what] of SIDEBAR_COPIES) {
+    if (pattern.test(src)) fail(`${file} ${what} — it should read lib/eblast-defaults.ts instead`);
   }
+}
+
+// ── 6. Every colourable surface is reachable from a section's panel ────────
+//
+// Background colour had no control at all for a while: the only way to change
+// one was to hover the right part of the preview and click. Each colour now
+// belongs to the panel of the section that draws it, and a colour belonging to
+// no panel would be exactly as unreachable as before.
+for (const field of UNREACHABLE_COLORS) {
+  fail(`${field} belongs to no section's panel, so nobody can change it`);
+}
+for (const field of SECTION_COLOR_FIELDS) {
+  const owners = Object.keys(SECTION_PANELS).filter((name) =>
+    SECTION_PANELS[name].colors.some((c) => c.field === field),
+  );
+  if (owners.length > 1) fail(`${field} appears in ${owners.join(" and ")} — it can only belong to one`);
+}
+for (const name of Object.keys(SECTION_PANELS)) {
+  if (!SECTION_NAMES.includes(name)) fail(`the panel describes "${name}", which the email has no section for`);
+}
+for (const name of SECTION_NAMES) {
+  if (!SECTION_PANELS[name]) fail(`the email draws "${name}" and the panel has nothing to show for it`);
 }
 
 // ── Report ─────────────────────────────────────────────────────────────────
@@ -208,7 +247,9 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  `\nSidebar and preview agree: ${Object.keys(FIELD_FONT_SIZES).length} field sizes, ` +
-  `${Object.keys(expected).length} text defaults, ${SECTION_COLOR_FIELDS.length} colourable sections, ` +
-  `${COLOR_CASES.length} colour-carrying cases, ${SIDEBAR_COPIES.length} duplicate-copy guards.`,
+  `\nPanel and preview agree: ${Object.keys(FIELD_FONT_SIZES).length} field sizes, ` +
+  `${Object.keys(expected).length} text defaults, ${SECTION_COLOR_FIELDS.length} colourable surfaces ` +
+  `each reachable from exactly one of ${SECTION_NAMES.length} sections, ` +
+  `${COLOR_CASES.length} colour-carrying cases, ` +
+  `${SIDEBAR_COPIES.length} duplicate-copy patterns across ${EDITOR_FILES.length} editor files.`,
 );

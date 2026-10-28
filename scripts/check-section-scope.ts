@@ -77,10 +77,15 @@ for (const section of SECTIONS) {
   }
 }
 
-// Photos own no text, so nothing written may survive a request made there.
+// Photos own one line — the label above the grid, which the email draws in
+// that section and the panel now edits there. Nothing else written may survive
+// a request made in Photos.
 const photos = boundToSection(before, after, "images");
 for (const field of Object.keys(before)) {
-  if (photos[field] !== before[field]) fail(`a request in Photos changed ${field}`);
+  const owned = field === "galleryLabel";
+  if (photos[field] !== (owned ? after[field] : before[field])) {
+    fail(owned ? `a request in Photos could not change ${field}` : `a request in Photos changed ${field}`);
+  }
 }
 
 // No section means the whole email, which is how it worked before any of this.

@@ -1,8 +1,8 @@
 /**
  * What the email is made of, in the order it is made of it.
  *
- * One list, read by the renderer when it draws and by the sidebar when it
- * offers to rearrange. They used to agree only by coincidence — the sidebar
+ * One list, read by the renderer when it draws and by the editor when it
+ * offers to rearrange. They used to agree only by coincidence — the editor
  * offered a place to add a line after the hero's call button and the email
  * never drew one, so a line added there was saved and never seen. A guard
  * checks the two still agree.
@@ -16,7 +16,7 @@
 export interface BlockDef {
   /** The name the email tags it with, and what a stored order refers to. */
   name: string;
-  /** What the sidebar calls it. */
+  /** What the editor calls it. */
   label: string;
   /**
    * The gap that follows it, where added lines go.
@@ -26,6 +26,14 @@ export interface BlockDef {
    * `heroAddress` when the address was the last thing inside it.
    */
   slot: string;
+  /**
+   * Gaps the email draws inside this block, before the block's own gap.
+   *
+   * The hero's date band is one movable block holding three lines, and the
+   * email draws a gap between the time and the address. It travels with the
+   * band rather than sitting at a fixed place in the section.
+   */
+  innerSlots?: string[];
 }
 
 export interface SectionDef {
@@ -46,8 +54,8 @@ export interface SectionDef {
    * only the eyebrow and the title trade places.
    */
   blocks: BlockDef[];
-  /** Blocks the section draws but does not rearrange — they still take lines. */
-  fixedSlots?: string[];
+  /** Gaps after every block, for what the section draws but never rearranges. */
+  tailSlots?: string[];
 }
 
 export const SECTIONS: SectionDef[] = [
@@ -60,11 +68,10 @@ export const SECTIONS: SectionDef[] = [
       { name: "rsvpLabel", label: "RSVP Label", slot: "rsvpLabel" },
       { name: "headline", label: "Headline", slot: "headline" },
       { name: "scriptSubheadline", label: "Script Subheadline", slot: "scriptSubheadline" },
-      { name: "eventDateTime", label: "Date, Time & Address", slot: "heroAddress" },
+      // The gap inside the bordered band sits between the time and the address.
+      { name: "eventDateTime", label: "Date, Time & Address", slot: "heroAddress", innerSlots: ["eventTime"] },
       { name: "ctaButtonLabel", label: "Call Button", slot: "ctaButtonLabel" },
     ],
-    // Inside the bordered band, between the time and the address.
-    fixedSlots: ["eventTime"],
   },
   {
     name: "Story",
@@ -74,10 +81,10 @@ export const SECTIONS: SectionDef[] = [
       { name: "storyEyebrow", label: "Section Eyebrow", slot: "storyEyebrow" },
       { name: "storyScriptTitle", label: "Section Title", slot: "storyScriptTitle" },
     ],
-    fixedSlots: ["bodyParagraphs"],
+    tailSlots: ["bodyParagraphs"],
   },
   { name: "Secondary Image", flag: "secondaryImageSectionHidden", blocks: [] },
-  { name: "Photo Gallery", flag: "gallerySectionHidden", blocks: [], fixedSlots: ["galleryLabel"] },
+  { name: "Photo Gallery", flag: "gallerySectionHidden", blocks: [], tailSlots: ["galleryLabel"] },
   {
     name: "Call to Action",
     flag: "finalCtaSectionHidden",
@@ -113,8 +120,11 @@ export function allSlots(): string[] {
   const out: string[] = [];
   for (const section of SECTIONS) {
     if (section.startSlot) out.push(section.startSlot);
-    for (const block of section.blocks) out.push(block.slot);
-    for (const slot of section.fixedSlots ?? []) out.push(slot);
+    for (const block of section.blocks) {
+      for (const slot of block.innerSlots ?? []) out.push(slot);
+      out.push(block.slot);
+    }
+    for (const slot of section.tailSlots ?? []) out.push(slot);
   }
   return out;
 }
@@ -182,6 +192,32 @@ export function orderedBlocks(flyer: Ordered, section: string): BlockDef[] {
   return applyOrder(canonical, flyer.blockOrder?.[section])
     .map((name) => def.blocks.find((b) => b.name === name))
     .filter((b): b is BlockDef => !!b);
+}
+
+/**
+ * One section's gaps, top to bottom, as this draft draws them.
+ *
+ * A line added to a section lands in the last of these and walks up through
+ * the rest. That is the whole of where a line can go: the list is derived from
+ * the section itself, so the editor can only ever offer a gap the email draws,
+ * and rearranging a section's blocks carries their gaps along with them.
+ */
+export function sectionSlots(flyer: Ordered, section: string): string[] {
+  const def = sectionDef(section);
+  if (!def) return [];
+  const out: string[] = [];
+  if (def.startSlot) out.push(def.startSlot);
+  for (const block of orderedBlocks(flyer, section)) {
+    for (const slot of block.innerSlots ?? []) out.push(slot);
+    out.push(block.slot);
+  }
+  for (const slot of def.tailSlots ?? []) out.push(slot);
+  return out;
+}
+
+/** The section a gap belongs to, which is the only one it can move within. */
+export function sectionOfSlot(slot: string): SectionDef | undefined {
+  return SECTIONS.find((s) => sectionSlots({}, s.name).includes(slot));
 }
 
 /** The section a block belongs to, which is the only one it can move within. */

@@ -39,20 +39,108 @@ export const inputClass =
 export function Group({
   label,
   action,
+  tone = "plain",
   children,
 }: {
   label: string;
   action?: React.ReactNode;
+  /**
+   * A tinted group sits on its own surface rather than being ruled off.
+   *
+   * Dividers are for separating things of the same kind; a different kind of
+   * thing is better told apart by what it sits on. Colour is not content, so
+   * the appearance group gets a surface of its own and can never be read as
+   * one more row in the list above it.
+   */
+  tone?: "plain" | "tinted";
   children: React.ReactNode;
 }) {
   return (
-    <section className="px-4 py-4 border-t border-[#EFEBE4] first:border-t-0">
+    <section
+      className={[
+        "px-4 py-4",
+        tone === "tinted"
+          ? "bg-[#F7F6F3] border-t border-[#E4E0D9]"
+          : "border-t border-[#EFEBE4] first:border-t-0",
+      ].join(" ")}
+    >
       <div className="flex items-center justify-between gap-2 mb-3">
         <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-[#6A736F]">{label}</h3>
         {action}
       </div>
       <div className="space-y-3.5">{children}</div>
     </section>
+  );
+}
+
+/**
+ * A button that opens a short list of actions.
+ *
+ * Every design system that has written this down says the same thing: show
+ * the one or two actions a view is for, and put the rest behind one control
+ * rather than spreading them along a bar. This is that one control — the
+ * caret on a split button and the kebab at the end of the top bar are both
+ * this, so they open and close identically.
+ */
+export function Menu({
+  items,
+  align = "right",
+  className,
+  title,
+  label,
+  children,
+}: {
+  items: MenuItem[];
+  align?: "left" | "right";
+  className?: string;
+  title?: string;
+  label?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button type="button" onClick={() => setOpen((o) => !o)} title={title} aria-label={label} aria-expanded={open} className={className}>
+        {children}
+      </button>
+      {open && (
+        <div
+          className={[
+            "absolute top-full z-50 mt-1 w-48 overflow-hidden rounded-[9px] border border-[#E4E0D9] bg-white py-1 shadow-[0_12px_32px_rgba(27,29,28,0.16)]",
+            align === "right" ? "right-0" : "left-0",
+          ].join(" ")}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              disabled={item.disabled}
+              onClick={() => { setOpen(false); item.onClick(); }}
+              className={[
+                "block w-full px-3 py-1.5 text-left text-[12px] transition-colors disabled:opacity-35 disabled:cursor-default",
+                item.danger ? "text-[#A3302B] hover:bg-[#FBF2F1]" : "text-[#1B1D1C] hover:bg-[#F7F6F3]",
+              ].join(" ")}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

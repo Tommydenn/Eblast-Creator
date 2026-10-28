@@ -11,7 +11,7 @@ import ApprovalModal from "./ApprovalModal";
 import { CopyPromptModal } from "./CopyPromptModal";
 import { FlyerPanel, useHasFlyer } from "./FlyerPanel";
 import { FloatingFormat } from "./FloatingFormat";
-import { Button } from "./ui";
+import { Button, Menu } from "./ui";
 import { orderedSections } from "@/lib/eblast-blocks";
 import { SECTION_PANELS } from "@/lib/eblast-inspector";
 import type { EditorSection } from "@/context/DraftContext";
@@ -78,18 +78,9 @@ function TopBar({
     canUndo, canRedo, undo, redo, lastRefineInstruction,
   } = useDraft();
 
-  const [savedFlash, setSavedFlash] = useState(false);
   const [pushFlash, setPushFlash] = useState(false);
   const [approvalFlash, setApprovalFlash] = useState(false);
-  const [hideSaveError, setHideSaveError] = useState(false);
   const [hidePushError, setHidePushError] = useState(false);
-
-  useEffect(() => {
-    if (!saveError) { setHideSaveError(false); return; }
-    setHideSaveError(false);
-    const id = setTimeout(() => setHideSaveError(true), 4500);
-    return () => clearTimeout(id);
-  }, [saveError]);
 
   useEffect(() => {
     if (!pushError) { setHidePushError(false); return; }
@@ -97,16 +88,6 @@ function TopBar({
     const id = setTimeout(() => setHidePushError(true), 4500);
     return () => clearTimeout(id);
   }, [pushError]);
-
-  const prevIsSaving = useRef(false);
-  useEffect(() => {
-    if (prevIsSaving.current && !isSaving && !saveError) {
-      setSavedFlash(true);
-      const id = setTimeout(() => setSavedFlash(false), 2500);
-      return () => clearTimeout(id);
-    }
-    prevIsSaving.current = isSaving;
-  }, [isSaving, saveError]);
 
   const prevIsPushing = useRef(false);
   useEffect(() => {
@@ -141,12 +122,8 @@ function TopBar({
         </div>
       )}
 
-      {autoSaveLabel && (
-        <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-[#6A736F]">
-          <Spinner />
-          {autoSaveLabel}
-        </span>
-      )}
+      <SaveStatus autoSaving={!!autoSaveLabel} />
+
       {imagesLoading && (
         <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-[#6A736F]">
           <Spinner />
@@ -190,40 +167,41 @@ function TopBar({
 
       <span className="h-5 w-px shrink-0 bg-[#E4E0D9]" aria-hidden />
 
-      <Button tone="quiet" onClick={() => { discard(); router.push("/"); }} title="Discard this and start again">
-        New draft
-      </Button>
+      {/* Two actions and a menu, which is what every design system that has
+          written this down recommends: the one thing this screen is for stays
+          visible, the step before it sits beside it, and the rest — a test run
+          of that same step, saving by hand, starting over — are variants and
+          afterthoughts rather than decisions to be weighed each time.
 
-      <Button
-        tone="quiet"
-        onClick={onTestApproval}
-        title="Send yourself the approval email and walk the whole flow. Approving it creates a [TEST] email in HubSpot and changes nothing here."
-      >
-        Send test
-      </Button>
-
-      <div className="relative shrink-0">
-        <Button tone="secondary" onClick={save} disabled={isSaving}>
-          {waitingForImages ? "Adding photos…" : isSaving ? "Saving…" : savedFlash ? <><Check />Saved</> : "Save"}
-        </Button>
-        {saveError && !hideSaveError && (
-          <div className="absolute right-0 top-full z-50 mt-1.5 w-64 rounded-[9px] border border-[#EFD9D7] bg-[#FBF2F1] px-3 py-2 shadow-[0_8px_24px_rgba(27,29,28,0.12)]">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#A3302B]">{errorCode(saveError)}</p>
-            <p className="mt-0.5 text-[11.5px] text-[#A3302B]">{saveError}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Held while the flyer's date and its weekday disagree: a wrong date is
+          Held while the flyer's date and its weekday disagree: a wrong date is
           the one mistake in an eblast that cannot be fixed after it goes out. */}
-      <Button
-        tone="secondary"
-        onClick={onApproval}
-        disabled={!!fields?.dateConflict}
-        title={fields?.dateConflict ? "Check the event date first — it is in the Hero" : undefined}
-      >
-        {approvalFlash ? <><Check />Sent</> : "Send for approval"}
-      </Button>
+      <div className="flex shrink-0 items-center">
+        <button
+          type="button"
+          onClick={onApproval}
+          disabled={!!fields?.dateConflict}
+          title={fields?.dateConflict ? "Check the event date first — it is in the Hero" : undefined}
+          className={`${SPLIT} rounded-l-md px-3`}
+        >
+          {approvalFlash ? <span className="flex items-center gap-1.5"><Check />Sent</span> : "Send for approval"}
+        </button>
+        <Menu
+          align="right"
+          label="Other ways to send this"
+          title="Other ways to send this"
+          className={`${SPLIT} -ml-px rounded-r-md px-1.5`}
+          items={[
+            {
+              label: "Send a test to myself",
+              onClick: onTestApproval,
+            },
+          ]}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </Menu>
+      </div>
 
       <div className="relative shrink-0">
         <Button tone="primary" onClick={push} disabled={isPushing}>
@@ -242,7 +220,74 @@ function TopBar({
           </div>
         )}
       </div>
+
+      <Menu
+        align="right"
+        label="More"
+        title="More"
+        className="grid h-[30px] w-[30px] place-items-center rounded-md text-[#495250] transition-colors hover:bg-[#F0EDE7] hover:text-[#1B1D1C]"
+        items={[
+          { label: isSaving ? "Saving…" : "Save now", onClick: save, disabled: isSaving },
+          { label: "Start a new draft", onClick: () => { discard(); router.push("/"); } },
+        ]}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
+        </svg>
+      </Menu>
     </header>
+  );
+}
+
+/** The two halves of the split button, so they read as one control. */
+const SPLIT =
+  "h-[30px] border border-[#DCD7CE] bg-white text-[12px] font-medium text-[#1B1D1C] transition-colors " +
+  "hover:border-[#1F4538] hover:text-[#1F4538] hover:z-10 relative disabled:opacity-40 disabled:cursor-not-allowed";
+
+/**
+ * Whether the draft is safe, instead of a button asking you to make it so.
+ *
+ * It saves itself five seconds after you stop typing, which made a Save button
+ * a thing you pressed for reassurance rather than effect. The reassurance is
+ * the real need, so this says plainly where the draft stands — including when
+ * a save failed, which a button that looked the same before and after could
+ * never tell you. Saving by hand is still there, in the menu.
+ */
+function SaveStatus({ autoSaving }: { autoSaving: boolean }) {
+  const { isSaving, isSaved, saveError, waitingForImages } = useDraft();
+  const [hideError, setHideError] = useState(false);
+
+  useEffect(() => {
+    if (!saveError) { setHideError(false); return; }
+    setHideError(false);
+    const id = setTimeout(() => setHideError(true), 4500);
+    return () => clearTimeout(id);
+  }, [saveError]);
+
+  const busy = isSaving || autoSaving || waitingForImages;
+  const label = saveError
+    ? "Couldn't save"
+    : waitingForImages
+      ? "Adding photos…"
+      : busy
+        ? "Saving…"
+        : isSaved
+          ? "Saved"
+          : "Unsaved changes";
+
+  return (
+    <div className="relative shrink-0">
+      <span className={`flex items-center gap-1.5 text-[11px] ${saveError ? "text-[#A3302B]" : "text-[#6A736F]"}`}>
+        {busy && <Spinner />}
+        {label}
+      </span>
+      {saveError && !hideError && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-[9px] border border-[#EFD9D7] bg-[#FBF2F1] px-3 py-2 shadow-[0_8px_24px_rgba(27,29,28,0.12)]">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#A3302B]">{errorCode(saveError)}</p>
+          <p className="mt-0.5 text-[11.5px] text-[#A3302B]">{saveError}</p>
+        </div>
+      )}
+    </div>
   );
 }
 

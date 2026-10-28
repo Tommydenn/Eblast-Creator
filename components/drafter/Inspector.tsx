@@ -13,6 +13,7 @@ import { combineDateTime, splitDateTime } from "@/lib/date-time-line";
 import { PhotoField } from "@/components/drafter/PhotoField";
 import { ColorRow } from "@/components/drafter/ColorRow";
 import { SectionList } from "@/components/drafter/SectionList";
+import { Orderable, type OrderableRow } from "@/components/drafter/Orderable";
 import { Button, EyeButton, Group, Pill, Row, inputClass, type MenuItem } from "@/components/drafter/ui";
 import { orderedBlocks, sectionDef, sectionSlots, type BlockDef } from "@/lib/eblast-blocks";
 import { SECTION_PANELS } from "@/lib/eblast-inspector";
@@ -258,10 +259,9 @@ function SectionPanel({ name, onBack }: { name: string; onBack: () => void }) {
     return !!mine[mine.indexOf(line) + dir] || !!slots[here + dir];
   };
 
-  const lineRows = (slot: string) =>
-    all
-      .filter((l) => l.after === slot)
-      .map((line) => (
+  const linesIn = (slot: string) => all.filter((l) => l.after === slot);
+
+  const lineRow = (line: CustomLine) => (
         <Row
           key={line.id}
           label="Added line"
@@ -301,7 +301,7 @@ function SectionPanel({ name, onBack }: { name: string; onBack: () => void }) {
             </div>
           )}
         </Row>
-      ));
+  );
 
   // ── Blocks ────────────────────────────────────────────────────────────────
   const order = orderedBlocks(fields, name);
@@ -377,42 +377,46 @@ function SectionPanel({ name, onBack }: { name: string; onBack: () => void }) {
           <RichInput {...rich} fieldName="scriptSubheadline" value={fields!.scriptSubheadline ?? ""} placeholder="Optional handwritten line"
             onValueChange={(html) => setField("scriptSubheadline", html || undefined)} />,
         );
+      // One item, three lines. The email draws the date, the time and the
+      // address inside a single bordered band, so the band is what moves —
+      // which is why the address lives in here rather than beside it.
       case "eventDateTime":
         return (
-          <React.Fragment key={block.name}>
-            <Row label={label} menu={menu} hidden={hidden} note="The date, then the time on the next line.">
-              <RichInput
-                {...rich}
-                fieldName="eventDate"
-                value={combineDateTime(fields!.eventDate, fields!.eventTime)}
-                placeholder="Wednesday, May 13"
-                onValueChange={(html) =>
-                  // Editing the date answers the question, so the warning goes with it.
-                  setFields({ ...splitDateTime(html), dateConflict: undefined })
-                }
-              />
-              {fields!.dateConflict && (
-                <div className="mt-1.5 rounded-md border border-[#EFD9D7] bg-[#FBF2F1] px-2.5 py-2">
-                  <p className="text-[11.5px] leading-snug text-[#A3302B]">{fields!.dateConflict}</p>
-                  <button
-                    onClick={() => setField("dateConflict", undefined)}
-                    className="mt-1 text-[11.5px] font-medium text-[#A3302B] underline underline-offset-2"
-                  >
-                    The date is right
-                  </button>
-                </div>
-              )}
-            </Row>
-            {lineRows("eventTime")}
-            <Row
-              label={LABELS.heroAddress}
-              hidden={isHidden("heroAddress")}
-              menu={[{ label: isHidden("heroAddress") ? "Show this" : "Hide this", onClick: () => toggle("heroAddress") }]}
-            >
-              <RichInput {...rich} fieldName="heroAddress" value={fields!.heroAddress ?? communityAddressLine(community)}
-                placeholder="Street, city, state" onValueChange={(html) => setField("heroAddress", html)} />
-            </Row>
-          </React.Fragment>
+          <Row key={block.name} label={label} menu={menu} hidden={hidden}>
+            <RichInput
+              {...rich}
+              fieldName="eventDate"
+              value={combineDateTime(fields!.eventDate, fields!.eventTime)}
+              placeholder="Wednesday, May 13"
+              onValueChange={(html) =>
+                // Editing the date answers the question, so the warning goes with it.
+                setFields({ ...splitDateTime(html), dateConflict: undefined })
+              }
+            />
+            <p className="mt-1 text-[11px] leading-snug text-[#6A736F]">The date, then the time on the next line.</p>
+            {fields!.dateConflict && (
+              <div className="mt-1.5 rounded-md border border-[#EFD9D7] bg-[#FBF2F1] px-2.5 py-2">
+                <p className="text-[11.5px] leading-snug text-[#A3302B]">{fields!.dateConflict}</p>
+                <button
+                  onClick={() => setField("dateConflict", undefined)}
+                  className="mt-1 text-[11.5px] font-medium text-[#A3302B] underline underline-offset-2"
+                >
+                  The date is right
+                </button>
+              </div>
+            )}
+            <div className="mt-3 space-y-3">
+              {linesIn("eventTime").map(lineRow)}
+              <Row
+                label={LABELS.heroAddress}
+                hidden={isHidden("heroAddress")}
+                menu={[{ label: isHidden("heroAddress") ? "Show this" : "Hide this", onClick: () => toggle("heroAddress") }]}
+              >
+                <RichInput {...rich} fieldName="heroAddress" value={fields!.heroAddress ?? communityAddressLine(community)}
+                  placeholder="Street, city, state" onValueChange={(html) => setField("heroAddress", html)} />
+              </Row>
+            </div>
+          </Row>
         );
       case "ctaButtonLabel":
         return wrap(
@@ -523,21 +527,85 @@ function SectionPanel({ name, onBack }: { name: string; onBack: () => void }) {
     return null;
   }
 
-  const content: React.ReactNode[] = [];
-  if (panel.photo === "hero" || panel.photo === "secondary") {
-    content.push(<PhotoField key="photo" slot={panel.photo} />);
+  // ── What the panel is made of ─────────────────────────────────────────────
+  //
+  // Three kinds of thing, told apart by what they sit on rather than by a rule
+  // between them: the photo in a card, the ordered rows in one ruled list, and
+  // the colours on their own surface further down.
+
+  /** The rows that can be dragged, which is every row inside the list. */
+  const listRows: OrderableRow[] = [];
+  if (def.startSlot) {
+    for (const line of linesIn(def.startSlot)) listRows.push({ key: `line:${line.id}`, node: lineRow(line) });
   }
-  if (def.startSlot) content.push(...lineRows(def.startSlot));
   for (const block of order) {
-    content.push(blockRows(block));
-    content.push(...lineRows(block.slot));
+    listRows.push({ key: `block:${block.name}`, node: blockRows(block) });
+    for (const line of linesIn(block.slot)) listRows.push({ key: `line:${line.id}`, node: lineRow(line) });
   }
+
+  /**
+   * A dropped row, read back as an order.
+   *
+   * Blocks keep their relative order, and a line belongs to whichever block
+   * it now sits under — which is the same rule the email draws by, so what
+   * the list shows after a drop is what the email shows.
+   */
+  const reorder = (keys: string[]) => {
+    const blocks: string[] = [];
+    const moved: CustomLine[] = [];
+    let current = def.startSlot ?? order[0]?.slot;
+    for (const key of keys) {
+      if (key.startsWith("block:")) {
+        const block = order.find((b) => b.name === key.slice(6));
+        if (!block) continue;
+        blocks.push(block.name);
+        current = block.slot;
+      } else {
+        const line = all.find((l) => l.id === key.slice(5));
+        if (!line || !current) continue;
+        moved.push({ ...line, after: current as CustomSlot });
+      }
+    }
+    // Lines in this section's other gaps, and in every other section, are not
+    // in this list and keep exactly where they were.
+    const untouched = all.filter((l) => !keys.includes(`line:${l.id}`));
+    const next = [...untouched, ...moved];
+    setFields({
+      blockOrder: { ...(fields.blockOrder ?? {}), [name]: blocks },
+      customLines: next.length ? next : undefined,
+      footerCustomLines: undefined,
+    });
+  };
+
+  /** Rows the email draws in a fixed place, so they sit outside the list. */
+  const fixed: React.ReactNode[] = [];
   for (const slot of def.tailSlots ?? []) {
-    content.push(tailRow(slot));
-    content.push(...lineRows(slot));
+    fixed.push(tailRow(slot));
+    for (const line of linesIn(slot)) fixed.push(lineRow(line));
   }
-  if (panel.photo === "gallery") content.push(<PhotoField key="photo" slot="gallery" />);
-  if (name === "Footer") content.push(<AdditionalEmails key="emails" />);
+  if (name === "Footer") fixed.push(<AdditionalEmails key="emails" />);
+
+  const photo = panel.photo && (
+    <div className="rounded-[9px] border border-[#E4E0D9] bg-white p-3">
+      <PhotoField slot={panel.photo} />
+    </div>
+  );
+
+  // A new line lands in the section's last gap, so the button that adds one
+  // belongs beside whatever owns that gap.
+  const lastSlot = slots[slots.length - 1];
+  const addsBelowFixed = !!lastSlot && (def.tailSlots ?? []).includes(lastSlot);
+  const addButton = lastSlot ? (
+    <button
+      type="button"
+      onClick={addLine}
+      className="w-full rounded-md border border-dashed border-[#DCD7CE] py-2 text-[12px] text-[#6A736F] transition-colors hover:border-[#1F4538] hover:text-[#1F4538]"
+    >
+      Add a line of text
+    </button>
+  ) : null;
+
+  const hasContent = !!photo || listRows.length > 0 || fixed.some(Boolean);
 
   return (
     <>
@@ -564,22 +632,25 @@ function SectionPanel({ name, onBack }: { name: string; onBack: () => void }) {
         {panel.note && <p className="mt-1 text-[12px] leading-snug text-[#495250]">{panel.note}</p>}
       </header>
 
-      {content.some(Boolean) && (
-        <Group label="Content">
-          {content}
-          {slots.length > 0 && (
-            <button
-              type="button"
-              onClick={addLine}
-              className="w-full rounded-md border border-dashed border-[#DCD7CE] py-2 text-[12px] text-[#6A736F] transition-colors hover:border-[#1F4538] hover:text-[#1F4538]"
-            >
-              Add a line of text
-            </button>
-          )}
+      {hasContent && (
+        <Group
+          label="Content"
+          action={
+            listRows.length > 1 ? (
+              <span className="text-[11px] text-[#6A736F]">Drag to reorder</span>
+            ) : undefined
+          }
+        >
+          {panel.photo !== "gallery" && photo}
+          <Orderable id={name} rows={listRows} onReorder={reorder} />
+          {!addsBelowFixed && addButton}
+          {fixed.some(Boolean) && <div className="space-y-3.5">{fixed}</div>}
+          {addsBelowFixed && addButton}
+          {panel.photo === "gallery" && photo}
         </Group>
       )}
 
-      <Group label="Appearance">
+      <Group label="Appearance" tone="tinted">
         {panel.colors.map((c) => <ColorRow key={c.field} field={c.field} label={c.label} />)}
       </Group>
     </>

@@ -2,6 +2,7 @@
 
 import React from "react";
 import { RichInput } from "@/components/drafter/RichEditor";
+import { HideToggle } from "@/components/drafter/HideToggle";
 
 /**
  * One box holding the event's date and time, on two lines.
@@ -85,6 +86,15 @@ export function splitDateTime(combined: string): { date?: string; time?: string 
 interface Props {
   label: string;
   hint?: string;
+  /**
+   * The two blocks this box writes, when each can be hidden on its own.
+   *
+   * One box, but two lines in the email, and sending a date without a time
+   * is a real thing to want — so the control is per line rather than per
+   * box. Both are optional, and without them the box has no controls.
+   */
+  dateBlock?: string;
+  timeBlock?: string;
   date?: string;
   time?: string;
   onChange: (next: { date?: string; time?: string }) => void;
@@ -97,14 +107,22 @@ interface Props {
 }
 
 export function DateTimeField({
-  label, hint, date, time, onChange, className, fieldName,
+  label, hint, dateBlock, timeBlock, date, time, onChange, className, fieldName,
   activeEditorRef, activeEditorCallback, activeFieldNameRef,
 }: Props) {
   return (
     <div>
-      <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">
-        {label}
-      </label>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">
+          {label}
+        </label>
+        {(dateBlock || timeBlock) && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {dateBlock && <HideToggle block={dateBlock} what="the date" />}
+            {timeBlock && <HideToggle block={timeBlock} what="the time" />}
+          </div>
+        )}
+      </div>
       <RichInput
         value={combineDateTime(date, time)}
         onValueChange={(html) => onChange(splitDateTime(html))}

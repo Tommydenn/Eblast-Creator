@@ -35,7 +35,20 @@ export interface ExtractedFlyer {
    * body runs left. Only a deliberate choice from the toolbar lands here.
    */
   textAlign?: Record<string, "left" | "center" | "right">;
-  /** Extra lines someone added to the footer, in the order they were added. */
+  /**
+   * Extra lines someone added, anywhere in the email.
+   *
+   * Each names the gap it sits in, and a gap belongs to exactly one
+   * section, so a line added to the hero stays in the hero.
+   */
+  customLines?: CustomLine[];
+  /**
+   * Where added lines used to live, back when only the footer had them.
+   *
+   * Still read, so drafts written before this keep their lines. Editing
+   * any of them moves the whole set into customLines above and empties
+   * this, which is why nothing writes to it any more.
+   */
   footerCustomLines?: FooterCustomLine[];
 
   /** True if the flyer explicitly requires or requests RSVP. */
@@ -166,11 +179,26 @@ export interface ExtractedFlyer {
    * Footer themselves are never hideable (logo/branding and required sender
    * contact info), but the Footer's own "Visit Our Website" button is.
    */
+  /**
+   * Blocks someone has hidden, by the name the email tags them with.
+   *
+   * Hiding is not deleting: the words stay in the sidebar box and come back
+   * the moment it is unhidden. Clearing a box still removes the line too —
+   * that is a different thing, for when the text itself is unwanted.
+   *
+   * One list rather than a flag per block, so a block added later is hideable
+   * without anything else changing. The section flags below predate it and
+   * are still read, so drafts written before this keep their hidden sections.
+   */
+  hiddenBlocks?: string[];
+
   heroSectionHidden?: boolean;
   storySectionHidden?: boolean;
   secondaryImageSectionHidden?: boolean;
   gallerySectionHidden?: boolean;
   finalCtaSectionHidden?: boolean;
+  headerSectionHidden?: boolean;
+  footerSectionHidden?: boolean;
   ctaButtonHidden?: boolean;
   finalCtaButtonHidden?: boolean;
   footerButtonHidden?: boolean;
@@ -254,16 +282,73 @@ export function withParagraphSpacing(paras: string[]): string[] {
 /**
  * The gaps in the footer an added line can sit in, each named for the thing
  * it follows. "top" is above the website button.
+ *
+ * These names predate the other sections having gaps of their own, which is
+ * why they are bare where the newer ones carry their section. Renaming them
+ * would strand the lines in every draft already written.
  */
 export const FOOTER_SLOTS = ["top", "button", "thankYou", "senderName", "footerName", "senderEmail"] as const;
 export type FooterSlot = (typeof FOOTER_SLOTS)[number];
 
-/** A line someone added to the footer. */
-export interface FooterCustomLine {
+/**
+ * Every gap an added line can sit in, in the order the email reads them.
+ *
+ * A gap is named for what it follows, and belongs to one section. That is
+ * the whole of the containment rule: a line added in the hero sits in a hero
+ * gap, so moving the hero moves it and nothing can push it into the story.
+ */
+export const CUSTOM_SLOTS = [
+  "hero:start",
+  "rsvpLabel",
+  "headline",
+  "scriptSubheadline",
+  "eventTime",
+  "heroAddress",
+  "ctaButtonLabel",
+  "story:start",
+  "storyEyebrow",
+  "storyScriptTitle",
+  "bodyParagraphs",
+  "galleryLabel",
+  "cta:start",
+  "ctaRsvpLabel",
+  "ctaEventTime",
+  "finalCtaButtonLabel",
+  "top",
+  "button",
+  "thankYou",
+  "senderName",
+  "footerName",
+  "senderEmail",
+] as const;
+export type CustomSlot = (typeof CUSTOM_SLOTS)[number];
+
+/** A line someone added to the email. */
+export interface CustomLine {
   /** Stable across edits, so alignment and deletion can refer to it. */
   id: string;
   /** Rich inline HTML, the same as any other single-line field. */
   text: string;
   /** Which gap it sits in. */
+  after: CustomSlot;
+}
+
+/** The older footer-only shape, kept for drafts written before CustomLine. */
+export interface FooterCustomLine {
+  id: string;
+  text: string;
   after: FooterSlot;
+}
+
+/**
+ * Every added line in one list, old and new together.
+ *
+ * The two lists are read as one everywhere, so a draft from before the
+ * other sections had gaps renders and edits exactly as it did.
+ */
+export function allCustomLines(flyer: {
+  customLines?: CustomLine[];
+  footerCustomLines?: FooterCustomLine[];
+}): CustomLine[] {
+  return [...(flyer.customLines ?? []), ...(flyer.footerCustomLines ?? [])];
 }

@@ -5,88 +5,17 @@ import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField, EmailButtonField, SenderNameField } from "@/components/drafter/RichEditor";
 import { DateTimeField } from "@/components/drafter/DateTimeField";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
-import { type FooterSlot, type FooterCustomLine } from "@/lib/extracted-flyer";
+import { Field } from "@/components/drafter/Field";
+import { BlockGap } from "@/components/drafter/BlockGap";
 import {
   defaultFooterName,
   DEFAULT_THANK_YOU_TEXT,
   DEFAULT_WEBSITE_BUTTON_LABEL,
 } from "@/lib/eblast-defaults";
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">{label}</label>
-      {children}
-      {hint && <p className="mt-1 text-xs text-[#9aaba4]">{hint}</p>}
-    </div>
-  );
-}
 
 const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
-/**
- * The added lines sitting in one gap of the footer, and the control that
- * adds another there.
- *
- * The gaps are the footer's own, laid out here in the order the email reads,
- * so the place a line is added is the place it appears. Adding used to be
- * done from the preview; it lives here instead, next to everything else the
- * footer is made of.
- */
-function FooterGap({ slot }: { slot: FooterSlot }) {
-  const { fields, setField, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
-  const all = fields?.footerCustomLines ?? [];
-  const mine = all.filter((l) => l.after === slot);
-  const write = (next: FooterCustomLine[]) =>
-    setField("footerCustomLines", next.length ? next : undefined);
-  return (
-    <div className="space-y-2">
-      {mine.map((line) => (
-        <div key={line.id} className="flex items-start gap-2">
-          <div className="flex-1">
-            <RichInput
-              value={line.text}
-              onValueChange={(html) =>
-                write(all.map((l) => (l.id === line.id ? { ...l, text: html } : l)))
-              }
-              placeholder="Extra line"
-              className={baseInput}
-              activeEditorRef={activeEditorRef}
-              activeEditorCallback={activeEditorCallback}
-              activeFieldNameRef={activeFieldNameRef}
-              fieldName={`footerCustomLine:${line.id}`}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => write(all.filter((l) => l.id !== line.id))}
-            className="mt-1.5 px-1 text-sm leading-none text-[#b9a89a] hover:text-[#a4552f] transition-colors"
-            title="Remove this line"
-          >
-            &times;
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() =>
-          write([
-            ...all,
-            {
-              id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-              text: "",
-              after: slot,
-            },
-          ])
-        }
-        className="w-full py-0.5 text-[11px] text-[#d5cec5] hover:text-[#1F4538] transition-colors"
-        title="Add a line of text here"
-      >
-        + line
-      </button>
-    </div>
-  );
-}
 
 export default function CtaSection() {
   const { fields, setField, setFields, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
@@ -119,6 +48,9 @@ export default function CtaSection() {
 
   return (
     <div className="space-y-5">
+      {fields.footerSectionHidden && (
+        <HiddenBanner label="The Footer section" onRestore={() => setField("footerSectionHidden", undefined)} />
+      )}
       {fields.finalCtaSectionHidden && (
         <HiddenBanner label="The Call-to-Action section" onRestore={() => setField("finalCtaSectionHidden", undefined)} />
       )}
@@ -129,7 +61,9 @@ export default function CtaSection() {
         <HiddenBanner label="The Visit Our Website button" onRestore={() => setField("footerButtonHidden", undefined)} />
       )}
 
-      <Field label="RSVP Label" hint="Edit to differ from the Hero section">
+      <BlockGap slot="cta:start" />
+
+      <Field label="RSVP Label" block="ctaRsvpLabel" hint="Edit to differ from the Hero section">
         <RichInput
           value={fields.ctaRsvpLabel ?? fields.rsvpLabel ?? ""}
           onValueChange={(html) => setField("ctaRsvpLabel", html)}
@@ -142,9 +76,13 @@ export default function CtaSection() {
         />
       </Field>
 
+      <BlockGap slot="ctaRsvpLabel" />
+
       {/* One box, two underlying fields — see DateTimeField. */}
       <DateTimeField
         label="Event Date & Time"
+        dateBlock="ctaEventDate"
+        timeBlock="ctaEventTime"
         hint="Edit to differ from the Hero section"
         date={fields.ctaEventDate ?? fields.eventDate}
         time={fields.ctaEventTime ?? fields.eventTime}
@@ -156,7 +94,9 @@ export default function CtaSection() {
         activeFieldNameRef={activeFieldNameRef}
       />
 
-      <Field label="Call Button Label" hint="The action button at the bottom of the email. Generates the same as the Hero's button, but is independently editable/formattable from here on — the number stays locked.">
+      <BlockGap slot="ctaEventTime" />
+
+      <Field label="Call Button Label" flag="finalCtaButtonHidden" hint="The action button at the bottom of the email. Generates the same as the Hero's button, but is independently editable/formattable from here on — the number stays locked.">
         <CallButtonField
           value={fields.finalCtaButtonLabel ?? fields.ctaButtonLabel ?? ""}
           onValueChange={(html) => setField("finalCtaButtonLabel", html || undefined)}
@@ -168,9 +108,11 @@ export default function CtaSection() {
         />
       </Field>
 
-      <FooterGap slot="top" />
+      <BlockGap slot="finalCtaButtonLabel" />
 
-      <Field label="Visit Our Website Button" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
+      <BlockGap slot="top" />
+
+      <Field label="Visit Our Website Button" flag="footerButtonHidden" hint="Text on the footer's website button. The link always points to the community's configured website. Select text to format it.">
         <RichInput
           value={fields.footerButtonLabel ?? DEFAULT_WEBSITE_BUTTON_LABEL}
           onValueChange={(html) => setField("footerButtonLabel", html || undefined)}
@@ -183,9 +125,9 @@ export default function CtaSection() {
         />
       </Field>
 
-      <FooterGap slot="button" />
+      <BlockGap slot="button" />
 
-      <Field label="Thank You Text" hint="Closing salutation displayed in the email footer.">
+      <Field label="Thank You Text" block="thankYouText" hint="Closing salutation displayed in the email footer.">
         <RichInput
           value={fields.thankYouText ?? DEFAULT_THANK_YOU_TEXT}
           onValueChange={(html) => setField("thankYouText", html)}
@@ -198,9 +140,9 @@ export default function CtaSection() {
         />
       </Field>
 
-      <FooterGap slot="thankYou" />
+      <BlockGap slot="thankYou" />
 
-      <Field label="Salesperson Name" hint="The community's primary sender, set on the Community page. Select text to format it — the name itself can't be changed here.">
+      <Field label="Salesperson Name" block="footerSenderName" hint="The community's primary sender, set on the Community page. Select text to format it — the name itself can't be changed here.">
         <SenderNameField
           value={fields.footerSenderName ?? ""}
           onValueChange={(html) => setField("footerSenderName", html)}
@@ -212,9 +154,9 @@ export default function CtaSection() {
         />
       </Field>
 
-      <FooterGap slot="senderName" />
+      <BlockGap slot="senderName" />
 
-      <Field label="Footer Signature" hint="Name appearing below 'Thank You!' in the email footer.">
+      <Field label="Footer Signature" block="footerName" hint="Name appearing below 'Thank You!' in the email footer.">
         <RichInput
           value={fields.footerName ?? defaultFooterName(community)}
           onValueChange={(html) => setField("footerName", html)}
@@ -227,9 +169,9 @@ export default function CtaSection() {
         />
       </Field>
 
-      <FooterGap slot="footerName" />
+      <BlockGap slot="footerName" />
 
-      <Field label="Salesperson Email" hint="The community's primary sender, set on the Community page. Select text to format it — the address itself can't be changed here.">
+      <Field label="Salesperson Email" block="footerSenderEmail" hint="The community's primary sender, set on the Community page. Select text to format it — the address itself can't be changed here.">
         <EmailButtonField
           value={fields.footerSenderEmail ?? ""}
           onValueChange={(html) => setField("footerSenderEmail", html)}
@@ -241,7 +183,7 @@ export default function CtaSection() {
         />
       </Field>
 
-      <FooterGap slot="senderEmail" />
+      <BlockGap slot="senderEmail" />
 
       <div>
         <div className="flex items-center justify-between mb-1.5">

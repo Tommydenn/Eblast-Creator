@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useDraft } from "@/context/DraftContext";
 import type { EditorSection } from "@/context/DraftContext";
-import type { ExtractedFlyer } from "@/lib/extracted-flyer";
+import { allCustomLines, type ExtractedFlyer } from "@/lib/extracted-flyer";
 import { buildEblastHtml } from "@/lib/render-email";
 import { IMAGE_LOADING_PLACEHOLDER } from "@/lib/image-bank";
 import { ColorPickerPopover } from "@/components/drafter/ColorPickerPopover";
@@ -242,14 +242,19 @@ function defaultForBgField(key: BgFieldKey, community: any): string {
   }
 }
 
-// Every hover-delete target — human label for the confirm popover. Header and
-// Footer themselves are intentionally absent (never deletable — branding and
-// required sender contact info), but the Footer's own website button is.
+// Every hover-delete target — human label for the confirm popover.
+//
+// The header and the footer are in it now. They used to be left out as
+// always-required branding and sender contact, which decided for everyone
+// that no eblast would ever want to go without them.
 type DeleteFieldKey =
   | "heroSectionHidden" | "storySectionHidden" | "secondaryImageSectionHidden" | "gallerySectionHidden"
-  | "finalCtaSectionHidden" | "ctaButtonHidden" | "finalCtaButtonHidden" | "footerButtonHidden";
+  | "finalCtaSectionHidden" | "ctaButtonHidden" | "finalCtaButtonHidden" | "footerButtonHidden"
+  | "headerSectionHidden" | "footerSectionHidden";
 
 const DELETE_FIELD_LABELS: Record<DeleteFieldKey, string> = {
+  headerSectionHidden: "the Header section",
+  footerSectionHidden: "the Footer section",
   heroSectionHidden: "the Hero section",
   storySectionHidden: "the Story section",
   secondaryImageSectionHidden: "the secondary image",
@@ -272,6 +277,17 @@ type LinkFieldKey = "heroImageLink" | "secondaryImageLink" | "galleryImageLinks"
  */
 function customLineId(field: string): string | null {
   return field.startsWith("footerCustomLine:") ? field.slice("footerCustomLine:".length) : null;
+}
+
+/**
+ * The block a delete target names, or null for anything else.
+ *
+ * Most of the email's lines have no flag of their own — they are hidden by
+ * name, in hiddenBlocks. The "block:" prefix is what tells the two apart in
+ * the one attribute the preview reads.
+ */
+function hiddenBlockName(field: string): string | null {
+  return field.startsWith("block:") ? field.slice("block:".length) : null;
 }
 
 /** Current link for the photo the popover is editing, "" when unset. */
@@ -407,7 +423,7 @@ export function confirmBoxPosition(
 }
 
 export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown } = {}) {
-  const { setActiveSection, fields, setField, images, community, imagesLoading } = useDraft();
+  const { setActiveSection, fields, setField, setFields, images, community, imagesLoading } = useDraft();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -430,6 +446,7 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
       heroImageUrl: stand(images.hero?.url),
       secondaryImageUrl: stand(images.secondary?.url),
       galleryImageUrls: images.gallery.map((g) => stand(g.url) ?? ""),
+      forPreview: true,
     });
   }, [fields, images, community, imagesLoading]);
 
@@ -733,10 +750,18 @@ export default function PreviewPanel({ layoutSignal }: { layoutSignal?: unknown 
               label={(DELETE_FIELD_LABELS as Record<string, string>)[deletePopover.field] ?? "this added line"}
               onConfirm={() => {
                 const id = customLineId(deletePopover.field);
+                const block = hiddenBlockName(deletePopover.field);
                 if (id) {
+                  const all = fields ? allCustomLines(fields) : [];
+                  const next = all.filter((l) => l.id !== id);
+                  setFields({
+                    customLines: next.length ? next : undefined,
+                    footerCustomLines: undefined,
+                  });
+                } else if (block) {
                   setField(
-                    "footerCustomLines",
-                    (fields?.footerCustomLines ?? []).filter((l) => l.id !== id),
+                    "hiddenBlocks",
+                    [...(fields?.hiddenBlocks ?? []), block],
                   );
                 } else {
                   setField(deletePopover.field as keyof ExtractedFlyer, true as never);

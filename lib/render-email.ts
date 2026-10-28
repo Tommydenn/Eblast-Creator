@@ -3,7 +3,7 @@
 // One template, every community gets it with their own brand variables.
 
 import type { Community } from "@/data/communities";
-import { type FooterSlot } from "@/lib/extracted-flyer";
+import { allCustomLines, type CustomSlot } from "@/lib/extracted-flyer";
 import logoDimensions from "@/lib/logo-dimensions.json";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import {
@@ -123,18 +123,34 @@ function hasText(value?: string | string[] | null): boolean {
 }
 
 /**
+ * Whether a block is hidden.
+ *
+ * Hiding is a display choice and keeps the words; clearing the box removes
+ * the words. Both end up showing nothing, and they are kept apart so that
+ * unhiding brings back what was written rather than an empty line.
+ */
+function isHidden(flyer: ExtractedFlyer, block: string): boolean {
+  return (flyer.hiddenBlocks ?? []).includes(block);
+}
+
+/**
  * A line that can be removed simply by clearing its text.
  *
  * A field nobody has touched is undefined, and shows whatever the template
  * would otherwise supply. A field someone emptied is an empty string, and
  * renders nothing at all, so the line and the space it held both go rather
  * than leaving a blank paragraph propping a gap open.
+ *
+ * Hiding the block does the same to the output and nothing to the words, so
+ * unhiding brings the line back exactly as it was written.
  */
 function deletableLine(
   value: string | null | undefined,
   fallbackHtml: string | null,
   wrap: (innerHtml: string) => string,
+  hidden = false,
 ): string {
+  if (hidden) return "";
   if (value === undefined || value === null) return fallbackHtml ? wrap(fallbackHtml) : "";
   if (!hasText(value)) return "";
   return wrap(renderInlineField(value));
@@ -349,9 +365,9 @@ function dateTimeRow(opts: {
     "$1",
   );
 
-  const dateLine = `<p class="glm-nowrap" style="${dateStyle}"><span data-field="${dateField}" style="color:#FFFFFF; text-decoration:none;">${dateHtml}</span></p>`;
+  const dateLine = `<p class="glm-nowrap" style="${dateStyle}"><span data-field="${dateField}" data-deletefield="block:${dateField}" style="color:#FFFFFF; text-decoration:none;">${dateHtml}</span></p>`;
   const timeLine = timeHtml
-    ? `<p class="glm-nowrap" style="${timeStyle}"><span data-field="${timeField}" style="color:#FFFFFF; text-decoration:none;">${timeWithoutSeparator}</span></p>`
+    ? `<p class="glm-nowrap" style="${timeStyle}"><span data-field="${timeField}" data-deletefield="block:${timeField}" style="color:#FFFFFF; text-decoration:none;">${timeWithoutSeparator}</span></p>`
     : "";
   return `${dateLine}${timeLine}`;
 }
@@ -363,6 +379,15 @@ export interface RenderOptions {
   secondaryImageUrl?: string;
   /** Additional images for the gallery section near the bottom. Up to 4 used. */
   galleryImageUrls?: string[];
+  /**
+   * Draws a note in place of an email with every section hidden.
+   *
+   * The editor only. Hiding the last section leaves a blank white page,
+   * which reads as something broken rather than as a thing you just did, so
+   * the preview says so and points at the way back. Nothing is added to a
+   * real send: an email with everything hidden is genuinely empty.
+   */
+  forPreview?: boolean;
 }
 
 export function buildEblastHtml(
@@ -376,6 +401,15 @@ export function buildEblastHtml(
   const galleryImgs = (options.galleryImageUrls ?? []).slice(0, 4);
 
   /**
+   * Whether a block shows: it has words, and nobody has hidden it.
+   *
+   * Every line in the email asks this, so hiding one is the same decision
+   * everywhere rather than a flag per field.
+   */
+  const shows = (block: string, value: string | string[] | null | undefined) =>
+    hasText(value) && !isHidden(flyer, block);
+
+  /**
    * The alignment someone chose for a field, as a style fragment.
    *
    * Empty unless they chose one, so every section keeps the alignment the
@@ -386,18 +420,21 @@ export function buildEblastHtml(
     return value ? `text-align: ${value}; ` : "";
   };
   /**
-   * The lines someone added in a given gap of the footer.
+   * The lines someone added in a given gap.
    *
    * Each is a field in its own right, so it formats and aligns like any
-   * other. Deliberately quieter than the sign-off above it — smaller and a
-   * touch lighter — so adding one does not compete with the community name.
+   * other. The colour comes from the section, because the hero reads white
+   * on the brand colour while everything below it reads dark on white.
+   *
+   * Deliberately quiet — smaller and a touch lighter than the lines
+   * the template puts there — so adding one does not compete with them.
    */
-  const footerLinesAfter = (slot: FooterSlot) =>
-    (flyer.footerCustomLines ?? [])
+  const linesAfter = (slot: CustomSlot, color = "#4A4A4A") =>
+    allCustomLines(flyer)
       .filter((line) => line.after === slot)
       .map((line) => {
         const field = `footerCustomLine:${line.id}`;
-        return `<p data-field="${field}" data-deletefield="${field}" style="${alignStyleFor(field)}font-family: ${fontBody}; font-size: 15px; color: #4A4A4A; margin: 0 0 6px 0;">${hasText(line.text) ? renderInlineField(line.text) : "&nbsp;"}</p>`;
+        return `<p data-field="${field}" data-deletefield="${field}" style="${alignStyleFor(field)}font-family: ${fontBody}; font-size: 15px; color: ${color}; margin: 0 0 6px 0;">${hasText(line.text) ? renderInlineField(line.text) : "&nbsp;"}</p>`;
       })
       .join("");
 
@@ -407,7 +444,9 @@ export function buildEblastHtml(
     return value ? `<div style="text-align: ${value};">${html}</div>` : html;
   };
 
-  const hasEventDateLine = !!(flyer.eventDate || flyer.eventTime);
+  const showEventDate = !!flyer.eventDate && !isHidden(flyer, "eventDate");
+  const showEventTime = !!flyer.eventTime && !isHidden(flyer, "eventTime");
+  const hasEventDateLine = showEventDate || showEventTime;
 
   const addressLine = flyer.heroAddress ?? communityAddressLine(community);
 
@@ -417,7 +456,9 @@ export function buildEblastHtml(
   const ctaRsvpLabel = (flyer.ctaRsvpLabel ?? flyer.rsvpLabel)?.trim() ?? "";
   const ctaDate = flyer.ctaEventDate ?? flyer.eventDate;
   const ctaTime = flyer.ctaEventTime ?? flyer.eventTime;
-  const hasCtaDateLine = !!(ctaDate || ctaTime);
+  const showCtaDate = !!ctaDate && !isHidden(flyer, "ctaEventDate");
+  const showCtaTime = !!ctaTime && !isHidden(flyer, "ctaEventTime");
+  const hasCtaDateLine = showCtaDate || showCtaTime;
   /** 600px shell minus a section's 36px side padding. */
   const CONTENT_WIDTH = 600 - 36 * 2;
 
@@ -566,8 +607,8 @@ export function buildEblastHtml(
   // data-section and data-field attributes are used by the preview's interactive
   // script for hover labels and inline text editing; email clients ignore them.
 
-  const header = `
-  <tr data-section="Header">
+  const header = flyer.headerSectionHidden ? "" : `
+  <tr data-section="Header" data-deletefield="headerSectionHidden">
     <td class="glm-bg-header" bgcolor="${headerBg}" style="padding: 26px 36px; background:${headerBg}; border-top: 4px solid ${headerStripe}; text-align:center;" align="center" data-bgfield="headerBgColor">
       ${logoContent}
     </td>
@@ -585,9 +626,13 @@ export function buildEblastHtml(
         </tr>` : ""}
         <tr>
           <td class="glm-bg-hero" bgcolor="${heroBg}" style="background:${heroBg}; padding: ${heroImg ? "36px" : "60px"} 36px 40px 36px;" align="center" data-bgfield="heroBgColor">
-            ${hasText(rsvpLabel) ? `<p data-field="rsvpLabel" style="${alignStyleFor("rsvpLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.rsvpLabel}px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
-            ${hasText(flyer.headline) ? `<p data-field="headline" class="glm-nowrap" style="${alignStyleFor("headline")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.headline}px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
-            ${hasText(flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" class="glm-nowrap" style="${alignStyleFor("scriptSubheadline")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}
+            ${linesAfter("hero:start", "#F0E2C0")}
+            ${shows("rsvpLabel", rsvpLabel) ? `<p data-field="rsvpLabel" data-deletefield="block:rsvpLabel" style="${alignStyleFor("rsvpLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.rsvpLabel}px; font-weight: 700; letter-spacing: 4px; color: ${HERO_ADDRESS_COLOR}; text-transform: uppercase; margin: 0 0 14px 0;">${renderInlineField(rsvpLabel)}</p>` : ""}
+            ${linesAfter("rsvpLabel", "#F0E2C0")}
+            ${shows("headline", flyer.headline) ? `<p data-field="headline" data-deletefield="block:headline" class="glm-nowrap" style="${alignStyleFor("headline")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.headline}px; line-height:1.1; color: #FFFFFF; letter-spacing: 0.5px; margin: 0 0 6px 0;">${renderInlineField(flyer.headline)}</p>` : ""}
+            ${linesAfter("headline", "#F0E2C0")}
+            ${shows("scriptSubheadline", flyer.scriptSubheadline) ? `<p data-field="scriptSubheadline" data-deletefield="block:scriptSubheadline" class="glm-nowrap" style="${alignStyleFor("scriptSubheadline")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${SCRIPT_SUBHEADLINE_SIZE}px; color: #F0E2C0; line-height: 1.1; margin: 0 auto 18px auto;">${renderInlineField(flyer.scriptSubheadline!)}</p>` : ""}
+            ${linesAfter("scriptSubheadline", "#F0E2C0")}
             ${hasEventDateLine ? `
             <!-- This table had no width at all, so it auto-sized to its text.
                  A date line longer than the column made it wider than the
@@ -601,21 +646,23 @@ export function buildEblastHtml(
                      header rather than sitting 26px further in. -->
                 <td style="border-top: 1px solid #ffffff; border-bottom: 1px solid #ffffff; padding: 22px 0; max-width: ${CONTENT_WIDTH}px;" align="center">
                   ${dateTimeRow({
-                    dateHtml: renderInlineField(flyer.eventDate ?? ""),
+                    dateHtml: showEventDate ? renderInlineField(flyer.eventDate ?? "") : "",
                     dateField: "eventDate",
-                    timeHtml: flyer.eventTime ? renderInlineField(flyer.eventTime) : "",
+                    timeHtml: showEventTime ? renderInlineField(flyer.eventTime!) : "",
                     timeField: "eventTime",
                     fontFamily: fontHeadline,
                     fontSize: FIELD_FONT_SIZES.eventDate,
                     align: flyer.textAlign?.eventDate ?? flyer.textAlign?.eventTime,
                     extraStyle: "letter-spacing: 1px;",
                     // No address beneath it means no space needed under the date.
-                    marginBottom: hasText(addressLine) ? 8 : 0,
+                    marginBottom: shows("heroAddress", addressLine) ? 8 : 0,
                   })}
-                  ${hasText(addressLine) ? `<p data-field="heroAddress" class="glm-nowrap" style="${alignStyleFor("heroAddress")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.heroAddress}px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
+                  ${linesAfter("eventTime", "#F0E2C0")}
+                  ${shows("heroAddress", addressLine) ? `<p data-field="heroAddress" data-deletefield="block:heroAddress" class="glm-nowrap" style="${alignStyleFor("heroAddress")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.heroAddress}px; letter-spacing: 1px; color: ${HERO_ADDRESS_COLOR}; margin: 0;"><span style="color: ${HERO_ADDRESS_COLOR}; text-decoration: none;">${flyer.heroAddress ? renderInlineField(flyer.heroAddress) : escapeHtml(addressLine)}</span></p>` : ""}
                 </td>
               </tr>
             </table>` : ""}
+            ${linesAfter("heroAddress", "#F0E2C0")}
             ${flyer.ctaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${ctaBtnWidth}">
               <tr>
@@ -635,15 +682,20 @@ export function buildEblastHtml(
   // padding and leave a gap exactly where the text used to be. When the
   // eyebrow and title are both gone, the body row takes over that top padding
   // so the section still sits properly below the one before it.
-  const storyEyebrowHtml = hasText(flyer.storyEyebrow) ? renderInlineField(flyer.storyEyebrow) : "";
-  const storyTitleHtml = hasText(flyer.storyScriptTitle) ? renderInlineField(flyer.storyScriptTitle!) : "";
-  const storyHeadShown = !!(storyEyebrowHtml || storyTitleHtml);
+  const storyEyebrowHtml = shows("storyEyebrow", flyer.storyEyebrow) ? renderInlineField(flyer.storyEyebrow) : "";
+  const storyTitleHtml = shows("storyScriptTitle", flyer.storyScriptTitle) ? renderInlineField(flyer.storyScriptTitle!) : "";
+  const storyStartLines = linesAfter("story:start");
+  const storyEyebrowLines = linesAfter("storyEyebrow");
+  const storyTitleLines = linesAfter("storyScriptTitle");
+  const storyHeadShown = !!(
+    storyEyebrowHtml || storyTitleHtml || storyStartLines || storyEyebrowLines || storyTitleLines
+  );
   // The body is a list of lines, rendered literally: one line break between
   // each, so a blank entry is a blank line and Enter in the editor moves down
   // exactly one line. Joining with two breaks instead meant every Enter opened
   // a blank line the writer never asked for. Only an entirely empty body drops
   // the row.
-  const storyBodyHtml = hasText(flyer.bodyParagraphs)
+  const storyBodyHtml = shows("bodyParagraphs", flyer.bodyParagraphs)
     ? flyer.bodyParagraphs.map((p) => renderBodyParagraph(p)).join("<br>")
     : "";
 
@@ -654,7 +706,8 @@ export function buildEblastHtml(
   // white area. Added to the 28px the story text and the secondary photo
   // already leave below them, that put 72px between the copy and the label —
   // roughly twice the gap anywhere else in the email, and it read as a hole.
-  const storyBodyShown = !flyer.storySectionHidden && !!storyBodyHtml;
+  const storyBodyLines = linesAfter("bodyParagraphs");
+  const storyBodyShown = !flyer.storySectionHidden && !!(storyBodyHtml || storyBodyLines);
   const secondaryShown = !!secondaryImg && !flyer.secondaryImageSectionHidden;
   const galleryFollowsContent = storyBodyShown || secondaryShown;
 
@@ -663,14 +716,18 @@ export function buildEblastHtml(
   ${storyHeadShown ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td class="glm-bg-story" bgcolor="${storyBg}" style="background:${storyBg}; padding: 44px 36px 12px 36px;" data-bgfield="storyBgColor">
-      ${storyEyebrowHtml ? `<p data-field="storyEyebrow" class="glm-nowrap" style="${alignStyleFor("storyEyebrow")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.storyEyebrow}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
-      ${storyTitleHtml ? `<p data-field="storyScriptTitle" class="glm-nowrap" style="${alignStyleFor("storyScriptTitle")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${FIELD_FONT_SIZES.storyScriptTitle}px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
+      ${storyStartLines}
+      ${storyEyebrowHtml ? `<p data-field="storyEyebrow" data-deletefield="block:storyEyebrow" class="glm-nowrap" style="${alignStyleFor("storyEyebrow")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.storyEyebrow}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0 0 10px 0;">${storyEyebrowHtml}</p>` : ""}
+      ${storyEyebrowLines}
+      ${storyTitleHtml ? `<p data-field="storyScriptTitle" data-deletefield="block:storyScriptTitle" class="glm-nowrap" style="${alignStyleFor("storyScriptTitle")}font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-style: italic; font-size: ${FIELD_FONT_SIZES.storyScriptTitle}px; color: ${brand.accent}; line-height: 1.1; margin: 0 0 10px 0;">${storyTitleHtml}</p>` : ""}
+      ${storyTitleLines}
     </td>
   </tr>` : ""}
-  ${storyBodyHtml ? `
+  ${(storyBodyHtml || storyBodyLines) ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td class="glm-bg-story" bgcolor="${storyBg}" style="background:${storyBg}; padding: ${storyHeadShown ? "0" : "44px"} 36px 28px 36px;" data-bgfield="storyBgColor">
-      <p data-field="bodyParagraphs" style="${alignStyleFor("bodyParagraphs")}font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${storyBodyHtml}</p>
+      <p data-field="bodyParagraphs" data-deletefield="block:bodyParagraphs" style="${alignStyleFor("bodyParagraphs")}font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${storyBodyHtml}</p>
+      ${linesAfter("bodyParagraphs")}
     </td>
   </tr>` : ""}`}
   ${(secondaryImg && !flyer.secondaryImageSectionHidden) ? `
@@ -707,7 +764,7 @@ export function buildEblastHtml(
     const galleryLabelHtml =
       flyer.galleryLabel === undefined || flyer.galleryLabel === null
         ? escapeHtml(defaultGalleryLabel(community))
-        : hasText(flyer.galleryLabel)
+        : shows("galleryLabel", flyer.galleryLabel)
           ? renderInlineField(flyer.galleryLabel)
           : "";
 
@@ -715,7 +772,8 @@ export function buildEblastHtml(
   ${galleryLabelHtml ? `
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
     <td class="glm-bg-gallerylabel" bgcolor="${galleryLabelBg}" style="background:${galleryLabelBg}; padding: ${galleryFollowsContent ? "8px" : "44px"} 36px 12px 36px;" align="center" data-bgfield="galleryLabelBgColor">
-      <p data-field="galleryLabel" style="${alignStyleFor("galleryLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.galleryLabel}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
+      <p data-field="galleryLabel" data-deletefield="block:galleryLabel" style="${alignStyleFor("galleryLabel")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.galleryLabel}px; letter-spacing: 3px; text-transform: uppercase; color: ${brand.accent}; font-weight: 700; margin: 0;">${galleryLabelHtml}</p>
+      ${linesAfter("galleryLabel")}
     </td>
   </tr>` : ""}
   <tr data-section="Photo Gallery" data-deletefield="gallerySectionHidden">
@@ -747,17 +805,20 @@ export function buildEblastHtml(
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="glm-bg-finalcta" bgcolor="${finalCtaBg}" style="background:${finalCtaBg};" data-bgfield="finalCtaBgColor">
         <tr>
           <td style="padding: 40px 36px;" align="center">
-            ${hasText(ctaRsvpLabel) ? `<p data-field="ctaRsvpLabel" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.ctaRsvpLabel}px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
+            ${linesAfter("cta:start", "#FFFFFF")}
+            ${shows("ctaRsvpLabel", ctaRsvpLabel) ? `<p data-field="ctaRsvpLabel" data-deletefield="block:ctaRsvpLabel" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.ctaRsvpLabel}px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #FFFFFF; margin: 0 0 14px 0;">${renderInlineField(ctaRsvpLabel)}</p>` : ""}
+            ${linesAfter("ctaRsvpLabel", "#FFFFFF")}
             ${hasCtaDateLine ? dateTimeRow({
-              dateHtml: renderInlineField(ctaDate ?? ""),
+              dateHtml: showCtaDate ? renderInlineField(ctaDate ?? "") : "",
               dateField: "ctaEventDate",
-              timeHtml: ctaTime ? renderInlineField(ctaTime) : "",
+              timeHtml: showCtaTime ? renderInlineField(ctaTime!) : "",
               timeField: "ctaEventTime",
               fontFamily: fontHeadline,
               fontSize: CTA_DATE_SIZE,
               extraStyle: "line-height: 1.2;",
               marginBottom: 22,
             }) : ""}
+            ${linesAfter("ctaEventTime", "#FFFFFF")}
             ${flyer.finalCtaButtonHidden ? "" : `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="${finalCtaLabel.width}">
               <tr>
@@ -766,6 +827,7 @@ export function buildEblastHtml(
                 </td>
               </tr>
             </table>`}
+            ${linesAfter("finalCtaButtonLabel", "#FFFFFF")}
           </td>
         </tr>
       </table>
@@ -788,9 +850,9 @@ export function buildEblastHtml(
   const secondarySenderEmails = (community.senders ?? [])
     .flatMap((s) => (s !== primarySender && s.email?.trim() ? [s.email.trim()] : []));
 
-  const footer = `
-  <tr data-section="Footer">
-    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center" data-bgfield="footerBgColor">${footerLinesAfter("top")}
+  const footer = flyer.footerSectionHidden ? "" : `
+  <tr data-section="Footer" data-deletefield="footerSectionHidden">
+    <td class="glm-bg-footer" bgcolor="${footerBg}" style="padding: 40px 36px 32px 36px; background: ${footerBg};" align="center" data-bgfield="footerBgColor">${linesAfter("top")}
       ${(websiteHref && !flyer.footerButtonHidden) ? `
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="220" style="margin-bottom:28px;">
         <tr>
@@ -798,17 +860,28 @@ export function buildEblastHtml(
             <a href="${escapeHtml(websiteHref)}" data-field="footerButtonLabel" style="display:block; padding:13px 28px; color:${buttonTextColor("#FFFFFF", footerButtonBg)}; text-decoration:none; font-family:${fontBody}; font-size:${FIELD_FONT_SIZES.footerButtonLabel}px; letter-spacing:2.5px; text-transform:uppercase; font-weight:700;">${flyer.footerButtonLabel ? renderInlineField(flyer.footerButtonLabel) : escapeHtml(DEFAULT_WEBSITE_BUTTON_LABEL)}</a>
           </td>
         </tr>
-      </table>` : ""}${footerLinesAfter("button")}
-      ${deletableLine(flyer.thankYouText, DEFAULT_THANK_YOU_TEXT, (inner) => `<p data-field="thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.thankYouText}px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`)}${footerLinesAfter("thankYou")}
-      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderName}px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`) : ""}${footerLinesAfter("senderName")}
-      ${deletableLine(flyer.footerName, escapeHtml(defaultFooterName(community)), (inner) => `<p data-field="footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerName}px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`)}${footerLinesAfter("footerName")}
-      ${primarySenderEmail ? alignWrap("footerSenderEmail", deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderEmail}px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`)) : ""}
+      </table>` : ""}${linesAfter("button")}
+      ${deletableLine(flyer.thankYouText, DEFAULT_THANK_YOU_TEXT, (inner) => `<p data-field="thankYouText" data-deletefield="block:thankYouText" style="${alignStyleFor("thankYouText")}font-family: ${fontHeadline}; font-size: ${FIELD_FONT_SIZES.thankYouText}px; color: ${brand.primary}; margin: 0 0 10px 0;">${inner}</p>`, isHidden(flyer, "thankYouText"))}${linesAfter("thankYou")}
+      ${primarySender?.name ? deletableLine(flyer.footerSenderName, escapeHtml(primarySender.name), (inner) => `<p data-field="footerSenderName" data-deletefield="block:footerSenderName" style="${alignStyleFor("footerSenderName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderName}px; color: #3A3A3A; margin: 0 0 2px 0;">${inner}</p>`, isHidden(flyer, "footerSenderName")) : ""}${linesAfter("senderName")}
+      ${deletableLine(flyer.footerName, escapeHtml(defaultFooterName(community)), (inner) => `<p data-field="footerName" data-deletefield="block:footerName" style="${alignStyleFor("footerName")}font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerName}px; color: #3A3A3A; margin: 0 0 4px 0;">${inner}</p>`, isHidden(flyer, "footerName"))}${linesAfter("footerName")}
+      ${primarySenderEmail ? alignWrap("footerSenderEmail", deletableLine(flyer.footerSenderEmail, escapeHtml(primarySenderEmail), (inner) => `<a href="mailto:${escapeHtml(primarySenderEmail)}" data-field="footerSenderEmail" data-deletefield="block:footerSenderEmail" style="font-family: ${fontBody}; font-size: ${FIELD_FONT_SIZES.footerSenderEmail}px; color: ${senderEmailColor}; text-decoration: none;">${inner}</a>`, isHidden(flyer, "footerSenderEmail"))) : ""}
       ${(flyer.additionalFooterEmails ?? secondarySenderEmails)
         .filter((e) => stripHtml(e ?? "").trim())
         .map((e) => `<div style="margin-top: 2px;"><a href="mailto:${escapeHtml(stripHtml(e).trim())}" style="font-family: ${fontBody}; font-size: 18px; color: ${senderEmailColor}; text-decoration: none;">${renderInlineField(e)}</a></div>`)
-        .join("")}${footerLinesAfter("senderEmail")}
+        .join("")}${linesAfter("senderEmail")}
     </td>
   </tr>`;
+
+  // Everything hidden is a state worth naming rather than a blank page.
+  const sections = [header, hero, story, gallery, finalCta, footer];
+  const body = sections.some((section) => section.trim())
+    ? sections.join("\n      ")
+    : options.forPreview
+      ? `
+      <tr><td style="padding:72px 36px; text-align:center; font-family:${fontBody}; font-size:15px; color:#8a8a8a;">
+        Every section is hidden. Turn one back on in the sidebar to see it here.
+      </td></tr>`
+      : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -911,12 +984,7 @@ export function buildEblastHtml(
          images stay at their declared widths, leaving uneven background beside
          them. The email must never be wider than its images. -->
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="glm-bg-white" bgcolor="#ffffff" style="width:600px; table-layout:fixed; margin:0 auto; background:#ffffff;">
-      ${header}
-      ${hero}
-      ${story}
-      ${gallery}
-      ${finalCta}
-      ${footer}
+      ${body}
     </table>
   </td></tr>
 </table>

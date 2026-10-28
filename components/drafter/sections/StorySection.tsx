@@ -4,27 +4,10 @@ import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, RichBodyEditor } from "@/components/drafter/RichEditor";
 import { HiddenBanner } from "@/components/drafter/HiddenBanner";
+import { Field } from "@/components/drafter/Field";
+import { BlockGap } from "@/components/drafter/BlockGap";
 import { defaultGalleryLabel } from "@/lib/eblast-defaults";
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">
-        {label}
-      </label>
-      {children}
-      {hint && <p className="mt-1 text-xs text-[#9aaba4]">{hint}</p>}
-    </div>
-  );
-}
 
 const baseInput =
   "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
@@ -45,7 +28,9 @@ export default function StorySection() {
         <HiddenBanner label="The secondary image" onRestore={() => setField("secondaryImageSectionHidden", undefined)} />
       )}
 
-      <Field label="Section Eyebrow" hint="Small label above the story section">
+      <BlockGap slot="story:start" />
+
+      <Field label="Section Eyebrow" block="storyEyebrow" hint="Small label above the story section">
         <RichInput
           value={fields.storyEyebrow}
           onValueChange={(html) => setField("storyEyebrow", html)}
@@ -58,7 +43,9 @@ export default function StorySection() {
         />
       </Field>
 
-      <Field label="Section Title" hint="Optional script-style title">
+      <BlockGap slot="storyEyebrow" />
+
+      <Field label="Section Title" block="storyScriptTitle" hint="Optional script-style title">
         <RichInput
           value={fields.storyScriptTitle ?? ""}
           onValueChange={(html) => setField("storyScriptTitle", html || undefined)}
@@ -71,8 +58,11 @@ export default function StorySection() {
         />
       </Field>
 
+      <BlockGap slot="storyScriptTitle" />
+
       <Field
         label="Body Copy"
+        block="bodyParagraphs"
         hint="Press Enter for a new line, twice to leave a blank line. Select text, then use the formatting toolbar above the preview to apply bold, color, or font."
       >
         <RichBodyEditor
@@ -85,8 +75,11 @@ export default function StorySection() {
         />
       </Field>
 
+      <BlockGap slot="bodyParagraphs" />
+
       <Field
         label="Gallery Label"
+        block="galleryLabel"
         hint="Small label above the photo gallery. Select text to format it."
       >
         <RichInput
@@ -100,6 +93,8 @@ export default function StorySection() {
           fieldName="galleryLabel"
         />
       </Field>
+
+      <BlockGap slot="galleryLabel" />
     </div>
   );
 }

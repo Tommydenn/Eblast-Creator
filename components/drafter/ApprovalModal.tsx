@@ -2,53 +2,42 @@
 
 import React, { useState } from "react";
 import { useDraft } from "@/context/DraftContext";
-import { input as inputCls, label as labelCls, hint as hintCls } from "@/components/drafter/ui";
 
-/**
- * Sending the eblast to somebody to look at.
- *
- * The command bar used to carry two buttons for this — "Send for Approval"
- * and "Send Test" — side by side, in a row that already held a third thing
- * that sends. But a test is not a different destination: it is the same
- * request with `isTest` set, the same email, the same link, recorded nowhere.
- * So it is a choice made inside this window rather than a second button
- * outside it, which is one less thing to read in the bar and one less chance
- * of pressing the wrong one.
- */
-export default function ApprovalModal({ onClose }: { onClose: () => void }) {
+interface Props {
+  onClose: () => void;
+  /**
+   * "test" sends the identical email and link, but the request is flagged so
+   * nothing it does is recorded — see savedDraftApprovals.isTest.
+   */
+  mode?: "real" | "test";
+}
+
+export default function ApprovalModal({ onClose, mode = "real" }: Props) {
+  const isTest = mode === "test";
   const { fields, community, save, isSaving, sendForApproval } = useDraft();
-
-  const [isTest, setIsTest] = useState(false);
-
   // Default the reviewer to this community's primary salesperson — they're who
   // the approval is almost always for, and they're already on the community
-  // record. A sender may be on the record by name alone; the reviewer has to
-  // be an address, so fall back to the first sender who has one, then to the
-  // marketing address.
+  // record. Falls back to the marketing address when a community has no
+  // senders set up yet.
+  // A test defaults to you rather than the salesperson — the address is still
+  // editable so a test can be sent to a colleague to check rendering.
   const primarySender = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
+  // A sender may be on the record by name alone. The reviewer has to be an
+  // address, so fall back to the first sender who has one.
   const firstSenderEmail =
     primarySender?.email?.trim() ||
     community?.senders?.find((s) => s.email?.trim())?.email?.trim() ||
     "";
-  const MINE = "jwalls@greatlakesmc.com";
-
-  const [recipientEmail, setRecipientEmail] = useState(firstSenderEmail || MINE);
-  // Once the address has been typed in it is left alone; until then it follows
-  // the choice above, because a test almost always goes back to whoever sent
-  // it and an approval almost always goes to the salesperson.
-  const [typedRecipient, setTypedRecipient] = useState(false);
-  const [notifyEmail, setNotifyEmail] = useState(MINE);
+  const [recipientEmail, setRecipientEmail] = useState(
+    isTest ? "jwalls@greatlakesmc.com" : firstSenderEmail || "jwalls@greatlakesmc.com",
+  );
+  const [notifyEmail, setNotifyEmail] = useState("jwalls@greatlakesmc.com");
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!fields || !community) return null;
-
-  function chooseMode(test: boolean) {
-    setIsTest(test);
-    if (!typedRecipient) setRecipientEmail(test ? MINE : firstSenderEmail || MINE);
-  }
 
   async function handleSend() {
     if (!recipientEmail.trim() || sending) return;
@@ -71,110 +60,109 @@ export default function ApprovalModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="eb-appear w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="border-b border-[#f0ede7] px-6 pb-4 pt-6">
-          <h2 className="text-base font-semibold text-[#1F4538]">Send for review</h2>
-
-          {/* The choice comes first, because it changes what everything below
-              it means. */}
-          <div className="mt-3 flex rounded-lg bg-[#f5f3ef] p-0.5">
-            {([false, true] as const).map((test) => (
-              <button
-                key={String(test)}
-                onClick={() => chooseMode(test)}
-                className={[
-                  "flex-1 rounded-md py-1.5 text-xs font-medium transition-colors",
-                  isTest === test ? "bg-white text-[#1F4538] shadow-sm" : "text-[#7a8c85] hover:text-[#5a6b63]",
-                ].join(" ")}
-              >
-                {test ? "Test run" : "For approval"}
-              </button>
-            ))}
-          </div>
-
-          <p className={hintCls + " mt-2.5"}>
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 pt-6 pb-4 border-b border-[#f0ede7]">
+          <h2 className="text-base font-semibold text-[#1F4538]">
+            {isTest ? "Send Test Approval" : "Send for Approval"}
+          </h2>
+          <p className="mt-1 text-xs text-[#7a8c85]">
             {isTest
-              ? "The same email and the same link, recorded nowhere — the draft won't be marked approved, won't lock, and won't count as awaiting approval. Approving it does create a [TEST] email in HubSpot."
-              : "The reviewer gets a preview and a link to approve or request changes."}
+              ? "The same email and the same link, so you can walk the whole flow. Approving it creates a [TEST] email in HubSpot — but nothing here is recorded: the draft won't be marked approved, won't lock, and won't count as awaiting approval."
+              : "An email preview will be sent to the reviewer with a link to approve or request changes."}
           </p>
         </div>
 
         {sent ? (
           <div className="px-6 py-8 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12" />
+                <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
-            <p className="text-sm font-semibold text-[#1F4538]">Sent to {recipientEmail}</p>
-            <button onClick={onClose} className="mt-5 text-sm font-medium text-[#1F4538] hover:underline">
+            <p className="text-sm font-semibold text-[#1F4538]">
+              {isTest ? "Test email sent!" : "Approval request sent!"}
+            </p>
+            <p className="mt-1 text-xs text-[#7a8c85]">We notified {recipientEmail}.</p>
+            <button
+              onClick={onClose}
+              className="mt-5 text-sm font-medium text-[#1F4538] hover:underline"
+            >
               Close
             </button>
           </div>
         ) : (
-          <div className="space-y-4 px-6 py-5">
+          <div className="px-6 py-5 space-y-4">
             <div>
-              <label className={labelCls + " mb-1.5"}>Reviewer</label>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">
+                Reviewer Email
+              </label>
               <input
                 type="email"
                 value={recipientEmail}
-                onChange={(e) => { setRecipientEmail(e.target.value); setTypedRecipient(true); }}
-                className={inputCls}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538]"
                 placeholder="reviewer@example.com"
               />
             </div>
 
             <div>
-              <label className={labelCls + " mb-1.5"}>Notify marketing</label>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">
+                Notify (marketing team)
+              </label>
               <input
                 type="email"
                 value={notifyEmail}
                 onChange={(e) => setNotifyEmail(e.target.value)}
-                className={inputCls}
+                className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538]"
                 placeholder="marketing@greatlakesmc.com"
               />
-              <p className={hintCls + " mt-1"}>
-                Gets the notes when the reviewer asks for a change the AI can&rsquo;t make.
+              <p className="mt-1 text-[11px] text-[#9aaba4]">
+                If the reviewer requests edits our AI can&rsquo;t apply automatically, this address gets the notes so a human can make the change.
               </p>
             </div>
 
             <div>
-              <label className={labelCls + " mb-1.5"}>
-                Note <span className="font-normal text-[#9aaba4]">(optional)</span>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">
+                Note <span className="normal-case tracking-normal font-normal text-[#9aaba4]">(optional)</span>
               </label>
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={3}
-                placeholder="Anything they should know before they look…"
-                className={inputCls + " resize-y"}
+                placeholder="Anything you want them to know before they review…"
+                className="w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] resize-y"
               />
-              <p className={hintCls + " mt-1"}>Shown above the eblast.</p>
+              <p className="mt-1 text-[11px] text-[#9aaba4]">
+                Shown to the reviewer above the eblast preview.
+              </p>
             </div>
 
-            <div className="space-y-0.5 rounded-lg bg-[#f5f3ef] px-3 py-2.5 text-xs text-[#7a8c85]">
+            <div className="bg-[#f5f3ef] rounded-lg px-3 py-2.5 text-xs text-[#7a8c85] space-y-0.5">
               <p><span className="font-medium text-[#5a6b63]">Community:</span> {community.displayName}</p>
               <p><span className="font-medium text-[#5a6b63]">Subject:</span> {fields.subject || "(no subject)"}</p>
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{error}</div>
             )}
 
             <div className="flex gap-3 pt-1">
               <button
                 onClick={onClose}
-                className="flex-1 rounded-lg border border-[#ddd8d0] py-2 text-sm text-[#5a6b63] transition-colors hover:text-[#1F4538]"
+                className="flex-1 rounded-lg border border-[#ddd8d0] text-sm text-[#5a6b63] hover:text-[#1F4538] py-2 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSend}
                 disabled={!recipientEmail.trim() || sending || isSaving}
-                className="flex-1 rounded-lg bg-[#1F4538] py-2 text-sm font-semibold text-white transition-colors hover:bg-[#173829] disabled:opacity-40"
+                className="flex-1 rounded-lg bg-[#1F4538] text-white text-sm font-semibold py-2 hover:bg-[#173829] transition-colors disabled:opacity-40"
               >
-                {sending || isSaving ? "Sending…" : isTest ? "Send test" : "Send"}
+                {sending || isSaving ? "Sending…" : isTest ? "Send test email" : "Send for approval"}
               </button>
             </div>
           </div>

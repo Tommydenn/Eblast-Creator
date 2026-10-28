@@ -4,7 +4,9 @@ import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput } from "@/components/drafter/RichEditor";
 import { allCustomLines, type CustomSlot, type CustomLine } from "@/lib/extracted-flyer";
-import { input } from "@/components/drafter/ui";
+
+const baseInput =
+  "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
 
 /**
  * The lines someone added in one gap of the eblast, and the control that
@@ -58,7 +60,7 @@ export function BlockGap({ slot }: { slot: CustomSlot }) {
                 write(all.map((l) => (l.id === line.id ? { ...l, text: html } : l)))
               }
               placeholder="Extra line"
-              className={input}
+              className={baseInput}
               activeEditorRef={activeEditorRef}
               activeEditorCallback={activeEditorCallback}
               activeFieldNameRef={activeFieldNameRef}

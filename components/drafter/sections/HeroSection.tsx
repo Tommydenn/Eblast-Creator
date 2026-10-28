@@ -3,36 +3,35 @@
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
 import { RichInput, CallButtonField } from "@/components/drafter/RichEditor";
+import { SectionHeader } from "@/components/drafter/SectionHeader";
 import { Field } from "@/components/drafter/Field";
 import { BlockGap } from "@/components/drafter/BlockGap";
 import { DateTimeField } from "@/components/drafter/DateTimeField";
-import { HeroImageSection } from "@/components/drafter/sections/ImagesSection";
 import { communityAddressLine } from "@/lib/eblast-defaults";
-import { input } from "@/components/drafter/ui";
 
-/**
- * The hero: the photo, and the words printed under it.
- *
- * The photo is first because that is where the email draws it, and it is here
- * at all because it belongs to this section — it used to be on a tab of its
- * own, two tabs from the headline it sits above.
- */
+
+const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
+
 export default function HeroSection() {
   const { fields, setField, setFields, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   if (!fields) return null;
 
   return (
-    <>
-      <HeroImageSection />
+    <div className="space-y-5">
+      {/* The logo band. It has no fields of its own, so this row is the
+          only place it can be turned off and on. */}
+      <SectionHeader label="Header" flag="headerSectionHidden" />
+
+      <SectionHeader label="Hero" flag="heroSectionHidden" />
 
       <BlockGap slot="hero:start" />
 
-      <Field label="RSVP label" block="rsvpLabel" hint="Leave blank if none is needed.">
+      <Field label="RSVP Label" block="rsvpLabel" hint="Shown at the top of the hero and CTA sections. Leave blank if no RSVP required.">
         <RichInput
           value={fields.rsvpLabel ?? ""}
           onValueChange={(html) => setField("rsvpLabel", html || undefined)}
           placeholder="e.g. RSVP Required"
-          className={input}
+          className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -47,7 +46,7 @@ export default function HeroSection() {
           value={fields.headline}
           onValueChange={(html) => setField("headline", html)}
           placeholder="Main event headline"
-          className={input}
+          className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -57,12 +56,12 @@ export default function HeroSection() {
 
       <BlockGap slot="headline" />
 
-      <Field label="Script subheadline" block="scriptSubheadline">
+      <Field label="Script Subheadline" block="scriptSubheadline" hint="Optional handwritten-style subheading beneath the headline">
         <RichInput
           value={fields.scriptSubheadline ?? ""}
           onValueChange={(html) => setField("scriptSubheadline", html || undefined)}
           placeholder="Optional script text…"
-          className={input}
+          className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -74,8 +73,7 @@ export default function HeroSection() {
 
       {/* One box, two underlying fields — see DateTimeField. */}
       <DateTimeField
-        label="Date & time"
-        hint="Date on the first line, time on the second."
+        label="Event Date & Time"
         orderBlock="eventDateTime"
         dateBlock="eventDate"
         timeBlock="eventTime"
@@ -85,7 +83,7 @@ export default function HeroSection() {
           // Editing the date answers the question, so the warning goes with it.
           setFields({ eventDate: date, eventTime: time, dateConflict: undefined })
         }
-        className={input}
+        className={baseInput}
         fieldName="eventDate"
         activeEditorRef={activeEditorRef}
         activeEditorCallback={activeEditorCallback}
@@ -98,10 +96,10 @@ export default function HeroSection() {
       {fields.dateConflict && (
         <div className="-mt-2 rounded-lg border border-[#f0d5d5] bg-[#fdf6f6] px-3 py-2">
           <p className="text-xs font-semibold text-[#9a3a34]">Check this date</p>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-[#7a4a44]">{fields.dateConflict}</p>
+          <p className="mt-0.5 text-[11px] text-[#7a4a44] leading-relaxed">{fields.dateConflict}</p>
           <button
             onClick={() => setField("dateConflict", undefined)}
-            className="mt-1.5 text-[11px] font-medium text-[#9a3a34] underline-offset-2 hover:underline"
+            className="mt-1.5 text-[11px] font-medium text-[#9a3a34] hover:underline underline-offset-2"
           >
             The date is right
           </button>
@@ -110,12 +108,12 @@ export default function HeroSection() {
 
       <BlockGap slot="eventTime" />
 
-      <Field label="Address" block="heroAddress" hint="The community's own, unless you change it.">
+      <Field label="Address Line" block="heroAddress" hint="Shown beneath the event date in the hero section. Defaults to the community's address.">
         <RichInput
           value={fields.heroAddress ?? communityAddressLine(community)}
           onValueChange={(html) => setField("heroAddress", html)}
           placeholder="e.g. 1234 Oak St, Green Bay, WI 54301"
-          className={input}
+          className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -125,14 +123,12 @@ export default function HeroSection() {
 
       <BlockGap slot="heroAddress" />
 
-      {/* The field prints the locked number under itself, so there is nothing
-          left for a hint to say. */}
-      <Field label="Call button" flag="ctaButtonHidden" orderBlock="ctaButtonLabel">
+      <Field label="Call Button Label" flag="ctaButtonHidden" orderBlock="ctaButtonLabel" hint="Text on the hero's call-to-action button. Independent from the bottom Call Button Label — select text to format it (bold, color, size…), the number stays locked.">
         <CallButtonField
           value={fields.ctaButtonLabel ?? ""}
           onValueChange={(html) => setField("ctaButtonLabel", html)}
           fieldName="ctaButtonLabel"
-          className={input}
+          className={baseInput}
           activeEditorRef={activeEditorRef}
           activeEditorCallback={activeEditorCallback}
           activeFieldNameRef={activeFieldNameRef}
@@ -140,6 +136,6 @@ export default function HeroSection() {
       </Field>
 
       <BlockGap slot="ctaButtonLabel" />
-    </>
+    </div>
   );
 }

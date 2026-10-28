@@ -2,78 +2,72 @@
 
 import React from "react";
 import { useDraft } from "@/context/DraftContext";
-import { Field } from "@/components/drafter/Field";
-import { input as inputCls, eyebrow } from "@/components/drafter/ui";
 
-/**
- * The subject line and the inbox preview — the two things that are read before
- * the email is opened, and the only two that are not part of it.
- *
- * It had a Field of its own, a near-copy of the shared one that existed only
- * because these boxes have nothing to hide and nothing to reorder. The shared
- * one draws no controls when a box has none, so there is nothing left for a
- * second copy to do.
- */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const baseInput = "w-full rounded-lg border border-[#ddd8d0] bg-white px-3 py-2 text-sm text-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#1F4538]/30 focus:border-[#1F4538] transition-colors";
+
 export default function SubjectSection() {
   const { fields, setField, subjectSpecialist, swapSubjectLine } = useDraft();
   if (!fields) return null;
 
   return (
-    <>
-      <Field label="Subject" hint={`${fields.subject.length}/90 — aim under 60`}>
+    <div className="space-y-5">
+      <Field label="Subject Line">
         <input
           type="text"
           value={fields.subject}
           onChange={(e) => setField("subject", e.target.value)}
-          className={inputCls}
+          className={baseInput}
           placeholder="Email subject…"
           maxLength={90}
         />
+        <p className="mt-1 text-xs text-[#9aaba4]">{fields.subject.length}/90 chars · Target: under 60</p>
       </Field>
 
-      <Field
-        label="Inbox preview"
-        hint={`${fields.previewText.length}/150 — aim under 120. Shown under the subject in the inbox, never in the email.`}
-      >
+      <Field label="Preview Text">
         <textarea
           value={fields.previewText}
           onChange={(e) => setField("previewText", e.target.value)}
           rows={2}
-          className={inputCls + " resize-none"}
+          className={baseInput + " resize-none"}
           placeholder="Inbox preview snippet…"
           maxLength={150}
         />
+        <p className="mt-1 text-xs text-[#9aaba4]">{fields.previewText.length}/150 chars · Target: under 120</p>
+        <p className="mt-0.5 text-[10px] text-[#b0a89f]">Shown in the inbox below the subject — not visible in the email preview.</p>
       </Field>
 
       {subjectSpecialist && subjectSpecialist.alternatives.length > 0 && (
         <div>
-          <p className={eyebrow + " mb-2"}>Suggestions</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#7a8c85] mb-2">AI Alternatives</p>
           <div className="space-y-2">
             {[subjectSpecialist.winner, ...subjectSpecialist.alternatives].map((alt, i) => (
               <button
                 key={i}
                 onClick={() => swapSubjectLine(alt.subject, alt.previewText)}
                 className={[
-                  "w-full rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                  "w-full text-left rounded-lg border px-3 py-2.5 text-sm transition-colors",
                   alt.subject === fields.subject
                     ? "border-[#1F4538] bg-[#f0f5f2] text-[#1F4538]"
-                    : "border-[#e8e3dc] bg-white text-[#1a1a1a] hover:border-[#1F4538]/40 hover:bg-[#faf9f6]",
+                    : "border-[#e8e3dc] bg-white hover:border-[#1F4538]/40 hover:bg-[#faf9f6] text-[#1a1a1a]",
                 ].join(" ")}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-medium">{alt.subject}</span>
-                  {i === 0 && (
-                    <span className="mt-0.5 shrink-0 text-[9px] font-semibold uppercase tracking-wider text-[#9aaba4]">
-                      Suggested
-                    </span>
-                  )}
-                </div>
-                {alt.previewText && <div className="mt-0.5 truncate text-xs text-[#7a8c85]">{alt.previewText}</div>}
+                <div className="font-medium">{alt.subject}</div>
+                {alt.previewText && <div className="text-xs text-[#7a8c85] mt-0.5 truncate">{alt.previewText}</div>}
+                {i === 0 && <span className="text-[10px] font-semibold uppercase tracking-wider text-[#1F4538] mt-1 inline-block">AI Winner</span>}
               </button>
             ))}
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

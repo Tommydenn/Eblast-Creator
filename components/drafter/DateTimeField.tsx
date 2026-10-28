@@ -5,7 +5,6 @@ import { RichInput } from "@/components/drafter/RichEditor";
 import { HideToggle } from "@/components/drafter/HideToggle";
 import { Reorderable } from "@/components/drafter/Reorderable";
 import { sectionOfBlock } from "@/lib/eblast-blocks";
-import { label as labelCls, hint as hintCls } from "@/components/drafter/ui";
 
 /**
  * One box holding the event's date and time, on two lines.
@@ -125,8 +124,10 @@ export function DateTimeField({
 
   const inner = (
     <>
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <label className={labelCls}>{label}</label>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <label className="block text-xs font-semibold uppercase tracking-widest text-[#7a8c85]">
+          {label}
+        </label>
         {(dateBlock || timeBlock) && (
           <div className="flex items-center gap-1.5 shrink-0">
             {dateBlock && <HideToggle block={dateBlock} what="the date" />}
@@ -144,7 +145,7 @@ export function DateTimeField({
         activeFieldNameRef={activeFieldNameRef}
         fieldName={fieldName}
       />
-      {hint && <p className={hintCls + " mt-1"}>{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-[#9aaba4]">{hint}</p>}
     </>
   );
 

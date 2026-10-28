@@ -152,12 +152,32 @@ function useEditorEvents(
   serialize: () => void,
   blockEnter = false,
 ) {
+  const { undo, redo } = useDraft();
+  const undoRef = useRef(undo);
+  undoRef.current = undo;
+  const redoRef = useRef(redo);
+  redoRef.current = redo;
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
     const onBeforeInput = (e: InputEvent) => {
       if (e.isComposing) return;
+      // The browser keeps its own undo for each box, which knows nothing about
+      // colours, hidden blocks or anything outside the box it belongs to. Two
+      // undos on one shortcut means pressing it once could step back a word
+      // here while the draft's own history stays where it was. The draft's
+      // wins, everywhere, so there is one history and one meaning.
+      //
+      // Caught as beforeinput rather than on the key, because this also covers
+      // the Edit menu, the right-click menu and a trackpad swipe.
+      if (e.inputType === "historyUndo" || e.inputType === "historyRedo") {
+        e.preventDefault();
+        if (e.inputType === "historyUndo") undoRef.current();
+        else redoRef.current();
+        return;
+      }
       if (e.inputType === "insertText" && e.data && getPending(el)) {
         if (insertTextWithPending(el, e.data)) {
           e.preventDefault();
@@ -172,6 +192,19 @@ function useEditorEvents(
       serialize();
     };
     const onKeyDown = (e: KeyboardEvent) => {
+      // The same two, from the keyboard. Firefox does not always raise the
+      // beforeinput above for these.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redoRef.current();
+        else undoRef.current();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redoRef.current();
+        return;
+      }
       if (singleLine && e.key === "Enter") {
         e.preventDefault();
         // Locked fields (the salesperson name and email) revert any edit that
@@ -267,7 +300,7 @@ export function RichInput({
   // never call onValueChange at all — plus opens the copy prompt. Checked
   // via refs (not the destructured values directly) so serialize() itself
   // stays referentially stable.
-  const { lockInfo, requestCopyPrompt } = useDraft();
+  const { lockInfo, requestCopyPrompt, historyRevision } = useDraft();
   const isLockedRef = useRef(false);
   isLockedRef.current = !!lockInfo?.locked;
   const requestCopyPromptRef = useRef(requestCopyPrompt);
@@ -304,8 +337,8 @@ export function RichInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync genuine external changes (AI refine, undo/redo, changed defaults) —
-  // never while the user types, and never for our own echoed output.
+  // Sync genuine external changes (AI refine, changed defaults) — never while
+  // the user types, and never for our own echoed output.
   useEffect(() => {
     if (isFocused.current || !ref.current) return;
     if (value === lastEmitted.current) return;
@@ -313,6 +346,20 @@ export function RichInput({
     lastGoodHtml.current = ref.current.innerHTML;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+
+  // Undo and redo, which have to land even in the box that has the cursor —
+  // that is usually the very box being undone. The guard above exists to stop
+  // a draft being overwritten mid-sentence, and an undo is not that: it was
+  // asked for. The caret goes to the end of the restored text, which is where
+  // it would be had the words just been typed.
+  useEffect(() => {
+    if (!ref.current || historyRevision === 0) return;
+    ref.current.innerHTML = inlineHtmlForEditing(value ?? "");
+    lastGoodHtml.current = ref.current.innerHTML;
+    lastEmitted.current = serializeInline(ref.current);
+    if (isFocused.current) placeCaretEnd(ref.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyRevision]);
 
   useEditorEvents(ref, true, serialize, blockEnter);
 
@@ -367,7 +414,7 @@ export function RichBodyEditor({
   const lastGoodHtml = useRef<string>("");
 
   // Same lock rejection as RichInput — see its comment for why refs are used.
-  const { lockInfo, requestCopyPrompt } = useDraft();
+  const { lockInfo, requestCopyPrompt, historyRevision } = useDraft();
   const isLockedRef = useRef(false);
   isLockedRef.current = !!lockInfo?.locked;
   const requestCopyPromptRef = useRef(requestCopyPrompt);
@@ -404,6 +451,16 @@ export function RichBodyEditor({
     lastGoodHtml.current = ref.current.innerHTML;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extKey]);
+
+  // Undo and redo land even with the cursor here — see RichInput's copy.
+  useEffect(() => {
+    if (!ref.current || historyRevision === 0) return;
+    ref.current.innerHTML = blocksToHtml(paragraphs);
+    lastGoodHtml.current = ref.current.innerHTML;
+    lastEmitted.current = paragraphs.join(" ");
+    if (isFocused.current) placeCaretEnd(ref.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyRevision]);
 
   useEditorEvents(ref, false, serialize);
 

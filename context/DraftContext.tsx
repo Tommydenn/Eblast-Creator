@@ -171,16 +171,26 @@ function computeLockInfo(draft: Pick<SavedDraft, "approvedAt" | "pushedAt" | "pe
   return { locked: reasons.length > 0, reasons };
 }
 
+/**
+ * The draft as it stood before one change.
+ *
+ * Everything the editor can alter except the photos: the words, their colour,
+ * size and alignment, which blocks are hidden, and the section backgrounds.
+ * Photos are deliberately outside it — they are swapped by hand in the Images
+ * tab, nothing else moves them, and an undo that put an old photo back after
+ * you had deliberately replaced it would be the opposite of helpful.
+ */
+/** How many steps back it is possible to go. */
+const HISTORY_LIMIT = 100;
+/** A run of changes to the same thing within this long counts as one step. */
+const HISTORY_COALESCE_MS = 700;
+
 interface RefineSnapshot {
   fields: ExtractedFlyer;
-  /**
-   * Undefined for history restored from a saved draft: image data URIs are
-   * multi-MB and can't ride along in the save payload (same reason
-   * buildDraftPayload strips them), so persisted history is text-only and
-   * undo/redo leaves images untouched. Present for in-session snapshots.
-   */
+  /** No longer written. Kept so history saved before this still loads. */
   images?: DraftImages;
-  instruction: string;
+  /** What the AI was asked to do, when the step came from the AI. */
+  instruction?: string;
 }
 
 /**
@@ -192,7 +202,7 @@ const MAX_PERSISTED_HISTORY = 25;
 
 /** Drop the in-memory image data before a snapshot goes into the save payload. */
 function stripSnapshotImages(s: RefineSnapshot): RefineSnapshot {
-  return { fields: s.fields, instruction: s.instruction };
+  return { fields: s.fields, ...(s.instruction ? { instruction: s.instruction } : {}) };
 }
 
 export interface PushStep { step: string; ok: boolean; status?: number; body?: any }
@@ -280,6 +290,8 @@ export interface DraftContextValue {
   generateError: string | null;
   isRefining: boolean;
   refineError: string | null;
+  /** Changes when undo or redo runs, so an open text box takes the new words. */
+  historyRevision: number;
   canUndo: boolean;
   canRedo: boolean;
   lastRefineInstruction: string | null;
@@ -540,6 +552,15 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Refine / undo-redo
   const [isRefining, setIsRefining] = useState(false);
   const [refineError, setRefineError] = useState<string | null>(null);
+  /**
+   * Bumped on undo and redo, so the text boxes know to take the restored words
+   * even while one of them has the cursor in it. They otherwise ignore changes
+   * arriving from outside while focused, which is what stops a draft being
+   * overwritten mid-sentence.
+   */
+  const [historyRevision, setHistoryRevision] = useState(0);
+  /** What the last history entry was for, so a run of edits is one step. */
+  const lastHistoryRef = useRef<{ key: string; at: number } | null>(null);
   const [refineNote, setRefineNote] = useState<string | null>(null);
   const [changedFields, setChangedFields] = useState<string[]>([]);
   const [undoStack, setUndoStack] = useState<RefineSnapshot[]>([]);
@@ -682,19 +703,44 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // it loses focus: since `value` never actually changed, the moment
   // requestCopyPrompt() blurs the active editor, that effect resets the
   // DOM's innerHTML back to match — no separate revert logic needed here.
+  /**
+   * Remember how the draft looked before a change, so it can be undone.
+   *
+   * Typing calls this on every keystroke, which would otherwise make undo walk
+   * back a letter at a time. A run of changes to the same thing, with no real
+   * pause in it, is one step: the snapshot taken at the start of the run is
+   * already the right thing to go back to, so the rest are skipped. Pause, or
+   * move to something else, and the next change starts a new step.
+   */
+  const pushHistory = useCallback((key: string) => {
+    const before = fieldsRef.current;
+    if (!before) return;
+    const now = Date.now();
+    const last = lastHistoryRef.current;
+    if (last && last.key === key && now - last.at < HISTORY_COALESCE_MS) {
+      lastHistoryRef.current = { key, at: now };
+      return;
+    }
+    lastHistoryRef.current = { key, at: now };
+    setUndoStack((prev) => [...prev, { fields: { ...before } }].slice(-HISTORY_LIMIT));
+    setRedoStack([]);
+  }, []);
+
   const setField = useCallback(<K extends keyof ExtractedFlyer>(key: K, value: ExtractedFlyer[K]) => {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
+    pushHistory(String(key));
     setFields_((prev) => prev ? { ...prev, [key]: value } : prev);
     setIsSaved(false);
     setLastEditTimestamp(Date.now());
-  }, [requestCopyPrompt]);
+  }, [requestCopyPrompt, pushHistory]);
 
   const setFields = useCallback((patch: Partial<ExtractedFlyer>) => {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
+    pushHistory(Object.keys(patch).sort().join(","));
     setFields_((prev) => prev ? { ...prev, ...patch } : prev);
     setIsSaved(false);
     setLastEditTimestamp(Date.now());
-  }, [requestCopyPrompt]);
+  }, [requestCopyPrompt, pushHistory]);
 
   // ─── Image management ──────────────────────────────────────────────────────
   const assignImage = useCallback(async (slot: "hero" | "secondary", imageUrl: string, bankIdx?: number) => {
@@ -816,6 +862,10 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
    */
   const resetColors = useCallback(() => {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
+    // Its own step. Reset touches every colour at once, and the whole point of
+    // undoing it is getting all of them back together.
+    pushHistory("reset-colors");
+    lastHistoryRef.current = null;
     setFields_((prev) => {
       if (!prev) return prev;
       const next: Record<string, unknown> = { ...prev };
@@ -832,7 +882,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     });
     setIsSaved(false);
     setLastEditTimestamp(Date.now());
-  }, [requestCopyPrompt]);
+  }, [requestCopyPrompt, pushHistory]);
 
   const addToImageBank = useCallback((url: string) => {
     setImageBank((prev) => (prev.includes(url) ? prev : [...prev, url]));
@@ -987,11 +1037,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (lockInfoRef.current?.locked) { requestCopyPrompt(); return; }
 
     // Snapshot for undo
-    const snapshot: RefineSnapshot = {
-      fields: { ...f },
-      images: { ...imgs, gallery: [...imgs.gallery] },
-      instruction,
-    };
+    const snapshot: RefineSnapshot = { fields: { ...f }, instruction };
 
     setIsRefining(true);
     setRefineError(null);
@@ -1054,20 +1100,18 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (stack.length === 0) return;
     const snap = stack[stack.length - 1];
     const current = fieldsRef.current;
-    const currentImgs = imagesRef.current;
     if (current) {
-      const redoEntry: RefineSnapshot = {
-        fields: { ...current },
-        // Only capture images when the snapshot being restored carries them;
-        // otherwise redo would "restore" images that undo never changed.
-        images: snap.images ? { ...currentImgs, gallery: [...currentImgs.gallery] } : undefined,
-        instruction: snap.instruction,
-      };
-      setRedoStack((r) => [...r, redoEntry]);
+      setRedoStack((r) => [...r, { fields: { ...current }, instruction: snap.instruction }]);
     }
     setFields_(snap.fields);
-    if (snap.images) setImages(snap.images);
     setUndoStack((prev) => prev.slice(0, -1));
+    // The next edit starts a fresh step rather than merging into whichever
+    // one was being written when undo was pressed.
+    lastHistoryRef.current = null;
+    // Tells the text boxes to take the restored words even while one of them
+    // has the cursor in it; without this an undo would leave the box you were
+    // typing in showing the old text.
+    setHistoryRevision((n) => n + 1);
     setIsSaved(false);
     setLastEditTimestamp(Date.now());
   }, []);
@@ -1077,18 +1121,13 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     if (stack.length === 0) return;
     const snap = stack[stack.length - 1];
     const current = fieldsRef.current;
-    const currentImgs = imagesRef.current;
     if (current) {
-      const undoEntry: RefineSnapshot = {
-        fields: { ...current },
-        images: snap.images ? { ...currentImgs, gallery: [...currentImgs.gallery] } : undefined,
-        instruction: snap.instruction,
-      };
-      setUndoStack((u) => [...u, undoEntry]);
+      setUndoStack((u) => [...u, { fields: { ...current }, instruction: snap.instruction }]);
     }
     setFields_(snap.fields);
-    if (snap.images) setImages(snap.images);
     setRedoStack((prev) => prev.slice(0, -1));
+    lastHistoryRef.current = null;
+    setHistoryRevision((n) => n + 1);
     setIsSaved(false);
     setLastEditTimestamp(Date.now());
   }, []);
@@ -1652,6 +1691,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     generateError,
     isRefining,
     refineError,
+    historyRevision,
     refineNote,
     changedFields,
     canUndo: undoStack.length > 0,

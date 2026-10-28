@@ -15,13 +15,14 @@ import { SECTION_LABELS, type EblastSection } from "@/lib/eblast-sections";
  * Hero tab, points this at the hero — so "make it shorter" means the thing in
  * front of you, and nothing outside it is allowed to move. The scope is a
  * button, because some instructions really are about the whole email.
+ *
+ * Undo and redo used to live here, when they only covered what the AI had
+ * done. They cover every edit now, so they belong with the other things that
+ * act on the whole draft rather than in the box that asks for one kind of
+ * change.
  */
 export function AiBar() {
-  const {
-    refine, isRefining, refineError, refineNote, changedFields,
-    canUndo, canRedo, undo, redo, lastRefineInstruction,
-    activeSection, fields,
-  } = useDraft();
+  const { refine, isRefining, refineError, refineNote, changedFields, activeSection, fields } = useDraft();
 
   const [instruction, setInstruction] = useState("");
   const [wholeEmail, setWholeEmail] = useState(false);
@@ -121,28 +122,6 @@ export function AiBar() {
           ) : "Go"}
         </button>
 
-        <div className="shrink-0 flex items-center gap-1 pl-1">
-          <button
-            onClick={undo}
-            disabled={!canUndo}
-            title={lastRefineInstruction ? `Undo: ${lastRefineInstruction}` : "Nothing to undo"}
-            className="w-6 h-6 flex items-center justify-center rounded text-[#7a8c85] hover:text-[#1F4538] hover:bg-[#f0ede7] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 7h11a5 5 0 0 1 0 10H3" /><polyline points="7 3 3 7 7 11" />
-            </svg>
-          </button>
-          <button
-            onClick={redo}
-            disabled={!canRedo}
-            title="Redo"
-            className="w-6 h-6 flex items-center justify-center rounded text-[#7a8c85] hover:text-[#1F4538] hover:bg-[#f0ede7] disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 7H10a5 5 0 0 0 0 10h11" /><polyline points="17 3 21 7 17 11" />
-            </svg>
-          </button>
-        </div>
       </div>
     </div>
   );

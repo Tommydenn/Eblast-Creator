@@ -100,3 +100,77 @@ export function defaultColor(
 
 /** Nothing colourable may be unreachable, so this is checked rather than hoped. */
 export const UNREACHABLE_COLORS = SECTION_COLOR_FIELDS.filter((f) => !sectionOfColorField(f));
+
+/**
+ * Where each row's words are stored, and what to look for in the email to see
+ * whether they were drawn.
+ *
+ * Whether something is in the email is a question only the email can answer.
+ * It leaves nothing behind for more reasons than the panel could keep a list
+ * of — a field can be empty, or turned off, or perfectly full and still not
+ * printed because the band it belongs to needs a date — so the panel reads the
+ * answer back out of what was rendered instead of working it out a second
+ * time. These are the names to read it by.
+ *
+ * Storage and drawn name are not always the same. A button carries no words of
+ * the draft's own (the phone number and the website come from the community),
+ * so it is counted by the flag that would hide it; the hero's date band is one
+ * row holding two fields, so either of them counts as the band being there.
+ */
+export const ROW_SOURCES: Record<string, { storage: string; drawn: string[] }> = {
+  rsvpLabel: { storage: "rsvpLabel", drawn: ["rsvpLabel"] },
+  headline: { storage: "headline", drawn: ["headline"] },
+  scriptSubheadline: { storage: "scriptSubheadline", drawn: ["scriptSubheadline"] },
+  eventDateTime: { storage: "eventDate", drawn: ["eventDate", "eventTime"] },
+  heroAddress: { storage: "heroAddress", drawn: ["heroAddress"] },
+  ctaButtonLabel: { storage: "ctaButtonLabel", drawn: ["ctaButtonHidden"] },
+  storyEyebrow: { storage: "storyEyebrow", drawn: ["storyEyebrow"] },
+  storyScriptTitle: { storage: "storyScriptTitle", drawn: ["storyScriptTitle"] },
+  bodyParagraphs: { storage: "bodyParagraphs", drawn: ["bodyParagraphs"] },
+  galleryLabel: { storage: "galleryLabel", drawn: ["galleryLabel"] },
+  ctaRsvpLabel: { storage: "ctaRsvpLabel", drawn: ["ctaRsvpLabel"] },
+  ctaEventDateTime: { storage: "ctaEventDate", drawn: ["ctaEventDate", "ctaEventTime"] },
+  finalCtaButtonLabel: { storage: "finalCtaButtonLabel", drawn: ["finalCtaButtonHidden"] },
+  footerButtonLabel: { storage: "footerButtonLabel", drawn: ["footerButtonHidden"] },
+  thankYouText: { storage: "thankYouText", drawn: ["thankYouText"] },
+  footerSenderName: { storage: "footerSenderName", drawn: ["footerSenderName"] },
+  footerName: { storage: "footerName", drawn: ["footerName"] },
+  footerSenderEmail: { storage: "footerSenderEmail", drawn: ["footerSenderEmail"] },
+};
+
+/**
+ * Fields the email fills in for itself when the draft leaves them alone.
+ *
+ * A draft that came out without one of these holds an empty string, which is
+ * not the same as never having been set: the empty string is exactly what
+ * stops the default. So putting one back means clearing it, which is what
+ * "Show this" does for these rows.
+ *
+ * The buttons are not in here. Clearing a button's label leaves the button
+ * standing — it is the flag that takes it away, not the words — so the row is
+ * still in the email and offering to show it would describe it wrongly. The
+ * guard checks that, which is how the two of them came out of this list.
+ */
+export const RESTORABLE_FIELDS = new Set([
+  "heroAddress",
+  "galleryLabel",
+  "thankYouText",
+  "footerName",
+  "ctaRsvpLabel",
+]);
+
+/**
+ * What the email tags as drawn, by the same rule the editor reads it by.
+ *
+ * Shared with the guard so the two can never drift: a field counts when it
+ * carries words, and a button counts by being there at all.
+ */
+export function drawnFieldsIn(html: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of html.matchAll(/data-field="([^"]+)"[^>]*>([\s\S]*?)<\//g)) {
+    const text = m[2].replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").trim();
+    if (text) out.add(m[1]);
+  }
+  for (const m of html.matchAll(/data-deletefield="([^"]+)"/g)) out.add(m[1]);
+  return out;
+}

@@ -38,6 +38,8 @@ const AI_SCOPE: Record<string, EditorSection> = {
   Footer: "cta",
 };
 
+const same = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
 // Error code generator — gives each error a short stable identifier.
 function errorCode(msg: string): string {
   let h = 0;
@@ -334,8 +336,8 @@ export default function EditorLayout() {
   const router = useRouter();
   const [panelOpen, setPanelOpen] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
-  /** Which sections the email drew last time, so the rest can be offered. */
-  const [drawn, setDrawn] = useState<string[]>([]);
+  /** What the email drew last time, so the panel can mark what it did not. */
+  const [drawn, setDrawn] = useState<{ sections: string[]; fields: string[] }>({ sections: [], fields: [] });
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [approvalMode, setApprovalMode] = useState<"real" | "test">("real");
   const [autoSaveLabel, setAutoSaveLabel] = useState<string | null>(null);
@@ -471,8 +473,8 @@ export default function EditorLayout() {
 
   // The email reports this on every redraw, which is every few keystrokes, and
   // the answer almost never changes.
-  const handleDrawn = (names: string[]) =>
-    setDrawn((was) => (was.length === names.length && was.every((n, i) => n === names[i]) ? was : names));
+  const handleDrawn = (next: { sections: string[]; fields: string[] }) =>
+    setDrawn((was) => (same(was.sections, next.sections) && same(was.fields, next.fields) ? was : next));
 
   return (
     <div className="flex h-screen flex-col bg-[#F7F6F3]">
@@ -491,7 +493,7 @@ export default function EditorLayout() {
           ].join(" ")}
         >
           <div className="eb-scroll h-full w-[360px] overflow-y-auto pb-8">
-            <Inspector selected={selected} onSelect={select} />
+            <Inspector selected={selected} onSelect={select} drawnFields={drawn.fields} drawnSections={drawn.sections} />
           </div>
         </aside>
 
@@ -535,7 +537,7 @@ export default function EditorLayout() {
               onClick={(e) => { if (e.target === e.currentTarget) select(null); }}
               className="eb-scroll flex-1 min-w-0 overflow-y-auto bg-[#E9E5DE] px-4 py-5"
             >
-              <MissingSections drawn={drawn} onSelect={select} />
+              <MissingSections drawn={drawn.sections} onSelect={select} />
               {/* Square corners, exactly the email's width. What is in this box
                   should be what lands in an inbox. */}
               <div className="mx-auto w-full max-w-[600px] shadow-[0_8px_32px_rgba(27,29,28,0.12)]">
@@ -543,7 +545,7 @@ export default function EditorLayout() {
                   layoutSignal={`${flyerOpen ? "flyer" : "no-flyer"}:${flyerWidth ?? "auto"}:${panelOpen ? "panel" : "wide"}`}
                   selected={selected}
                   onSelect={select}
-                  onSectionsDrawn={handleDrawn}
+                  onDrawn={handleDrawn}
                   scrollerRef={scrollerRef}
                 />
               </div>

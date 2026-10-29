@@ -122,7 +122,7 @@ export default function PreviewPanel({
   layoutSignal,
   selected,
   onSelect,
-  onSectionsDrawn,
+  onDrawn,
   scrollerRef,
 }: {
   layoutSignal?: unknown;
@@ -130,13 +130,15 @@ export default function PreviewPanel({
   selected?: string | null;
   onSelect?: (section: string | null) => void;
   /**
-   * Which sections the email actually drew this time.
+   * What the email actually drew this time, by section and by field.
    *
-   * A section with nothing in it draws nothing — an empty gallery, a second
-   * photo that was never chosen — so there is no row to click and no way back
-   * to it. Saying which ones are here is what lets the editor offer the rest.
+   * Whether a thing is in the email is a question only the email can answer,
+   * and it answers it for more reasons than the panel could keep a list of: a
+   * field can be empty, or hidden, or perfectly full and still not drawn
+   * because the band it sits inside needs a date. Reading it back means the
+   * panel is never a second opinion about what was rendered.
    */
-  onSectionsDrawn?: (names: string[]) => void;
+  onDrawn?: (drawn: { sections: string[]; fields: string[] }) => void;
   /** The column this scrolls in, so selecting a section can bring it into view. */
   scrollerRef?: React.RefObject<HTMLElement>;
 } = {}) {
@@ -149,17 +151,33 @@ export default function PreviewPanel({
   // through a ref rather than closing over whichever one it first saw.
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
-  const onDrawnRef = useRef(onSectionsDrawn);
-  onDrawnRef.current = onSectionsDrawn;
+  const onDrawnRef = useRef(onDrawn);
+  onDrawnRef.current = onDrawn;
 
   const reportDrawn = useCallback((doc: Document | null | undefined) => {
     if (!doc?.body) return;
-    const names = new Set<string>();
+    const sections = new Set<string>();
     doc.querySelectorAll("[data-section]").forEach((el) => {
       const name = (el as HTMLElement).dataset.section;
-      if (name) names.add(name);
+      if (name) sections.add(name);
     });
-    onDrawnRef.current?.([...names]);
+
+    const fields = new Set<string>();
+    // A field is here when it has words. The date band tags its date line
+    // whether or not there is a date in it, so the tag alone would say a date
+    // was drawn when only the time was.
+    doc.querySelectorAll("[data-field]").forEach((el) => {
+      const name = (el as HTMLElement).dataset.field;
+      if (name && el.textContent?.trim()) fields.add(name);
+    });
+    // Buttons carry no words of the draft's own — the phone number and the
+    // website come from the community — so they are counted by being here.
+    doc.querySelectorAll("[data-deletefield]").forEach((el) => {
+      const name = (el as HTMLElement).dataset.deletefield;
+      if (name) fields.add(name);
+    });
+
+    onDrawnRef.current?.({ sections: [...sections], fields: [...fields] });
   }, []);
 
   const html = useMemo(() => {

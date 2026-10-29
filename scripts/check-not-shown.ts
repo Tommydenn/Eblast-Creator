@@ -1,0 +1,191 @@
+/**
+ * Checks that the panel can tell what is in the email and what is not.
+ *
+ * A draft that came out of an informational flyer has no date, no time and no
+ * RSVP, and the email simply prints nothing for them. The panel used to show
+ * those boxes looking exactly like every other box — the address worst of all,
+ * because it pre-fills with the community's own address and so looked not just
+ * present but filled in, while the email was printing nothing at all. That is
+ * the same failure the shared-defaults rule exists to prevent, in the other
+ * direction: the panel claiming something the email does not do.
+ *
+ * So the panel reads back what the email drew rather than working it out a
+ * second time. This checks the names it reads by are the names the email
+ * really writes, which is the one way that reading can quietly stop working:
+ * a row whose name the email never emits would wear "Not shown" forever, and
+ * a row named after something always present could never wear it at all.
+ *
+ *   npx tsx scripts/check-not-shown.ts
+ */
+import { buildEblastHtml } from "@/lib/render-email";
+import { ROW_SOURCES, RESTORABLE_FIELDS, drawnFieldsIn } from "@/lib/eblast-inspector";
+
+const failures: string[] = [];
+const fail = (msg: string) => failures.push(msg);
+
+const community: any = {
+  slug: "check-community",
+  displayName: "Checkworth Senior Living",
+  shortName: "Checkworth",
+  brand: {
+    primary: "#004D71", accent: "#CCAC77", background: "#FBF7EE",
+    fontBody: "Nexa", fontHeadline: "Nexa",
+  },
+  address: { street: "1234 Oak St", city: "Green Bay", state: "WI", zip: "54301" },
+  websiteUrl: "https://example.com",
+  logos: [],
+  trackingPhone: "9205551234",
+  socials: {},
+  hubspot: {},
+  senders: [{ id: "s1", name: "Dana Reed", email: "dana@example.com", title: null, isPrimary: true }],
+};
+
+const px = (n: number) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${n}" height="${n}"/>`)}`;
+const opts = { heroImageUrl: px(600), secondaryImageUrl: px(528), galleryImageUrls: [px(252), px(252)] };
+
+/** A draft with words in every row, so nothing is missing for want of text. */
+const full: any = {
+  subject: "Check subject", previewText: "Preview text", eyebrow: "Eyebrow",
+  heroImageAlt: "Hero photo", heroImageDescription: "A photo", audienceHints: [],
+  rsvpLabel: "RSVP Required",
+  headline: "An Afternoon of Music",
+  scriptSubheadline: "with the Lakeside Trio",
+  eventDate: "Thursday, June 12",
+  eventTime: "2:00 PM",
+  heroAddress: "1234 Oak St, Green Bay, WI 54301",
+  storyEyebrow: "A Look Inside",
+  storyScriptTitle: "Our Summer Series",
+  bodyParagraphs: ["Come spend the afternoon with us."],
+  galleryLabel: "Around Our Community",
+  ctaRsvpLabel: "Seats Are Limited",
+  ctaEventDate: "Thursday the twelfth",
+  ctaEventTime: "Two o'clock",
+  thankYouText: "Thank You!",
+  footerSenderName: "Dana Reed",
+  footerName: "The Checkworth Team",
+  footerSenderEmail: "dana@example.com",
+  footerButtonLabel: "Visit Our Website",
+  ctaEyebrow: "Reserve Your Seat", ctaHeadline: "June 12", ctaSubline: "RSVP required",
+  ctaButtonLabel: "Call 920-555-1234", ctaButtonHref: "tel:9205551234",
+  finalCtaButtonLabel: "Call 920-555-1234",
+};
+
+const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opts));
+
+// ── 1. Every row's name is one the email really writes ─────────────────────
+//
+// With every row filled in, every row has to come back as drawn. A name the
+// email never emits would leave that row marked "Not shown" on every draft
+// there has ever been.
+{
+  const drawn = draw(full);
+  for (const [row, spec] of Object.entries(ROW_SOURCES)) {
+    if (!spec.drawn.some((name) => drawn.has(name))) {
+      fail(`${row} is read back as "${spec.drawn.join(" or ")}", which this email never writes`);
+    }
+  }
+}
+
+// ── 2. Turning a row off is seen ───────────────────────────────────────────
+//
+// The other half: a name that is always present whatever the draft says would
+// mean a row could never be marked at all.
+{
+  const BY_BLOCK: Array<[row: string, make: (f: any) => any]> = [
+    ["rsvpLabel", (f) => ({ ...f, hiddenBlocks: ["rsvpLabel"] })],
+    ["headline", (f) => ({ ...f, hiddenBlocks: ["headline"] })],
+    ["scriptSubheadline", (f) => ({ ...f, hiddenBlocks: ["scriptSubheadline"] })],
+    ["heroAddress", (f) => ({ ...f, hiddenBlocks: ["heroAddress"] })],
+    ["storyEyebrow", (f) => ({ ...f, hiddenBlocks: ["storyEyebrow"] })],
+    ["storyScriptTitle", (f) => ({ ...f, hiddenBlocks: ["storyScriptTitle"] })],
+    ["bodyParagraphs", (f) => ({ ...f, hiddenBlocks: ["bodyParagraphs"] })],
+    ["galleryLabel", (f) => ({ ...f, hiddenBlocks: ["galleryLabel"] })],
+    ["ctaRsvpLabel", (f) => ({ ...f, hiddenBlocks: ["ctaRsvpLabel"] })],
+    ["thankYouText", (f) => ({ ...f, hiddenBlocks: ["thankYouText"] })],
+    ["footerSenderName", (f) => ({ ...f, hiddenBlocks: ["footerSenderName"] })],
+    ["footerName", (f) => ({ ...f, hiddenBlocks: ["footerName"] })],
+    ["footerSenderEmail", (f) => ({ ...f, hiddenBlocks: ["footerSenderEmail"] })],
+    ["eventDateTime", (f) => ({ ...f, hiddenBlocks: ["eventDate", "eventTime"] })],
+    ["ctaEventDateTime", (f) => ({ ...f, hiddenBlocks: ["ctaEventDate", "ctaEventTime"] })],
+    ["ctaButtonLabel", (f) => ({ ...f, ctaButtonHidden: true })],
+    ["finalCtaButtonLabel", (f) => ({ ...f, finalCtaButtonHidden: true })],
+    ["footerButtonLabel", (f) => ({ ...f, footerButtonHidden: true })],
+  ];
+
+  for (const [row, make] of BY_BLOCK) {
+    const spec = ROW_SOURCES[row];
+    if (!spec) { fail(`${row} has no entry in ROW_SOURCES`); continue; }
+    const drawn = draw(make(full));
+    if (spec.drawn.some((name) => drawn.has(name))) {
+      fail(`${row} was turned off and the panel would still call it shown`);
+    }
+  }
+
+  // Every row that can be turned off is covered above.
+  for (const row of Object.keys(ROW_SOURCES)) {
+    if (!BY_BLOCK.some(([name]) => name === row)) fail(`${row} is never checked for being turned off`);
+  }
+}
+
+// ── 3. An informational flyer reads as an informational flyer ──────────────
+//
+// The draft this whole thing is for: no event, so no date, no time, no RSVP
+// and no subheading. The address is the one worth naming — it is still set,
+// and it still does not print, because the band it sits inside is not there.
+{
+  const informational = {
+    ...full,
+    rsvpLabel: "",
+    scriptSubheadline: "",
+    eventDate: "",
+    eventTime: "",
+  };
+  const drawn = draw(informational);
+
+  for (const row of ["rsvpLabel", "scriptSubheadline", "eventDateTime", "heroAddress"]) {
+    if (ROW_SOURCES[row].drawn.some((name) => drawn.has(name))) {
+      fail(`an informational draft prints ${row}, so the panel cannot mark it`);
+    }
+  }
+  // And the rest of the email is untouched by any of that.
+  for (const row of ["headline", "storyEyebrow", "bodyParagraphs", "thankYouText", "footerName"]) {
+    if (!ROW_SOURCES[row].drawn.some((name) => drawn.has(name))) {
+      fail(`an informational draft lost ${row}, which has nothing to do with the event`);
+    }
+  }
+}
+
+// ── 4. Clearing a restorable field stops it, and clearing the clear puts it
+//      back ────────────────────────────────────────────────────────────────
+//
+// "Show this" on these rows sets the field back to undefined. That only means
+// anything if undefined really does bring the default back.
+{
+  for (const field of RESTORABLE_FIELDS) {
+    const row = Object.entries(ROW_SOURCES).find(([, s]) => s.storage === field)?.[0];
+    if (!row) { fail(`${field} is restorable but belongs to no row`); continue; }
+
+    const cleared = draw({ ...full, [field]: "" });
+    if (ROW_SOURCES[row].drawn.some((n) => cleared.has(n))) {
+      fail(`${field} was cleared and the email still prints it, so "Not shown" would be wrong`);
+    }
+
+    const restored = draw({ ...full, [field]: undefined });
+    if (!ROW_SOURCES[row].drawn.some((n) => restored.has(n))) {
+      fail(`${field} has no default to come back, so "Show this" would do nothing`);
+    }
+  }
+}
+
+// ── Report ─────────────────────────────────────────────────────────────────
+if (failures.length) {
+  console.error(`\n${failures.length} problem(s):\n`);
+  for (const f of failures) console.error(`  - ${f}`);
+  process.exit(1);
+}
+console.log(
+  `\nAll ${Object.keys(ROW_SOURCES).length} rows are read back by a name the email really writes,\n` +
+  `each one disappears when it is turned off, and ${RESTORABLE_FIELDS.size} of them come back from\n` +
+  "a default when cleared. An informational draft marks its date, time, RSVP\n" +
+  "and address as not shown, and leaves the rest of the email alone.",
+);

@@ -174,3 +174,70 @@ export function drawnFieldsIn(html: string): Set<string> {
   for (const m of html.matchAll(/data-deletefield="([^"]+)"/g)) out.add(m[1]);
   return out;
 }
+
+/** How a row is turned off: by name, by a flag of its own, or line by line. */
+export interface HideSpec {
+  block?: string;
+  flag?: string;
+  /** Rows that hold two lines and turn each off separately. */
+  parts?: Array<[what: string, name: string]>;
+}
+
+export const ROW_HIDE: Record<string, HideSpec> = {
+  rsvpLabel: { block: "rsvpLabel" },
+  headline: { block: "headline" },
+  scriptSubheadline: { block: "scriptSubheadline" },
+  eventDateTime: { parts: [["the date", "eventDate"], ["the time", "eventTime"]] },
+  heroAddress: { block: "heroAddress" },
+  bodyParagraphs: { block: "bodyParagraphs" },
+  galleryLabel: { block: "galleryLabel" },
+  ctaButtonLabel: { flag: "ctaButtonHidden" },
+  storyEyebrow: { block: "storyEyebrow" },
+  storyScriptTitle: { block: "storyScriptTitle" },
+  ctaRsvpLabel: { block: "ctaRsvpLabel" },
+  ctaEventDateTime: { parts: [["the date", "ctaEventDate"], ["the time", "ctaEventTime"]] },
+  finalCtaButtonLabel: { flag: "finalCtaButtonHidden" },
+  footerButtonLabel: { flag: "footerButtonHidden" },
+  thankYouText: { block: "thankYouText" },
+  footerSenderName: { block: "footerSenderName" },
+  footerName: { block: "footerName" },
+  footerSenderEmail: { block: "footerSenderEmail" },
+};
+
+interface Toggles {
+  hiddenBlocks?: string[];
+  shownBlocks?: string[];
+  [key: string]: unknown;
+}
+
+const has = (drawn: Set<string> | string[], name: string) =>
+  Array.isArray(drawn) ? drawn.includes(name) : drawn.has(name);
+
+/**
+ * Whether one hideable name is off.
+ *
+ * Three ways a line ends up absent, and the row has to read the same for all
+ * of them, because the reader only ever sees one outcome: hidden on purpose,
+ * never written by the draft, or written but not printed because the band it
+ * belongs to is missing.
+ *
+ * Turning one back on is remembered whatever the reason, so the control works
+ * on a box that is still empty — which is the only way it could work at all on
+ * a draft that arrived without the line.
+ */
+export function nameOff(flyer: Toggles, name: string, drawn: Set<string> | string[]): boolean {
+  if ((flyer.hiddenBlocks ?? []).includes(name)) return true;
+  if ((flyer.shownBlocks ?? []).includes(name)) return false;
+  return !has(drawn, name);
+}
+
+/** Whether a whole row is off, which for a two-line row means both lines are. */
+export function rowOff(flyer: Toggles, key: string, drawn: Set<string> | string[]): boolean {
+  const hide = ROW_HIDE[key];
+  const spec = ROW_SOURCES[key];
+  if (!hide || !spec) return false;
+  if (hide.parts) return hide.parts.every(([, name]) => nameOff(flyer, name, drawn));
+  // A button carries no words, so its flag is the whole story.
+  if (hide.flag) return !!flyer[hide.flag];
+  return nameOff(flyer, hide.block ?? key, drawn);
+}

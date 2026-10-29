@@ -18,7 +18,7 @@
  *   npx tsx scripts/check-not-shown.ts
  */
 import { buildEblastHtml } from "@/lib/render-email";
-import { ROW_SOURCES, RESTORABLE_FIELDS, drawnFieldsIn } from "@/lib/eblast-inspector";
+import { ROW_SOURCES, ROW_HIDE, RESTORABLE_FIELDS, drawnFieldsIn, rowOff } from "@/lib/eblast-inspector";
 
 const failures: string[] = [];
 const fail = (msg: string) => failures.push(msg);
@@ -115,10 +115,12 @@ const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opt
   for (const [row, make] of BY_BLOCK) {
     const spec = ROW_SOURCES[row];
     if (!spec) { fail(`${row} has no entry in ROW_SOURCES`); continue; }
-    const drawn = draw(make(full));
+    const flyer = make(full);
+    const drawn = draw(flyer);
     if (spec.drawn.some((name) => drawn.has(name))) {
-      fail(`${row} was turned off and the panel would still call it shown`);
+      fail(`${row} was turned off and the email still prints it`);
     }
+    if (!rowOff(flyer, row, drawn)) fail(`${row} was turned off and the panel would still call it on`);
   }
 
   // Every row that can be turned off is covered above.
@@ -127,13 +129,19 @@ const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opt
   }
 }
 
-// ── 3. An informational flyer reads as an informational flyer ──────────────
+// ── 3. An informational flyer reads as an informational flyer, and every
+//      row it left out can be switched back on ─────────────────────────────
 //
 // The draft this whole thing is for: no event, so no date, no time, no RSVP
 // and no subheading. The address is the one worth naming — it is still set,
 // and it still does not print, because the band it sits inside is not there.
+//
+// All three of those are the same thing to whoever opens the draft: the row
+// is off, and the switch has to turn it on. A row the draft never wrote has
+// nothing to un-hide, which is exactly why being asked for is remembered
+// separately — without that the switch would flip and nothing would change.
 {
-  const informational = {
+  const informational: any = {
     ...full,
     rsvpLabel: "",
     scriptSubheadline: "",
@@ -141,16 +149,59 @@ const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opt
     eventTime: "",
   };
   const drawn = draw(informational);
+  const OUT = ["rsvpLabel", "scriptSubheadline", "eventDateTime", "heroAddress"];
 
-  for (const row of ["rsvpLabel", "scriptSubheadline", "eventDateTime", "heroAddress"]) {
-    if (ROW_SOURCES[row].drawn.some((name) => drawn.has(name))) {
-      fail(`an informational draft prints ${row}, so the panel cannot mark it`);
+  for (const row of OUT) {
+    if (!rowOff(informational, row, drawn)) {
+      fail(`an informational draft leaves ${row} out and the panel would not show it as off`);
     }
   }
   // And the rest of the email is untouched by any of that.
   for (const row of ["headline", "storyEyebrow", "bodyParagraphs", "thankYouText", "footerName"]) {
-    if (!ROW_SOURCES[row].drawn.some((name) => drawn.has(name))) {
-      fail(`an informational draft lost ${row}, which has nothing to do with the event`);
+    if (rowOff(informational, row, drawn)) {
+      fail(`an informational draft marked ${row} off, and it has nothing to do with the event`);
+    }
+  }
+
+  // The switch, on each of them, with the box still empty.
+  for (const row of OUT) {
+    const names = ROW_HIDE[row].parts?.map(([, n]) => n) ?? [ROW_HIDE[row].block!];
+    const asked = { ...informational, shownBlocks: names };
+    if (rowOff(asked, row, drawn)) {
+      fail(`${row} was switched on and stayed off, so the control does nothing`);
+    }
+    // And it goes back off again, which is the other half of a switch.
+    const hiddenAgain = { ...asked, hiddenBlocks: names, shownBlocks: [] };
+    if (!rowOff(hiddenAgain, row, drawn)) fail(`${row} could not be switched off again`);
+  }
+}
+
+// ── 3b. Every row's switch works on a draft that never wrote it ────────────
+//
+// Not just the four above: the request was every text box in every section.
+{
+  const bare: any = { ...full, hiddenBlocks: [] };
+  for (const key of Object.keys(ROW_SOURCES)) {
+    const hide = ROW_HIDE[key];
+    // The buttons are governed by their own flag, which has always worked in
+    // both directions and does not depend on there being any words.
+    if (hide.flag) {
+      if (!rowOff({ ...bare, [hide.flag]: true }, key, draw({ ...bare, [hide.flag]: true }))) {
+        fail(`${key} could not be switched off by its flag`);
+      }
+      continue;
+    }
+    const names = hide.parts?.map(([, n]) => n) ?? [hide.block!];
+    // Empty it the way a draft that never wrote it would.
+    const emptied: any = { ...bare };
+    for (const n of names) emptied[n] = "";
+    if (key === "bodyParagraphs") emptied.bodyParagraphs = [];
+    if (key === "heroAddress") emptied.heroAddress = "";
+
+    const drawn = draw(emptied);
+    if (!rowOff(emptied, key, drawn)) fail(`${key} was left out of the draft and does not read as off`);
+    if (rowOff({ ...emptied, shownBlocks: names }, key, drawn)) {
+      fail(`${key} was switched on while still empty and stayed off`);
     }
   }
 }
@@ -184,8 +235,10 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  `\nAll ${Object.keys(ROW_SOURCES).length} rows are read back by a name the email really writes,\n` +
-  `each one disappears when it is turned off, and ${RESTORABLE_FIELDS.size} of them come back from\n` +
-  "a default when cleared. An informational draft marks its date, time, RSVP\n" +
-  "and address as not shown, and leaves the rest of the email alone.",
+  `\nAll ${Object.keys(ROW_SOURCES).length} rows are read back by a name the email really writes.\n` +
+  "Each one reads as off when the draft leaves it out, or when it is turned off,\n" +
+  "and turns back on from the row menu even with the box still empty. " +
+  `${RESTORABLE_FIELDS.size} of them\n` +
+  "restore a community default when they had been cleared. An informational draft\n" +
+  "marks its date, time, RSVP and address, and leaves the rest of the email alone.",
 );

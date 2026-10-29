@@ -16,7 +16,7 @@ import { SectionList } from "@/components/drafter/SectionList";
 import { Orderable, type OrderableRow } from "@/components/drafter/Orderable";
 import { Button, EyeButton, Group, Pill, Row, inputClass, type MenuItem } from "@/components/drafter/ui";
 import { orderedBlocks, sectionDef, sectionSlots, type BlockDef } from "@/lib/eblast-blocks";
-import { SECTION_PANELS, ROW_SOURCES, RESTORABLE_FIELDS } from "@/lib/eblast-inspector";
+import { SECTION_PANELS, ROW_SOURCES, ROW_HIDE, RESTORABLE_FIELDS, nameOff, rowOff } from "@/lib/eblast-inspector";
 import {
   communityAddressLine,
   defaultFooterName,
@@ -36,28 +36,6 @@ import { allCustomLines, type CustomLine, type CustomSlot, type ExtractedFlyer }
  * owns — its words, its photos and its colours — rather than whichever of
  * those happened to be grouped under the same tab.
  */
-
-/** How each block is hidden: by name, by a flag of its own, or line by line. */
-const BLOCK_HIDE: Record<string, { block?: string; flag?: string; parts?: Array<[string, string]> }> = {
-  rsvpLabel: { block: "rsvpLabel" },
-  headline: { block: "headline" },
-  scriptSubheadline: { block: "scriptSubheadline" },
-  eventDateTime: { parts: [["the date", "eventDate"], ["the time", "eventTime"]] },
-  heroAddress: { block: "heroAddress" },
-  bodyParagraphs: { block: "bodyParagraphs" },
-  galleryLabel: { block: "galleryLabel" },
-  ctaButtonLabel: { flag: "ctaButtonHidden" },
-  storyEyebrow: { block: "storyEyebrow" },
-  storyScriptTitle: { block: "storyScriptTitle" },
-  ctaRsvpLabel: { block: "ctaRsvpLabel" },
-  ctaEventDateTime: { parts: [["the date", "ctaEventDate"], ["the time", "ctaEventTime"]] },
-  finalCtaButtonLabel: { flag: "finalCtaButtonHidden" },
-  footerButtonLabel: { flag: "footerButtonHidden" },
-  thankYouText: { block: "thankYouText" },
-  footerSenderName: { block: "footerSenderName" },
-  footerName: { block: "footerName" },
-  footerSenderEmail: { block: "footerSenderEmail" },
-};
 
 /** What the panel calls each block, which is shorter than the email's name for it. */
 const LABELS: Record<string, string> = {
@@ -85,18 +63,16 @@ export default function Inspector({
   selected,
   onSelect,
   drawnFields,
-  drawnSections,
 }: {
   selected: string | null;
   onSelect: (section: string | null) => void;
   /** What the email drew, read back from it. See PreviewPanel's onDrawn. */
   drawnFields: string[];
-  drawnSections: string[];
 }) {
   const { fields } = useDraft();
   if (!fields) return null;
   return selected ? (
-    <SectionPanel name={selected} drawnFields={drawnFields} drawnSections={drawnSections} onBack={() => onSelect(null)} />
+    <SectionPanel name={selected} drawnFields={drawnFields} onBack={() => onSelect(null)} />
   ) : (
     <EmailPanel onSelect={onSelect} />
   );
@@ -193,7 +169,7 @@ function EmailPanel({ onSelect }: { onSelect: (section: string) => void }) {
 
 // ── One section ─────────────────────────────────────────────────────────────
 
-function SectionPanel({ name, drawnFields, drawnSections, onBack }: { name: string; drawnFields: string[]; drawnSections: string[]; onBack: () => void }) {
+function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields: string[]; onBack: () => void }) {
   const { fields, setField, setFields, community, images, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   const [confirming, setConfirming] = useState<string | null>(null);
 
@@ -322,77 +298,88 @@ function SectionPanel({ name, drawnFields, drawnSections, onBack }: { name: stri
     setField("blockOrder", { ...(fields.blockOrder ?? {}), [name]: names });
   };
 
-  // ── Is it in the email, and if not, what would put it there ───────────────
+  // ── On or off, and the control that changes it ────────────────────────────
 
-  /** Only the email can answer this, so it is the email that is asked. */
-  const inEmail = (key: string | string[]) => {
-    // Nothing has been reported yet on the very first render, and every row
-    // would read as missing.
-    if (drawnFields.length === 0) return true;
-    return (Array.isArray(key) ? key : [key]).some((k) => drawnFields.includes(k));
-  };
+  // Before the email has reported anything there is nothing to compare
+  // against, and every row would read as off.
+  const drawn = drawnFields.length === 0 ? null : drawnFields;
+
+  const shownBlocks = fields.shownBlocks ?? [];
 
   /**
-   * Why a row with words in it is still not in the email.
+   * Turn one name on or off, by whichever of the three reasons applies.
    *
-   * Two fields depend on something else being there. Saying so beats offering
-   * a Show this that could not have worked.
+   * On means two things at once: not hidden, and asked for. The second is what
+   * makes the control work on a box that is still empty — a line the draft
+   * never wrote has nothing to un-hide, so without it the switch would flip
+   * and nothing would change.
    */
-  const blockedBy = (storage: string): string | undefined => {
-    if (storage === "heroAddress" && !inEmail(["eventDate", "eventTime"])) {
-      return "The email only prints this when there is a date or a time.";
+  const setOn = (name: string, on: boolean, clear?: keyof ExtractedFlyer) => {
+    const hidden = (fields.hiddenBlocks ?? []).filter((b) => b !== name);
+    const asked = shownBlocks.filter((b) => b !== name);
+    // One write, so one press of undo puts it back.
+    const patch: Partial<ExtractedFlyer> = {
+      hiddenBlocks: on ? (hidden.length ? hidden : undefined) : [...hidden, name],
+      shownBlocks: on ? [...asked, name] : (asked.length ? asked : undefined),
+    };
+    // Clearing an empty string is what lets a community default apply again.
+    if (clear) patch[clear] = undefined as never;
+    setFields(patch);
+  };
+
+  /** Whether one name is off, by the rule the guard checks. */
+  const nameIsOff = (nm: string) => (drawn ? nameOff(flyer, nm, drawn) : false);
+
+  /**
+   * Why a row that is on still prints nothing.
+   *
+   * Two fields need something else to be there. This never withholds the
+   * control — it answers the question the control leaves behind.
+   */
+  const stillEmpty = (storage: string): string | undefined => {
+    if (storage === "heroAddress" && drawn && !drawn.includes("eventDate") && !drawn.includes("eventTime")) {
+      return "The email prints this inside the date band, so it needs a date or a time too.";
     }
     if (storage === "galleryLabel" && images.gallery.length === 0) {
-      return "The email only prints this when there are photos.";
+      return "The email prints this above the photos, so it needs at least one.";
     }
     return undefined;
   };
 
-  /**
-   * Everything the panel needs to say about one row.
-   *
-   * A row is in the email or it is not, and there is one badge for not. What
-   * differs is what to do about it: put back something that was turned off,
-   * put back a default that was cleared, or simply type.
-   */
-  function rowState(key: string, hide?: { block?: string; flag?: string; parts?: Array<[string, string]> }) {
+  /** Everything the panel needs to say about one row, and its switch. */
+  function rowState(key: string) {
+    const hide = ROW_HIDE[key];
     const spec = ROW_SOURCES[key];
     const storage = spec?.storage ?? key;
-    const shown = spec ? inEmail(spec.drawn) : true;
-    const off = hide?.parts
-      ? hide.parts.every(([, part]) => isHidden(part))
-      : hide
-        ? isHidden(hide.block, hide.flag)
-        : false;
-    const blocked = shown ? undefined : blockedBy(storage);
-    const restorable = RESTORABLE_FIELDS.has(storage) && flyer[storage] === "";
+    const off = drawn ? rowOff(flyer, key, drawn) : false;
+
+    // Turning a row on also puts back a default somebody cleared, because an
+    // empty string is exactly what stops that default from applying.
+    const restored =
+      RESTORABLE_FIELDS.has(storage) && flyer[storage] === ""
+        ? (storage as keyof ExtractedFlyer)
+        : undefined;
 
     const verb: MenuItem[] = [];
     if (hide?.parts) {
       for (const [what, part] of hide.parts) {
-        // Offering to hide a date the email is not printing says the wrong
-        // thing about why it is missing.
-        if (isHidden(part)) verb.push({ label: `Show ${what}`, onClick: () => toggle(part) });
-        else if (shown) verb.push({ label: `Hide ${what}`, onClick: () => toggle(part) });
+        const partOff = nameIsOff(part);
+        verb.push({ label: `${partOff ? "Show" : "Hide"} ${what}`, onClick: () => setOn(part, partOff) });
       }
-    } else if (blocked) {
-      // Nothing here would help.
-    } else if (off) {
-      verb.push({ label: "Show this", onClick: () => toggle(hide?.block, hide?.flag) });
-    } else if (shown && hide) {
-      verb.push({ label: "Hide this", onClick: () => toggle(hide.block, hide.flag) });
-    } else if (restorable) {
-      verb.push({ label: "Show this", onClick: () => setField(storage as keyof ExtractedFlyer, undefined as never) });
+    } else if (hide?.flag) {
+      verb.push({
+        label: off ? "Show this" : "Hide this",
+        onClick: () => setField(hide.flag as never, (off ? undefined : true) as never),
+      });
+    } else if (hide?.block) {
+      verb.push({
+        label: off ? "Show this" : "Hide this",
+        onClick: () => setOn(hide.block!, off, off ? restored : undefined),
+      });
     }
 
-    // A row that is off says so with its badge, and the verb says what to do.
-    // A row that is simply empty has neither, so it gets the one line that
-    // explains it: there is nothing wrong, there is just nothing in it.
-    const note = shown
-      ? undefined
-      : blocked ?? (verb.length > 0 ? undefined : "Type here to add it.");
-
-    return { shown, off, verb, note };
+    const note = off ? undefined : stillEmpty(storage);
+    return { off, verb, note };
   }
 
   const blockMenu = (block: BlockDef, verb: MenuItem[]): MenuItem[] => {
@@ -415,10 +402,10 @@ function SectionPanel({ name, drawnFields, drawnSections, onBack }: { name: stri
   /** One block's control, plus the gap the email draws inside it. */
   function blockRows(block: BlockDef): React.ReactNode {
     const label = LABELS[block.name] ?? block.label;
-    const state = rowState(block.name, BLOCK_HIDE[block.name]);
+    const state = rowState(block.name);
     const menu = blockMenu(block, state.verb);
     const wrap = (children: React.ReactNode, note?: string) => (
-      <Row key={block.name} label={label} menu={menu} notShown={!state.shown} dim={state.off} note={state.note ?? note}>
+      <Row key={block.name} label={label} menu={menu} off={state.off} note={state.note ?? note}>
         {children}
       </Row>
     );
@@ -445,7 +432,7 @@ function SectionPanel({ name, drawnFields, drawnSections, onBack }: { name: stri
       // which is why the address lives in here rather than beside it.
       case "eventDateTime":
         return (
-          <Row key={block.name} label={label} menu={menu} notShown={!state.shown} dim={state.off} note={state.note}>
+          <Row key={block.name} label={label} menu={menu} off={state.off} note={state.note}>
             <RichInput
               {...rich}
               fieldName="eventDate"
@@ -476,12 +463,11 @@ function SectionPanel({ name, drawnFields, drawnSections, onBack }: { name: stri
             <div className="mt-3 space-y-3">
               {linesIn("eventTime").map(lineRow)}
               {(() => {
-                const address = rowState("heroAddress", BLOCK_HIDE.heroAddress);
+                const address = rowState("heroAddress");
                 return (
                   <Row
                     label={LABELS.heroAddress}
-                    notShown={!address.shown}
-                    dim={address.off}
+                    off={address.off}
                     note={address.note}
                     menu={address.verb}
                   >
@@ -567,13 +553,12 @@ function SectionPanel({ name, drawnFields, drawnSections, onBack }: { name: stri
   /** What a section draws after its blocks and never rearranges. */
   function tailRow(slot: string): React.ReactNode {
     if (slot === "bodyParagraphs") {
-      const state = rowState("bodyParagraphs", BLOCK_HIDE.bodyParagraphs);
+      const state = rowState("bodyParagraphs");
       return (
         <Row
           key={slot}
           label={LABELS.bodyParagraphs}
-          notShown={!state.shown}
-          dim={state.off}
+          off={state.off}
           menu={state.verb}
           note={state.note ?? "Enter for a new line, twice for a blank one."}
         >
@@ -589,13 +574,12 @@ function SectionPanel({ name, drawnFields, drawnSections, onBack }: { name: stri
       );
     }
     if (slot === "galleryLabel") {
-      const state = rowState("galleryLabel", BLOCK_HIDE.galleryLabel);
+      const state = rowState("galleryLabel");
       return (
         <Row
           key={slot}
           label={LABELS.galleryLabel}
-          notShown={!state.shown}
-          dim={state.off}
+          off={state.off}
           menu={state.verb}
           note={state.note}
         >
@@ -702,9 +686,7 @@ function SectionPanel({ name, drawnFields, drawnSections, onBack }: { name: stri
         </button>
         <div className="flex items-center gap-2">
           <h2 className="flex-1 truncate text-[16px] font-semibold leading-tight text-[#1B1D1C]">{name}</h2>
-          {/* The same badge a row wears, for the same reason: turned off and
-              empty both end as nothing in the inbox. */}
-          {(hiddenSection || (drawnSections.length > 0 && !drawnSections.includes(name))) && <Pill>Not shown</Pill>}
+          {hiddenSection && <Pill>Hidden</Pill>}
           <EyeButton
             hidden={hiddenSection}
             what={`the ${name.toLowerCase()}`}

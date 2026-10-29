@@ -154,24 +154,21 @@ export function Menu({
 export function Row({
   label,
   note,
-  notShown,
-  dim,
+  off,
   menu,
   children,
 }: {
   label: string;
   note?: string;
   /**
-   * The email is not drawing this.
+   * This line is not in the email.
    *
-   * One badge for every reason, because from the reader's side there is only
-   * one outcome: it is not in what gets sent. Whether that is because it was
-   * turned off, because nothing was ever typed in it, or because the band it
-   * belongs to is not there either, is what the note underneath is for.
+   * One state for every reason it could be out — turned off, never written by
+   * the draft, or written and not printed — because from the reader's side
+   * there is only one outcome. It greys, it says so, and its menu stays on
+   * screen so the switch is always within reach.
    */
-  notShown?: boolean;
-  /** Turned off deliberately, which is the one case worth dimming. */
-  dim?: boolean;
+  off?: boolean;
   menu?: MenuItem[];
   children: React.ReactNode;
 }) {
@@ -179,13 +176,11 @@ export function Row({
     <div className="group/row">
       <div className="flex items-center gap-2 mb-1">
         <span className="truncate text-[12px] font-medium text-[#495250]">{label}</span>
-        {notShown && <Pill>Not shown</Pill>}
+        {off && <Pill>Hidden</Pill>}
         <span className="flex-1" aria-hidden />
-        {menu && menu.length > 0 && <RowMenu items={menu} what={label} always={notShown} />}
+        {menu && menu.length > 0 && <RowMenu items={menu} what={label} always={off} />}
       </div>
-      {/* A box with nothing in it is a box to type in, so it is never dimmed —
-          only one you turned off is. */}
-      <div className={dim ? "opacity-45 transition-opacity" : "transition-opacity"}>{children}</div>
+      <div className={off ? "opacity-45 transition-opacity" : "transition-opacity"}>{children}</div>
       {note && <p className="mt-1 text-[11px] leading-snug text-[#6A736F]">{note}</p>}
     </div>
   );

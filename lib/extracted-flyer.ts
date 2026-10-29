@@ -210,6 +210,21 @@ export interface ExtractedFlyer {
    */
   hiddenBlocks?: string[];
 
+  /**
+   * Blocks someone has asked for that the email is not printing yet.
+   *
+   * The other direction from `hiddenBlocks`, and it exists because a draft can
+   * arrive with a line missing rather than hidden — an informational flyer has
+   * no date, no time and no RSVP, so the email prints nothing for them. Those
+   * rows show as turned off, and turning one back on has to be something that
+   * sticks even while the box is still empty, or the control would do nothing
+   * you could see.
+   *
+   * It changes nothing about what is rendered: an empty block prints nothing
+   * whether it is in this list or not. It only decides how the row reads.
+   */
+  shownBlocks?: string[];
+
   heroSectionHidden?: boolean;
   storySectionHidden?: boolean;
   secondaryImageSectionHidden?: boolean;

@@ -493,7 +493,7 @@ export default function EditorLayout() {
           ].join(" ")}
         >
           <div className="eb-scroll h-full w-[360px] overflow-y-auto pb-8">
-            <Inspector selected={selected} onSelect={select} drawnFields={drawn.fields} drawnSections={drawn.sections} />
+            <Inspector selected={selected} onSelect={select} drawnFields={drawn.fields} />
           </div>
         </aside>
 

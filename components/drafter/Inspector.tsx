@@ -9,14 +9,13 @@ import {
   EmailButtonField,
   SenderNameField,
 } from "@/components/drafter/RichEditor";
-import { combineDateTime, splitDateTime } from "@/lib/date-time-line";
 import { PhotoField } from "@/components/drafter/PhotoField";
 import { ColorRow } from "@/components/drafter/ColorRow";
 import { SectionList } from "@/components/drafter/SectionList";
 import { Orderable, type OrderableRow } from "@/components/drafter/Orderable";
 import { Button, EyeButton, Group, Pill, Row, inputClass, type MenuItem } from "@/components/drafter/ui";
 import { orderedBlocks, sectionDef, sectionSlots, type BlockDef } from "@/lib/eblast-blocks";
-import { SECTION_PANELS, ROW_SOURCES, ROW_HIDE, RESTORABLE_FIELDS, nameOff, rowOff } from "@/lib/eblast-inspector";
+import { SECTION_PANELS, ROW_SOURCES, ROW_HIDE, RESTORABLE_FIELDS, rowOff } from "@/lib/eblast-inspector";
 import {
   communityAddressLine,
   defaultFooterName,
@@ -42,7 +41,8 @@ const LABELS: Record<string, string> = {
   rsvpLabel: "RSVP label",
   headline: "Headline",
   scriptSubheadline: "Script subheading",
-  eventDateTime: "Date and time",
+  eventDate: "Date",
+  eventTime: "Time",
   heroAddress: "Address",
   ctaButtonLabel: "Call button",
   storyEyebrow: "Eyebrow",
@@ -50,7 +50,8 @@ const LABELS: Record<string, string> = {
   bodyParagraphs: "Body",
   galleryLabel: "Label",
   ctaRsvpLabel: "RSVP label",
-  ctaEventDateTime: "Date and time",
+  ctaEventDate: "Date",
+  ctaEventTime: "Time",
   finalCtaButtonLabel: "Call button",
   footerButtonLabel: "Website button",
   thankYouText: "Closing",
@@ -170,7 +171,7 @@ function EmailPanel({ onSelect }: { onSelect: (section: string) => void }) {
 // ── One section ─────────────────────────────────────────────────────────────
 
 function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields: string[]; onBack: () => void }) {
-  const { fields, setField, setFields, community, images, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
+  const { fields, setField, setFields, community, activeEditorRef, activeEditorCallback, activeFieldNameRef } = useDraft();
   const [confirming, setConfirming] = useState<string | null>(null);
 
   const def = sectionDef(name);
@@ -327,26 +328,13 @@ function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields
     setFields(patch);
   };
 
-  /** Whether one name is off, by the rule the guard checks. */
-  const nameIsOff = (nm: string) => (drawn ? nameOff(flyer, nm, drawn) : false);
-
   /**
    * Why a row that is on still prints nothing.
    *
    * Two fields need something else to be there. This never withholds the
    * control — it answers the question the control leaves behind.
    */
-  const stillEmpty = (storage: string): string | undefined => {
-    if (storage === "heroAddress" && drawn && !drawn.includes("eventDate") && !drawn.includes("eventTime")) {
-      return "The email prints this inside the date band, so it needs a date or a time too.";
-    }
-    if (storage === "galleryLabel" && images.gallery.length === 0) {
-      return "The email prints this above the photos, so it needs at least one.";
-    }
-    return undefined;
-  };
-
-  /** Everything the panel needs to say about one row, and its switch. */
+  /** Whether a row is off, and the one menu entry that changes it. */
   function rowState(key: string) {
     const hide = ROW_HIDE[key];
     const spec = ROW_SOURCES[key];
@@ -361,12 +349,7 @@ function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields
         : undefined;
 
     const verb: MenuItem[] = [];
-    if (hide?.parts) {
-      for (const [what, part] of hide.parts) {
-        const partOff = nameIsOff(part);
-        verb.push({ label: `${partOff ? "Show" : "Hide"} ${what}`, onClick: () => setOn(part, partOff) });
-      }
-    } else if (hide?.flag) {
+    if (hide?.flag) {
       verb.push({
         label: off ? "Show this" : "Hide this",
         onClick: () => setField(hide.flag as never, (off ? undefined : true) as never),
@@ -378,8 +361,7 @@ function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields
       });
     }
 
-    const note = off ? undefined : stillEmpty(storage);
-    return { off, verb, note };
+    return { off, verb };
   }
 
   const blockMenu = (block: BlockDef, verb: MenuItem[]): MenuItem[] => {
@@ -405,7 +387,7 @@ function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields
     const state = rowState(block.name);
     const menu = blockMenu(block, state.verb);
     const wrap = (children: React.ReactNode, note?: string) => (
-      <Row key={block.name} label={label} menu={menu} off={state.off} note={state.note ?? note}>
+      <Row key={block.name} label={label} menu={menu} off={state.off} note={note}>
         {children}
       </Row>
     );
@@ -430,55 +412,52 @@ function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields
       // One item, three lines. The email draws the date, the time and the
       // address inside a single bordered band, so the band is what moves —
       // which is why the address lives in here rather than beside it.
-      case "eventDateTime":
+      // Three boxes, each its own field with its own switch. The email draws
+      // them inside one bordered band and moves the band as a piece, so they
+      // share a place in the order — which is why the move controls sit on the
+      // date, beside the grip that does the same thing.
+      case "eventDateTime": {
+        const date = rowState("eventDate");
+        const time = rowState("eventTime");
+        const address = rowState("heroAddress");
         return (
-          <Row key={block.name} label={label} menu={menu} off={state.off} note={state.note}>
-            <RichInput
-              {...rich}
-              fieldName="eventDate"
-              value={combineDateTime(fields!.eventDate, fields!.eventTime)}
-              placeholder="Wednesday, May 13"
-              onValueChange={(html) => {
-                // Named one at a time rather than spread: splitDateTime answers
-                // in `date` and `time`, the draft holds `eventDate` and
-                // `eventTime`, and a spread of the one into the other type-
-                // checks while writing to two fields that do not exist.
-                const { date, time } = splitDateTime(html);
+          <React.Fragment key={block.name}>
+            <Row label={LABELS.eventDate} menu={blockMenu(block, date.verb)} off={date.off}>
+              <RichInput
+                {...rich}
+                fieldName="eventDate"
+                value={fields!.eventDate ?? ""}
+                placeholder="Wednesday, May 13"
                 // Editing the date answers the question, so the warning goes with it.
-                setFields({ eventDate: date, eventTime: time, dateConflict: undefined });
-              }}
-            />
-            <p className="mt-1 text-[11px] leading-snug text-[#6A736F]">The date, then the time on the next line.</p>
-            {fields!.dateConflict && (
-              <div className="mt-1.5 rounded-md border border-[#EFD9D7] bg-[#FBF2F1] px-2.5 py-2">
-                <p className="text-[11.5px] leading-snug text-[#A3302B]">{fields!.dateConflict}</p>
-                <button
-                  onClick={() => setField("dateConflict", undefined)}
-                  className="mt-1 text-[11.5px] font-medium text-[#A3302B] underline underline-offset-2"
-                >
-                  The date is right
-                </button>
-              </div>
-            )}
-            <div className="mt-3 space-y-3">
-              {linesIn("eventTime").map(lineRow)}
-              {(() => {
-                const address = rowState("heroAddress");
-                return (
-                  <Row
-                    label={LABELS.heroAddress}
-                    off={address.off}
-                    note={address.note}
-                    menu={address.verb}
+                onValueChange={(html) => setFields({ eventDate: html, dateConflict: undefined })}
+              />
+              {fields!.dateConflict && (
+                <div className="mt-1.5 rounded-md border border-[#EFD9D7] bg-[#FBF2F1] px-2.5 py-2">
+                  <p className="text-[11.5px] leading-snug text-[#A3302B]">{fields!.dateConflict}</p>
+                  <button
+                    onClick={() => setField("dateConflict", undefined)}
+                    className="mt-1 text-[11.5px] font-medium text-[#A3302B] underline underline-offset-2"
                   >
-                    <RichInput {...rich} fieldName="heroAddress" value={fields!.heroAddress ?? communityAddressLine(community)}
-                      placeholder="Street, city, state" onValueChange={(html) => setField("heroAddress", html)} />
-                  </Row>
-                );
-              })()}
-            </div>
-          </Row>
+                    The date is right
+                  </button>
+                </div>
+              )}
+            </Row>
+
+            <Row label={LABELS.eventTime} menu={time.verb} off={time.off}>
+              <RichInput {...rich} fieldName="eventTime" value={fields!.eventTime ?? ""}
+                placeholder="2:00 PM" onValueChange={(html) => setField("eventTime", html)} />
+            </Row>
+
+            {linesIn("eventTime").map(lineRow)}
+
+            <Row label={LABELS.heroAddress} menu={address.verb} off={address.off}>
+              <RichInput {...rich} fieldName="heroAddress" value={fields!.heroAddress ?? communityAddressLine(community)}
+                placeholder="Street, city, state" onValueChange={(html) => setField("heroAddress", html)} />
+            </Row>
+          </React.Fragment>
         );
+      }
       case "ctaButtonLabel":
         return wrap(
           <CallButtonField {...rich} fieldName="ctaButtonLabel" value={fields!.ctaButtonLabel ?? ""}
@@ -500,20 +479,23 @@ function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields
             onValueChange={(html) => setField("ctaRsvpLabel", html)} />,
           "Follows the hero until you change it here.",
         );
-      case "ctaEventDateTime":
-        return wrap(
-          <RichInput
-            {...rich}
-            fieldName="ctaEventDate"
-            value={combineDateTime(fields!.ctaEventDate ?? fields!.eventDate, fields!.ctaEventTime ?? fields!.eventTime)}
-            placeholder="Wednesday, May 13"
-            onValueChange={(html) => {
-              const { date, time } = splitDateTime(html);
-              setFields({ ctaEventDate: date, ctaEventTime: time });
-            }}
-          />,
-          "Follows the hero until you change it here.",
+      // Two boxes, for the same reason the hero has three.
+      case "ctaEventDateTime": {
+        const date = rowState("ctaEventDate");
+        const time = rowState("ctaEventTime");
+        return (
+          <React.Fragment key={block.name}>
+            <Row label={LABELS.ctaEventDate} menu={blockMenu(block, date.verb)} off={date.off} note="Follows the hero until you change it here.">
+              <RichInput {...rich} fieldName="ctaEventDate" value={fields!.ctaEventDate ?? fields!.eventDate ?? ""}
+                placeholder="Wednesday, May 13" onValueChange={(html) => setField("ctaEventDate", html)} />
+            </Row>
+            <Row label={LABELS.ctaEventTime} menu={time.verb} off={time.off}>
+              <RichInput {...rich} fieldName="ctaEventTime" value={fields!.ctaEventTime ?? fields!.eventTime ?? ""}
+                placeholder="2:00 PM" onValueChange={(html) => setField("ctaEventTime", html)} />
+            </Row>
+          </React.Fragment>
         );
+      }
       case "finalCtaButtonLabel":
         return wrap(
           <CallButtonField {...rich} fieldName="finalCtaButtonLabel" value={fields!.finalCtaButtonLabel ?? fields!.ctaButtonLabel ?? ""}
@@ -560,7 +542,7 @@ function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields
           label={LABELS.bodyParagraphs}
           off={state.off}
           menu={state.verb}
-          note={state.note ?? "Enter for a new line, twice for a blank one."}
+          note="Enter for a new line, twice for a blank one."
         >
           <RichBodyEditor
             paragraphs={fields!.bodyParagraphs}
@@ -581,7 +563,6 @@ function SectionPanel({ name, drawnFields, onBack }: { name: string; drawnFields
           label={LABELS.galleryLabel}
           off={state.off}
           menu={state.verb}
-          note={state.note}
         >
           <RichInput {...rich} fieldName="galleryLabel" value={fields!.galleryLabel ?? defaultGalleryLabel(community)}
             placeholder="A small label above the photos" onValueChange={(html) => setField("galleryLabel", html)} />

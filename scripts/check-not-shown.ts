@@ -105,8 +105,10 @@ const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opt
     ["footerSenderName", (f) => ({ ...f, hiddenBlocks: ["footerSenderName"] })],
     ["footerName", (f) => ({ ...f, hiddenBlocks: ["footerName"] })],
     ["footerSenderEmail", (f) => ({ ...f, hiddenBlocks: ["footerSenderEmail"] })],
-    ["eventDateTime", (f) => ({ ...f, hiddenBlocks: ["eventDate", "eventTime"] })],
-    ["ctaEventDateTime", (f) => ({ ...f, hiddenBlocks: ["ctaEventDate", "ctaEventTime"] })],
+    ["eventDate", (f) => ({ ...f, hiddenBlocks: ["eventDate"] })],
+    ["eventTime", (f) => ({ ...f, hiddenBlocks: ["eventTime"] })],
+    ["ctaEventDate", (f) => ({ ...f, hiddenBlocks: ["ctaEventDate"] })],
+    ["ctaEventTime", (f) => ({ ...f, hiddenBlocks: ["ctaEventTime"] })],
     ["ctaButtonLabel", (f) => ({ ...f, ctaButtonHidden: true })],
     ["finalCtaButtonLabel", (f) => ({ ...f, finalCtaButtonHidden: true })],
     ["footerButtonLabel", (f) => ({ ...f, footerButtonHidden: true })],
@@ -149,7 +151,7 @@ const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opt
     eventTime: "",
   };
   const drawn = draw(informational);
-  const OUT = ["rsvpLabel", "scriptSubheadline", "eventDateTime", "heroAddress"];
+  const OUT = ["rsvpLabel", "scriptSubheadline", "eventDate", "eventTime", "heroAddress"];
 
   for (const row of OUT) {
     if (!rowOff(informational, row, drawn)) {
@@ -165,7 +167,7 @@ const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opt
 
   // The switch, on each of them, with the box still empty.
   for (const row of OUT) {
-    const names = ROW_HIDE[row].parts?.map(([, n]) => n) ?? [ROW_HIDE[row].block!];
+    const names = [ROW_HIDE[row].block!];
     const asked = { ...informational, shownBlocks: names };
     if (rowOff(asked, row, drawn)) {
       fail(`${row} was switched on and stayed off, so the control does nothing`);
@@ -191,7 +193,7 @@ const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opt
       }
       continue;
     }
-    const names = hide.parts?.map(([, n]) => n) ?? [hide.block!];
+    const names = [hide.block!];
     // Empty it the way a draft that never wrote it would.
     const emptied: any = { ...bare };
     for (const n of names) emptied[n] = "";
@@ -224,6 +226,42 @@ const draw = (flyer: any) => drawnFieldsIn(buildEblastHtml(flyer, community, opt
     const restored = draw({ ...full, [field]: undefined });
     if (!ROW_SOURCES[row].drawn.some((n) => restored.has(n))) {
       fail(`${field} has no default to come back, so "Show this" would do nothing`);
+    }
+  }
+}
+
+// ── 5. Asking for the address on an eblast with no event prints it, and
+//      nothing made before that switch existed changes ────────────────────
+//
+// The bordered band holds the date, the time and the address, and it has
+// always needed a date or a time to appear at all. So on an informational
+// eblast the address had nowhere to print and no way to be asked for, and
+// switching it on in the panel would have done nothing anybody could see.
+{
+  const noEvent: any = { ...full, eventDate: "", eventTime: "" };
+  if (drawnFieldsIn(buildEblastHtml(noEvent, community, opts)).has("heroAddress")) {
+    fail("an eblast with no event prints the address without being asked");
+  }
+
+  const asked = { ...noEvent, shownBlocks: ["heroAddress"] };
+  if (!drawnFieldsIn(buildEblastHtml(asked, community, opts)).has("heroAddress")) {
+    fail("the address was switched on and the email still will not print it");
+  }
+  if (rowOff(asked, "heroAddress", draw(asked))) {
+    fail("the address was switched on and the panel still reads it as off");
+  }
+
+  // Hiding outranks asking, or the switch would only work one way.
+  const both = { ...asked, hiddenBlocks: ["heroAddress"] };
+  if (drawnFieldsIn(buildEblastHtml(both, community, opts)).has("heroAddress")) {
+    fail("the address was hidden and asked for at once, and hiding lost");
+  }
+
+  // A draft from before the switch existed carries no shownBlocks, so every
+  // eblast already sent or waiting renders exactly as it did.
+  for (const [what, flyer] of [["an event draft", full], ["an informational draft", noEvent]] as const) {
+    if (buildEblastHtml(flyer, community, opts) !== buildEblastHtml({ ...flyer, shownBlocks: [] }, community, opts)) {
+      fail(`${what} renders differently once shownBlocks exists but is empty`);
     }
   }
 }

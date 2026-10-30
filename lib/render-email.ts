@@ -447,9 +447,24 @@ export function buildEblastHtml(
 
   const showEventDate = !!flyer.eventDate && !isHidden(flyer, "eventDate");
   const showEventTime = !!flyer.eventTime && !isHidden(flyer, "eventTime");
-  const hasEventDateLine = showEventDate || showEventTime;
 
   const addressLine = flyer.heroAddress ?? communityAddressLine(community);
+
+  /**
+   * The bordered band holds the date, the time and the address, and it has
+   * always needed a date or a time to appear at all — so on an eblast with no
+   * event, the address had nowhere to print and no way to be asked for.
+   *
+   * It draws for the address on its own when the draft has explicitly asked
+   * for it, which is a thing only the editor's switch writes. No draft made
+   * before that switch existed carries it, so nothing already sent or waiting
+   * renders any differently than it did.
+   */
+  const askedForAddress =
+    (flyer.shownBlocks ?? []).includes("heroAddress") &&
+    !isHidden(flyer, "heroAddress") &&
+    hasText(addressLine);
+  const hasEventDateLine = showEventDate || showEventTime || askedForAddress;
 
   // RSVP label from the flyer ("RSVP Required" / "RSVP Requested")
   const rsvpLabel = flyer.rsvpLabel?.trim() ?? "";

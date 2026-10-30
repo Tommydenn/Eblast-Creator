@@ -220,8 +220,11 @@ export interface ExtractedFlyer {
    * sticks even while the box is still empty, or the control would do nothing
    * you could see.
    *
-   * It changes nothing about what is rendered: an empty block prints nothing
-   * whether it is in this list or not. It only decides how the row reads.
+   * It changes nothing about what is rendered, with one exception: the hero's
+   * bordered band has always needed a date or a time to appear at all, so on
+   * an eblast with no event the address had nowhere to print. Asking for the
+   * address draws the band for it. No draft written before this list existed
+   * carries it, so nothing already sent renders differently.
    */
   shownBlocks?: string[];
 

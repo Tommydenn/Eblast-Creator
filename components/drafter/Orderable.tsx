@@ -140,7 +140,11 @@ export function Orderable({
                 </svg>
               </span>
             )}
-            <div className={movable ? "pl-5" : ""}>{row.node}</div>
+            {/* An item is usually one box, but the hero's band is three of
+                them — the date, the time and the address — which the email
+                draws inside one border and moves as a piece. They are spaced
+                like any other boxes; what they share is a place in the order. */}
+            <div className={`space-y-3.5 ${movable ? "pl-5" : ""}`}>{row.node}</div>
           </div>
         );
       })}

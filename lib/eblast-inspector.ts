@@ -121,7 +121,8 @@ export const ROW_SOURCES: Record<string, { storage: string; drawn: string[] }> =
   rsvpLabel: { storage: "rsvpLabel", drawn: ["rsvpLabel"] },
   headline: { storage: "headline", drawn: ["headline"] },
   scriptSubheadline: { storage: "scriptSubheadline", drawn: ["scriptSubheadline"] },
-  eventDateTime: { storage: "eventDate", drawn: ["eventDate", "eventTime"] },
+  eventDate: { storage: "eventDate", drawn: ["eventDate"] },
+  eventTime: { storage: "eventTime", drawn: ["eventTime"] },
   heroAddress: { storage: "heroAddress", drawn: ["heroAddress"] },
   ctaButtonLabel: { storage: "ctaButtonLabel", drawn: ["ctaButtonHidden"] },
   storyEyebrow: { storage: "storyEyebrow", drawn: ["storyEyebrow"] },
@@ -129,7 +130,8 @@ export const ROW_SOURCES: Record<string, { storage: string; drawn: string[] }> =
   bodyParagraphs: { storage: "bodyParagraphs", drawn: ["bodyParagraphs"] },
   galleryLabel: { storage: "galleryLabel", drawn: ["galleryLabel"] },
   ctaRsvpLabel: { storage: "ctaRsvpLabel", drawn: ["ctaRsvpLabel"] },
-  ctaEventDateTime: { storage: "ctaEventDate", drawn: ["ctaEventDate", "ctaEventTime"] },
+  ctaEventDate: { storage: "ctaEventDate", drawn: ["ctaEventDate"] },
+  ctaEventTime: { storage: "ctaEventTime", drawn: ["ctaEventTime"] },
   finalCtaButtonLabel: { storage: "finalCtaButtonLabel", drawn: ["finalCtaButtonHidden"] },
   footerButtonLabel: { storage: "footerButtonLabel", drawn: ["footerButtonHidden"] },
   thankYouText: { storage: "thankYouText", drawn: ["thankYouText"] },
@@ -175,19 +177,24 @@ export function drawnFieldsIn(html: string): Set<string> {
   return out;
 }
 
-/** How a row is turned off: by name, by a flag of its own, or line by line. */
+/**
+ * How a row is turned off: by name, or by a flag of its own.
+ *
+ * One switch per box. The hero's date, time and address used to be one row
+ * with two switches inside it and a third nested underneath; they are three
+ * boxes now, each answering only for itself.
+ */
 export interface HideSpec {
   block?: string;
   flag?: string;
-  /** Rows that hold two lines and turn each off separately. */
-  parts?: Array<[what: string, name: string]>;
 }
 
 export const ROW_HIDE: Record<string, HideSpec> = {
   rsvpLabel: { block: "rsvpLabel" },
   headline: { block: "headline" },
   scriptSubheadline: { block: "scriptSubheadline" },
-  eventDateTime: { parts: [["the date", "eventDate"], ["the time", "eventTime"]] },
+  eventDate: { block: "eventDate" },
+  eventTime: { block: "eventTime" },
   heroAddress: { block: "heroAddress" },
   bodyParagraphs: { block: "bodyParagraphs" },
   galleryLabel: { block: "galleryLabel" },
@@ -195,7 +202,8 @@ export const ROW_HIDE: Record<string, HideSpec> = {
   storyEyebrow: { block: "storyEyebrow" },
   storyScriptTitle: { block: "storyScriptTitle" },
   ctaRsvpLabel: { block: "ctaRsvpLabel" },
-  ctaEventDateTime: { parts: [["the date", "ctaEventDate"], ["the time", "ctaEventTime"]] },
+  ctaEventDate: { block: "ctaEventDate" },
+  ctaEventTime: { block: "ctaEventTime" },
   finalCtaButtonLabel: { flag: "finalCtaButtonHidden" },
   footerButtonLabel: { flag: "footerButtonHidden" },
   thankYouText: { block: "thankYouText" },
@@ -231,12 +239,11 @@ export function nameOff(flyer: Toggles, name: string, drawn: Set<string> | strin
   return !has(drawn, name);
 }
 
-/** Whether a whole row is off, which for a two-line row means both lines are. */
+/** Whether a row is off. */
 export function rowOff(flyer: Toggles, key: string, drawn: Set<string> | string[]): boolean {
   const hide = ROW_HIDE[key];
   const spec = ROW_SOURCES[key];
   if (!hide || !spec) return false;
-  if (hide.parts) return hide.parts.every(([, name]) => nameOff(flyer, name, drawn));
   // A button carries no words, so its flag is the whole story.
   if (hide.flag) return !!flyer[hide.flag];
   return nameOff(flyer, hide.block ?? key, drawn);

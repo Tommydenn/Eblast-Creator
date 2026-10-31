@@ -119,15 +119,6 @@ const GLOBAL_POINTE_BRAND = {
   fontsSource: "brand-guide-extracted" as const,
 };
 
-const BROADWELL_BRAND = {
-  primary: "#005E85",    // PMS 7469 C — deep teal blue
-  accent: "#CFB400",     // PMS 606 C — gold
-  background: "#669BB4", // PMS 7469 C 60% tint — light steel blue
-  fontHeadline: "Asul",
-  fontBody: "Raleway",
-  paletteSource: "brand-guide-extracted" as const,
-  fontsSource: "brand-guide-extracted" as const,
-};
 
 // Placeholder palette sampled from the logo artwork (#4d646e slate wordmark,
 // #98afb7 sage branch) so previews look right until the real brand colors are
@@ -682,16 +673,17 @@ export const seedCommunities: SeedCommunity[] = [
   },
   {
     community: {
-      slug: "broadwell",
-      displayName: "Broadwell",
-      shortName: "Broadwell",
-      brandFamily: "Broadwell",
+      slug: "talamore-plymouth",
+      displayName: "Talamore Plymouth",
+      shortName: "Talamore",
+      brandFamily: "Talamore",
       type: "mixed",
       address: { street: "3025 Harbor Lane N", city: "Plymouth", state: "MN", zip: "55447" },
-      websiteUrl: "https://broadwellplymouth.com",
+      websiteUrl: "talamoreseniorliving.com/plymouth-mn",
+      trackingPhone: "763-316-3701",
       hubspot: {},
-      brand: BROADWELL_BRAND,
-      logos: twoLogos("broadwell"),
+      brand: TALAMORE_BRAND,
+      logos: twoLogos("talamore-plymouth"),
       socials: {},
     },
     senders: [{ name: "Matthew Gregar", email: "mgregar@greatlakesmc.com", isPrimary: true }],
@@ -744,7 +736,7 @@ const ACRONYM_BY_SLUG: Record<string, string> = {
   "global-pointe": "GP",
   "seven-hills": "SH",
   "orchards-of-minnetonka": "OM",
-  "broadwell": "BWP",
+  "talamore-plymouth": "BWP",
   "the-preserve-of-roseville": "TPR",
   "talamore-grand-rapids": "PGR",
 };

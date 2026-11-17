@@ -13,8 +13,13 @@
  * <div> of blocks.
  *
  * The editor half of this — toggling a list on and off in the contentEditable
- * — needs a browser DOM and so is not exercised here. What is checked is the
- * stored shape both sides agree on, and everything the renderer does with it.
+ * — needs a browser DOM and so is not exercised here. That gap is why the
+ * first version of this feature shipped turning a whole story into one bullet:
+ * body copy is usually stored as ONE paragraph carrying its own breaks, the
+ * toggle worked a block at a time, and a block is not a line. What is checked
+ * here is the stored shape both sides agree on, and everything the renderer
+ * does with it, including the arrays that bulleting part of such a paragraph
+ * produces.
  *
  *   npx tsx scripts/check-body-lists.ts
  */
@@ -225,6 +230,38 @@ function bodyBlock(html: string): string {
   // Two different kinds in a row are two lists, so they do get separated.
   const mixed = withParagraphSpacing([makeListItem("ul", "a"), makeListItem("ol", "b")]);
   if (mixed.length !== 3 || mixed[1] !== "") fail("a bullet running into a number was not separated");
+}
+
+// ── 9. The shapes bulleting a real body produces ───────────────────────────
+//
+// Body copy is usually stored as ONE paragraph carrying its own breaks, so
+// bulleting part of it splits that paragraph into a line each and wraps only
+// the lines that were chosen. These are the arrays that comes out, checked
+// against what the email makes of them. The split itself happens in the
+// browser and is not exercised here — see the note at the top of this file.
+{
+  // "Hello,<br><br>I hope…<br><br>My name…" with only the last line bulleted.
+  const onlyLast = ["Hello,", "", "I hope you are well.", "", makeListItem("ul", "My name is Angie.")];
+  const a = bodyBlock(render(onlyLast));
+  if ((a.match(/<li/g) ?? []).length !== 1) fail("bulleting one line of a paragraph made more than one item");
+  if (!/Hello,/.test(a) || !/I hope you are well\./.test(a)) fail("bulleting one line lost the lines around it");
+  const aOrder: string[] = [];
+  for (const m of a.matchAll(/<(p|ul|ol)[\s>]/g)) aOrder.push(m[1]);
+  if (aOrder.join(" ") !== "p p p p ul") fail(`bulleting the last line gave "${aOrder.join(" ")}"`);
+
+  // Two lines bulleted, the blank that separated them dropped so the list is
+  // one list rather than two with a gap down the middle.
+  const twoLines = ["Hello,", "", makeListItem("ul", "I hope you are well."), makeListItem("ul", "My name is Angie.")];
+  const b = bodyBlock(render(twoLines));
+  if ((b.match(/<ul[\s>]/g) ?? []).length !== 1) fail("two bulleted lines did not make one list");
+  if ((b.match(/<li/g) ?? []).length !== 2) fail("two bulleted lines did not make two items");
+
+  // The same thing with the blank left in would have made two lists, which is
+  // the shape this is here to rule out.
+  const withGap = ["Hello,", "", makeListItem("ul", "One"), "", makeListItem("ul", "Two")];
+  if ((bodyBlock(render(withGap)).match(/<ul[\s>]/g) ?? []).length !== 2) {
+    fail("a blank line between two items no longer separates them, so dropping it would be pointless");
+  }
 }
 
 // ── Report ─────────────────────────────────────────────────────────────────

@@ -390,30 +390,107 @@ export function blocksToHtml(paras: string[]): string {
 // is untouched by that, because it lives on spans inside the line and the line
 // is only ever moved, never rewritten.
 
-/** The blocks of the editor a selection touches: its <div>s and its <li>s. */
-function selectedLines(root: HTMLElement): HTMLElement[] {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return [];
-  const range = sel.getRangeAt(0);
-  if (!root.contains(range.commonAncestorContainer)) return [];
-
-  const lines: HTMLElement[] = [];
+/** Every block of the editor: its paragraphs, and the items of its lists. */
+function blocksOf(root: HTMLElement): HTMLElement[] {
+  const out: HTMLElement[] = [];
   for (const child of Array.from(root.children)) {
     if (child.tagName === "UL" || child.tagName === "OL") {
       for (const li of Array.from(child.children)) {
-        if (li.tagName === "LI") lines.push(li as HTMLElement);
+        if (li.tagName === "LI") out.push(li as HTMLElement);
       }
     } else {
-      lines.push(child as HTMLElement);
+      out.push(child as HTMLElement);
     }
   }
-  return lines.filter((el) => range.intersectsNode(el));
+  return out;
+}
+
+/**
+ * The lines of a block, as ranges over it.
+ *
+ * A block is not a line. Body copy is usually stored as a single paragraph
+ * carrying its own breaks — "Hello,<br><br>I hope…" is one block and three
+ * lines — so treating a block as a line turned a whole story into one bullet.
+ * A line is what sits between two breaks, wherever in the markup those breaks
+ * happen to be nested.
+ */
+function lineRangesOf(block: HTMLElement): Range[] {
+  const breaks: Element[] = [];
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_ELEMENT, null);
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    if ((n as Element).tagName === "BR") breaks.push(n as Element);
+  }
+
+  const ranges: Range[] = [];
+  let start: { node: Node; offset: number } = { node: block, offset: 0 };
+  for (const br of breaks) {
+    const r = document.createRange();
+    r.setStart(start.node, start.offset);
+    r.setEndBefore(br);
+    ranges.push(r);
+    const after = document.createRange();
+    after.setStartAfter(br);
+    start = { node: after.startContainer, offset: after.startOffset };
+  }
+  const tail = document.createRange();
+  tail.setStart(start.node, start.offset);
+  tail.setEnd(block, block.childNodes.length);
+  ranges.push(tail);
+  return ranges;
+}
+
+/** Whether the selection reaches into one line. */
+function lineTouched(sel: Range, line: Range): boolean {
+  try {
+    if (sel.collapsed) return line.comparePoint(sel.startContainer, sel.startOffset) === 0;
+    return (
+      sel.compareBoundaryPoints(Range.END_TO_START, line) < 0 &&
+      sel.compareBoundaryPoints(Range.START_TO_END, line) > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Replace a block with one of its own kind per line it holds.
+ *
+ * Every line is cloned before anything moves: taking the first one out would
+ * detach the nodes the ranges of all the others are described by. Cloning a
+ * range reproduces the elements enclosing it, so a line that was inside a
+ * coloured span comes out still inside one.
+ */
+function splitIntoLines(block: HTMLElement, ranges: Range[]): HTMLElement[] {
+  if (ranges.length <= 1) return [block];
+  const parts = ranges.map((r) => r.cloneContents());
+  const made = parts.map((frag) => {
+    const el = document.createElement(block.tagName.toLowerCase());
+    el.appendChild(frag);
+    if (!el.firstChild) el.appendChild(document.createElement("br"));
+    return el;
+  });
+  block.replaceWith(...made);
+  return made;
+}
+
+const isBlankBlock = (el: HTMLElement) => (el.textContent ?? "").trim() === "";
+
+/** The lines the selection reaches, without moving anything. */
+function touchedBlocks(root: HTMLElement, sel: Range): HTMLElement[] {
+  return blocksOf(root).filter((block) =>
+    lineRangesOf(block).some((r) => lineTouched(sel, r)),
+  );
 }
 
 /** Which kind of list the selection is in, when every line of it is in one. */
 export function queryListState(root: HTMLElement | null): ListKind | null {
   if (!root) return null;
-  const lines = selectedLines(root);
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) return null;
+  const lines = touchedBlocks(root, range);
   if (lines.length === 0) return null;
   const kinds = lines.map((el) =>
     el.tagName === "LI" ? (el.parentElement?.tagName.toLowerCase() as ListKind) : null,
@@ -441,12 +518,48 @@ function selectAcross(lines: HTMLElement[]): void {
  * three.
  */
 export function toggleList(root: HTMLElement, kind: ListKind): boolean {
-  const lines = selectedLines(root);
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const selRange = sel.getRangeAt(0);
+  if (!root.contains(selRange.commonAncestorContainer)) return false;
+
+  // Which lines are wanted is settled before anything moves. Splitting the
+  // first block detaches the very nodes the selection is described by, so
+  // asking afterwards would get the wrong answer for every block after it.
+  const plan = blocksOf(root).map((block) => {
+    const ranges = lineRangesOf(block);
+    return { block, ranges, picked: ranges.map((r) => lineTouched(selRange, r)) };
+  });
+
+  const lines: HTMLElement[] = [];
+  for (const { block, ranges, picked } of plan) {
+    if (!picked.some(Boolean)) continue;
+    const parts = splitIntoLines(block, ranges);
+    parts.forEach((el, i) => { if (picked[i]) lines.push(el); });
+  }
   if (lines.length === 0) return false;
 
   const alreadyThisKind = lines.every(
     (el) => el.tagName === "LI" && el.parentElement?.tagName.toLowerCase() === kind,
   );
+
+  // The blank lines that separated the chosen paragraphs are doing the job a
+  // list does with its own spacing, so the ones caught in the middle of the
+  // run come out rather than becoming empty bullets. The ones at either end
+  // are not between anything and stay where they are.
+  if (!alreadyThisKind) {
+    const first = lines.findIndex((el) => !isBlankBlock(el));
+    let last = -1;
+    lines.forEach((el, i) => { if (!isBlankBlock(el)) last = i; });
+    if (first !== -1) {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (i > first && i < last && isBlankBlock(lines[i])) {
+          lines[i].remove();
+          lines.splice(i, 1);
+        }
+      }
+    }
+  }
 
   const replaced: HTMLElement[] = [];
 

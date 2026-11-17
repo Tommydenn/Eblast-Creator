@@ -1,6 +1,8 @@
 // The structured shape Claude returns from a flyer PDF.
 // Every field on the eventual HTML email is derivable from this object.
 
+import { parseBodyLine } from "@/lib/rich-text/list-blocks";
+
 export interface ExtractedFlyer {
   /** Email subject line. ≤60 chars, action-forward, specific. */
   subject: string;
@@ -304,12 +306,22 @@ function isBlankLine(p: string): boolean {
  *
  * Idempotent: a body that already has its blank lines comes back unchanged, so
  * it is safe to apply to a body that has been edited by hand.
+ *
+ * The items of a list are the exception. They are consecutive written lines
+ * like any others, but they are lines of one list rather than paragraphs, and
+ * a blank between them would break that list into several with gaps down the
+ * middle. This runs on everything the model writes, so without the exception
+ * a single refinement would pull apart a list somebody had just made.
  */
 export function withParagraphSpacing(paras: string[]): string[] {
   const out: string[] = [];
   for (const p of paras) {
     const prev = out[out.length - 1];
-    if (out.length && !isBlankLine(p) && !isBlankLine(prev)) out.push("");
+    const sameList =
+      out.length > 0 &&
+      parseBodyLine(p).kind !== null &&
+      parseBodyLine(p).kind === parseBodyLine(prev).kind;
+    if (out.length && !sameList && !isBlankLine(p) && !isBlankLine(prev)) out.push("");
     out.push(p);
   }
   return out;

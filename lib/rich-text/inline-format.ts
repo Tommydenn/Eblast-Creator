@@ -20,6 +20,10 @@
 // The functions here are pure DOM utilities — the React layer wires them to
 // events and selection. Nothing here touches React.
 
+import { groupBodyLines, makeListItem, type ListKind } from "./list-blocks";
+
+export type { ListKind };
+
 export type ToggleType = "bold" | "italic" | "underline";
 
 export type FormatCommand =
@@ -272,7 +276,9 @@ export function serializeInline(root: Element): string {
  * top-level child a <div>, the common case).
  */
 export function serializeBlocks(root: Element): string[] {
-  const hasDiv = Array.from(root.children).some((c) => c.tagName === "DIV");
+  const hasDiv = Array.from(root.children).some(
+    (c) => c.tagName === "DIV" || c.tagName === "UL" || c.tagName === "OL",
+  );
   if (!hasDiv) {
     const only = runsToHtml(trimEnds(collectRuns(root, root), "content"));
     return [only === "<br>" ? "" : only];
@@ -298,6 +304,19 @@ export function serializeBlocks(root: Element): string[] {
       flushLoose();
       const d = child as HTMLElement;
       blocks.push(runsToHtml(trimEnds(collectRuns(d, d), "content")));
+    } else if (
+      child.nodeType === Node.ELEMENT_NODE &&
+      ((child as Element).tagName === "UL" || (child as Element).tagName === "OL")
+    ) {
+      // A list is a run of ordinary lines that happen to wear a list tag, so
+      // it leaves one entry per item rather than one for the whole list.
+      flushLoose();
+      const kind = (child as Element).tagName.toLowerCase() as ListKind;
+      for (const li of Array.from((child as Element).children)) {
+        if (li.tagName !== "LI") continue;
+        const inner = runsToHtml(trimEnds(collectRuns(li, li), "content"));
+        blocks.push(makeListItem(kind, inner === "<br>" ? "" : inner));
+      }
     } else if (child.nodeType === Node.TEXT_NODE) {
       const text = (child.nodeValue || "").replace(/ /g, " ");
       if (text !== "") pushRun({ text, style: effectiveFormat(child, root) });
@@ -340,15 +359,149 @@ export function inlineHtmlForEditing(html: string): string {
   return /<br\s*\/?>$/i.test(normalized) ? `${normalized}<br>` : normalized;
 }
 
-/** Build the multi-paragraph editor's initial HTML from paragraph strings. */
+/**
+ * Build the multi-paragraph editor's initial HTML from paragraph strings.
+ *
+ * Consecutive list items of one kind are joined back into a single list, which
+ * is what makes a run of stored items behave in the editor as one list rather
+ * than a stack of one-item ones.
+ */
 export function blocksToHtml(paras: string[]): string {
   const list = paras.length ? paras : [""];
-  return list
-    .map((p) => {
-      const inner = normalizeInlineHtml(p);
-      return `<div>${inner || "<br>"}</div>`;
+  return groupBodyLines(list)
+    .map((group) => {
+      if (!group.kind) {
+        const inner = normalizeInlineHtml(group.items[0]);
+        return `<div>${inner || "<br>"}</div>`;
+      }
+      const items = group.items
+        .map((item) => `<li>${normalizeInlineHtml(item) || "<br>"}</li>`)
+        .join("");
+      return `<${group.kind}>${items}</${group.kind}>`;
     })
     .join("");
+}
+
+// ── lists ─────────────────────────────────────────────────────────────────────
+//
+// Lists are the one thing in this file that is structure rather than style, so
+// they are handled as blocks: the lines the selection touches become <li>s in
+// a list, or stop being them. Everything inside a line — bold, colour, size —
+// is untouched by that, because it lives on spans inside the line and the line
+// is only ever moved, never rewritten.
+
+/** The blocks of the editor a selection touches: its <div>s and its <li>s. */
+function selectedLines(root: HTMLElement): HTMLElement[] {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return [];
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) return [];
+
+  const lines: HTMLElement[] = [];
+  for (const child of Array.from(root.children)) {
+    if (child.tagName === "UL" || child.tagName === "OL") {
+      for (const li of Array.from(child.children)) {
+        if (li.tagName === "LI") lines.push(li as HTMLElement);
+      }
+    } else {
+      lines.push(child as HTMLElement);
+    }
+  }
+  return lines.filter((el) => range.intersectsNode(el));
+}
+
+/** Which kind of list the selection is in, when every line of it is in one. */
+export function queryListState(root: HTMLElement | null): ListKind | null {
+  if (!root) return null;
+  const lines = selectedLines(root);
+  if (lines.length === 0) return null;
+  const kinds = lines.map((el) =>
+    el.tagName === "LI" ? (el.parentElement?.tagName.toLowerCase() as ListKind) : null,
+  );
+  return kinds.every((k) => k === kinds[0]) ? kinds[0] : null;
+}
+
+/** Put the caret back across the lines that were just converted. */
+function selectAcross(lines: HTMLElement[]): void {
+  const sel = window.getSelection();
+  if (!sel || lines.length === 0) return;
+  const r = document.createRange();
+  r.setStart(lines[0], 0);
+  r.setEnd(lines[lines.length - 1], lines[lines.length - 1].childNodes.length);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+/**
+ * Turn the lines the selection touches into a list, or back into plain lines.
+ *
+ * Pressing the button a selection already matches turns it off, the way it
+ * does in a word processor. Adjacent lists of the same kind are absorbed, so
+ * bulleting the line between two bulleted lists leaves one list rather than
+ * three.
+ */
+export function toggleList(root: HTMLElement, kind: ListKind): boolean {
+  const lines = selectedLines(root);
+  if (lines.length === 0) return false;
+
+  const alreadyThisKind = lines.every(
+    (el) => el.tagName === "LI" && el.parentElement?.tagName.toLowerCase() === kind,
+  );
+
+  const replaced: HTMLElement[] = [];
+
+  if (alreadyThisKind) {
+    // Off: every line becomes an ordinary paragraph again, in place.
+    for (const li of lines) {
+      const list = li.parentElement!;
+      const div = document.createElement("div");
+      while (li.firstChild) div.appendChild(li.firstChild);
+      if (!div.firstChild) div.appendChild(document.createElement("br"));
+      // The list splits around the line being taken out of it, so a line
+      // removed from the middle leaves the items above and below it alone.
+      const after = Array.from(list.children).slice(Array.from(list.children).indexOf(li) + 1);
+      list.parentElement!.insertBefore(div, list.nextSibling);
+      if (after.length) {
+        const rest = document.createElement(list.tagName.toLowerCase());
+        for (const node of after) rest.appendChild(node);
+        div.parentElement!.insertBefore(rest, div.nextSibling);
+      }
+      li.remove();
+      if (!list.firstChild) list.remove();
+      replaced.push(div);
+    }
+  } else {
+    // On: one list for the whole run, taking in any neighbour of the same kind.
+    const first = lines[0];
+    const anchorList = first.tagName === "LI" ? first.parentElement! : first;
+    let target = anchorList.previousElementSibling;
+    const list =
+      target && target.tagName.toLowerCase() === kind
+        ? (target as HTMLElement)
+        : document.createElement(kind);
+    if (!list.parentElement) anchorList.parentElement!.insertBefore(list, anchorList);
+
+    for (const el of lines) {
+      const li = document.createElement("li");
+      while (el.firstChild) li.appendChild(el.firstChild);
+      if (!li.firstChild) li.appendChild(document.createElement("br"));
+      list.appendChild(li);
+      const owner = el.tagName === "LI" ? el.parentElement : null;
+      el.remove();
+      if (owner && !owner.firstChild) owner.remove();
+      replaced.push(li);
+    }
+
+    // A list of the same kind left sitting straight after is now contiguous.
+    const next = list.nextElementSibling;
+    if (next && next.tagName.toLowerCase() === kind) {
+      while (next.firstChild) list.appendChild(next.firstChild);
+      next.remove();
+    }
+  }
+
+  selectAcross(replaced);
+  return true;
 }
 
 // ── selection helpers ──────────────────────────────────────────────────────────

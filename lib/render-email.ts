@@ -5,6 +5,7 @@
 import type { Community } from "@/data/communities";
 import { allCustomLines } from "@/lib/extracted-flyer";
 import { orderedBlocks, orderedSections } from "@/lib/eblast-blocks";
+import { groupBodyLines, hasAnyList } from "@/lib/rich-text/list-blocks";
 import logoDimensions from "@/lib/logo-dimensions.json";
 import type { ExtractedFlyer } from "@/lib/extracted-flyer";
 import {
@@ -720,6 +721,37 @@ export function buildEblastHtml(
     ? flyer.bodyParagraphs.map((p) => renderBodyParagraph(p)).join("<br>")
     : "";
 
+  // The body's own type, repeated on every block it is split into. Outlook
+  // does not reliably inherit into <li>, so each one says it for itself.
+  const BODY_TYPE = `font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A;`;
+  const bodyAttrs = `data-field="bodyParagraphs" data-deletefield="block:bodyParagraphs"`;
+
+  /**
+   * The body, which is one paragraph unless somebody has made a list.
+   *
+   * Without a list this is the single <p> it has always been, character for
+   * character — a list is the only thing that can split the body into several
+   * blocks, and a <ul> cannot live inside a <p> without email clients closing
+   * the paragraph early and losing its styling. So the plain case is left
+   * exactly alone and only a body that actually has a list is built the other
+   * way, inside a <div> carrying the same attributes the <p> used to.
+   */
+  const storyBodyMarkup = !hasAnyList(flyer.bodyParagraphs)
+    ? `<p ${bodyAttrs} style="${alignStyleFor("bodyParagraphs")}${BODY_TYPE} margin: 0;">${storyBodyHtml}</p>`
+    : `<div ${bodyAttrs} style="${alignStyleFor("bodyParagraphs")}${BODY_TYPE}">${groupBodyLines(flyer.bodyParagraphs)
+        .map((group) => {
+          if (!group.kind) {
+            return `<p style="${BODY_TYPE} margin: 0;">${renderBodyParagraph(group.items[0])}</p>`;
+          }
+          const items = group.items
+            .map((item) => `<li style="${BODY_TYPE} margin: 0 0 6px 0;">${renderBodyParagraph(item)}</li>`)
+            .join("");
+          // Margins and padding written out: email clients disagree about what
+          // a list's defaults are, and Outlook has none of its own.
+          return `<${group.kind} style="${BODY_TYPE} margin: 10px 0; padding: 0 0 0 26px;">${items}</${group.kind}>`;
+        })
+        .join("")}</div>`;
+
   // Whether the gallery label follows body text or a photo in the same white
   // block rather than opening a fresh one.
   //
@@ -756,7 +788,7 @@ export function buildEblastHtml(
   ${(storyBodyHtml || storyBodyLines) ? `
   <tr data-section="Story" data-deletefield="storySectionHidden">
     <td class="glm-bg-story" bgcolor="${storyBg}" style="background:${storyBg}; padding: ${storyHeadShown ? "0" : "44px"} 36px 28px 36px;" data-bgfield="storyBgColor">
-      <p data-field="bodyParagraphs" data-deletefield="block:bodyParagraphs" style="${alignStyleFor("bodyParagraphs")}font-family: ${fontBody}; font-size: 19px; line-height: 1.65; color: #3A3A3A; margin: 0;">${storyBodyHtml}</p>
+      ${storyBodyMarkup}
       ${linesAfter("bodyParagraphs")}
     </td>
   </tr>` : ""}`}`;

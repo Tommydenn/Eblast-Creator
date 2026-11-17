@@ -14,6 +14,9 @@ import {
   getPending,
   clearPending,
   insertTextWithPending,
+  toggleList,
+  queryListState,
+  type ListKind,
   type FormatCommand,
   type FormatState,
   type ToggleType,
@@ -65,11 +68,17 @@ function insertPlainText(text: string, singleLine: boolean, root?: HTMLElement |
     ? [text.replace(/[\r\n]+/g, " ")]
     : text.replace(/\r\n/g, "\n").split("\n");
 
-  // The paragraph the caret sits in, which a multi-line paste splits in two.
-  // Paragraphs are the editor's own children, so this walks up to the one
-  // sitting directly inside it.
+  // The block the caret sits in, which a multi-line paste splits in two.
+  // Usually that is one of the editor's own children, but inside a list it is
+  // the item: a list item's parent is the list, not the editor, so walking all
+  // the way up would land on the <ul> and append the pasted text straight into
+  // it, outside any item. Stopping at the item means pasting into a list makes
+  // more items rather than breaking out of it.
+  const isItem = (n: Node | null) =>
+    !!n && n.nodeType === Node.ELEMENT_NODE && (n as Element).tagName === "LI";
   let para: Node | null = root && range.startContainer !== root ? range.startContainer : null;
-  while (para && para.parentNode !== root) para = para.parentNode;
+  while (para && para.parentNode !== root && !isItem(para)) para = para.parentNode;
+  const blockTag = isItem(para) ? "li" : "div";
 
   if (lines.length === 1 || !root || !para) {
     // One line, a single-line field, or no paragraph to split: the text goes
@@ -97,7 +106,7 @@ function insertPlainText(text: string, singleLine: boolean, root?: HTMLElement |
 
   let anchor: Node = para;
   for (let i = 1; i < lines.length; i++) {
-    const div = document.createElement("div");
+    const div = document.createElement(blockTag);
     if (lines[i]) div.appendChild(document.createTextNode(lines[i]));
     if (i === lines.length - 1) {
       caretAfter = div.lastChild;
@@ -469,6 +478,10 @@ export function RichBodyEditor({
       ref={ref}
       contentEditable
       suppressContentEditableWarning
+      // The body is the only field made of lines rather than one line, so it is
+      // the only one a list can exist in. The toolbar reads this to decide
+      // whether to offer the two list buttons at all.
+      data-rich-body="1"
       onFocus={() => {
         isFocused.current = true;
         activeEditorRef.current = ref.current;
@@ -774,6 +787,9 @@ export function FormatToolbar({
   // Which field the caret is in. Alignment belongs to the whole line rather
   // than to a selection, so the buttons act on the field, not the words.
   const [activeField, setActiveField] = useState<string | null>(null);
+  // Lists are blocks, and only the body is made of blocks — see the buttons below.
+  const [listKind, setListKind] = useState<ListKind | null>(null);
+  const [canList, setCanList] = useState(false);
   const { fields, setField } = useDraft();
   const colorPanelRef = useRef<HTMLDivElement>(null);
   const fontPanelRef = useRef<HTMLDivElement>(null);
@@ -810,6 +826,8 @@ export function FormatToolbar({
       setState(st);
       const fieldName = activeFieldNameRef?.current;
       setActiveField(fieldName ?? null);
+      setCanList(el.dataset.richBody === "1");
+      setListKind(queryListState(el));
       // What the box shows, in order of authority: the size set on the
       // selection itself, then the size this field is actually rendered at in
       // the email, then the table.
@@ -868,6 +886,21 @@ export function FormatToolbar({
   }
 
   const currentAlign = activeField ? fields?.textAlign?.[activeField] : undefined;
+
+  /**
+   * Bullets and numbers, on the lines the selection touches.
+   *
+   * The same button turns it off again, as it does in a word processor, and
+   * nothing inside the lines changes — bold, colour and size live on spans
+   * inside a line, and a line is only ever moved into or out of a list.
+   */
+  function runList(kind: ListKind) {
+    const el = editorRef.current;
+    if (!el) return;
+    if (!toggleList(el, kind)) return;
+    onInput();
+    setListKind(queryListState(el));
+  }
 
   function run(cmd: FormatCommand, savedRange?: Range | null) {
     const el = editorRef.current;
@@ -1008,6 +1041,45 @@ export function FormatToolbar({
           <AlignIcon kind={kind} />
         </button>
       ))}
+
+      {/* Bulleted and numbered lists. Only the body is made of separate lines,
+          so these appear only there rather than sitting dead on every other
+          field — a headline is one line and cannot be a list. */}
+      {canList && (
+        <>
+          <div className="w-px h-4 bg-[#ddd8d0] mx-0.5" />
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); runList("ul"); }}
+            className={`${btn(listKind === "ul")} flex items-center justify-center`}
+            title="Bulleted list"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+              <circle cx="2.2" cy="4" r="1.3" fill="currentColor" />
+              <circle cx="2.2" cy="8" r="1.3" fill="currentColor" />
+              <circle cx="2.2" cy="12" r="1.3" fill="currentColor" />
+              <rect x="5.6" y="3.3" width="9" height="1.4" rx="0.7" fill="currentColor" />
+              <rect x="5.6" y="7.3" width="9" height="1.4" rx="0.7" fill="currentColor" />
+              <rect x="5.6" y="11.3" width="9" height="1.4" rx="0.7" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); runList("ol"); }}
+            className={`${btn(listKind === "ol")} flex items-center justify-center`}
+            title="Numbered list"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+              <text x="0" y="5.6" fontSize="5.2" fontFamily="Helvetica, Arial, sans-serif" fill="currentColor">1</text>
+              <text x="0" y="9.9" fontSize="5.2" fontFamily="Helvetica, Arial, sans-serif" fill="currentColor">2</text>
+              <text x="0" y="14.2" fontSize="5.2" fontFamily="Helvetica, Arial, sans-serif" fill="currentColor">3</text>
+              <rect x="5.6" y="3.3" width="9" height="1.4" rx="0.7" fill="currentColor" />
+              <rect x="5.6" y="7.3" width="9" height="1.4" rx="0.7" fill="currentColor" />
+              <rect x="5.6" y="11.3" width="9" height="1.4" rx="0.7" fill="currentColor" />
+            </svg>
+          </button>
+        </>
+      )}
 
       <div className="w-px h-4 bg-[#ddd8d0] mx-0.5" />
 

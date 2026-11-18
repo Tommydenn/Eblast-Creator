@@ -71,12 +71,29 @@ export function formatEventTime(raw: string): string {
  * and its punctuation is not Facebook's.
  */
 export function phoneFrom(href: string | null | undefined, label?: string | null): string | null {
-  const digits = (String(href ?? "").replace(/^tel:/i, "") + " " + String(label ?? ""))
-    .replace(/\D+/g, "")
-    .slice(0, 11);
-  const ten = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
-  if (ten.length !== 10) return null;
+  // Each source is read on its own. Reading them together was the first
+  // version, and on a draft that has both — which is nearly all of them — it
+  // produced twenty digits and gave up, so every event went out with no
+  // number and no line telling anyone to call.
+  const ten = tenDigits(String(href ?? "").replace(/^tel:/i, "")) ?? tenDigits(label);
+  if (!ten) return null;
   return `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
+/**
+ * Ten digits, or nothing.
+ *
+ * A label can arrive carrying the editor's own markup — a colour as
+ * rgb(69, 103, 101) is three numbers sitting in front of the real one — so
+ * tags are taken out before the digits are read.
+ */
+function tenDigits(source: string | null | undefined): string | null {
+  const digits = String(source ?? "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\b(?:rgba?|hsla?)\([^)]*\)/gi, " ")
+    .replace(/\D+/g, "");
+  const ten = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  return ten.length === 10 ? ten : null;
 }
 
 export interface EventFacts {

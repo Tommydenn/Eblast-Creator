@@ -58,7 +58,11 @@ Rules:
 - Do not write the date, the time, the address or the phone number. Those are
   added below your paragraphs automatically, and repeating them reads as a
   mistake.
-- Do not open with "Join us for" twice, and do not end with a sign-off.
+- Do not open with "Join us for" twice.
+- Do not end with a send-off. "We'd love to see you there", "Hope to see you
+  soon" and anything like them carry nothing a reader did not already know,
+  and the lines below your paragraphs are where the event is actually offered.
+  The last sentence you write is a fact about the event.
 - Two paragraphs, two to four sentences each. Shorter is better.
 - Plain sentences. No hashtags, no emoji, no exclamation marks beyond one.`;
 

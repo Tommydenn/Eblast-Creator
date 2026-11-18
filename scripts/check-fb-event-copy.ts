@@ -62,6 +62,23 @@ eq("with a country code", phoneFrom("tel:+16513601691"), "651-360-1691");
 eq("from the label when the href has none", phoneFrom(null, "Call 651.360.1691 to RSVP"), "651-360-1691");
 eq("nothing to go on", phoneFrom(null, null), null);
 eq("too few digits", phoneFrom("tel:12345"), null);
+// Nearly every real draft has both, and reading them together gave twenty
+// digits and therefore no number at all — which is how this was found.
+eq(
+  "both on the draft, as they always are",
+  phoneFrom("tel:7633438336", "Call 763.343.8336 to RSVP"),
+  "763-343-8336",
+);
+eq(
+  "a label the editor has coloured",
+  phoneFrom(null, '<span style="color: rgb(69, 103, 101)">Call 952.295.3158 to RSVP</span>'),
+  "952-295-3158",
+);
+eq(
+  "both, with the label coloured",
+  phoneFrom("tel:6122609862", '<span style="color: rgb(69, 103, 101)">Call 612.260.9862 for Details</span>'),
+  "612-260-9862",
+);
 
 // ── The whole description ─────────────────────────────────────────────────
 {

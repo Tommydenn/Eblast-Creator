@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export interface EventRow {
   taskId: string;
@@ -46,9 +46,18 @@ const FURTHER_URL =
  * an event, in the order the database happened to hold it — three blocks of
  * prose, no way to copy the date, and the actions in a row underneath.
  */
+type Shelf = "todo" | "done";
+
 export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
   const [rows, setRows] = useState(initialRows);
-  const [showPosted, setShowPosted] = useState(false);
+  /**
+   * Two shelves, not a filter.
+   *
+   * Marking one posted has to take it off the list of things to do without
+   * it vanishing — so it moves to Done, which is a place you can go back to,
+   * rather than disappearing behind a toggle you have to remember exists.
+   */
+  const [shelf, setShelf] = useState<Shelf>("todo");
   const [busy, setBusy] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -74,12 +83,22 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
     () =>
       rows
         .filter((r) => community === ALL || (r.community ?? "No community") === community)
-        // The one being worked on never leaves the list, whatever the filter
-        // says — that was what made marking something posted look broken.
-        .filter((r) => showPosted || !r.postedToFacebookAt || r.taskId === selectedId)
-        .sort((a, b) => (a.dueAt ?? "").localeCompare(b.dueAt ?? "")),
-    [rows, community, showPosted, selectedId],
+        .filter((r) => (shelf === "done" ? r.postedToFacebookAt : !r.postedToFacebookAt))
+        .sort((a, b) =>
+          shelf === "done"
+            ? (b.postedToFacebookAt ?? "").localeCompare(a.postedToFacebookAt ?? "")
+            : (a.dueAt ?? "").localeCompare(b.dueAt ?? ""),
+        ),
+    [rows, community, shelf],
   );
+
+  const counts = useMemo(() => {
+    const here = rows.filter((r) => community === ALL || (r.community ?? "No community") === community);
+    return {
+      todo: here.filter((r) => !r.postedToFacebookAt).length,
+      done: here.filter((r) => r.postedToFacebookAt).length,
+    };
+  }, [rows, community]);
 
   const selected = list.find((r) => r.taskId === selectedId) ?? list[0] ?? null;
 
@@ -116,6 +135,9 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
 
   async function setPosted(taskId: string, posted: boolean) {
     const was = rows.find((r) => r.taskId === taskId)?.postedToFacebookAt ?? null;
+    // Follow it onto the shelf it just moved to, so the thing you acted on
+    // is still the thing in front of you.
+    setShelf(posted ? "done" : "todo");
     setSelectedId(taskId);
     setRows((prev) =>
       prev.map((r) =>
@@ -164,6 +186,31 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
           ))}
         </select>
 
+        <div className="mt-3 flex gap-1 rounded-xl bg-sand-100/80 p-1">
+          {(
+            [
+              ["todo", "To post", counts.todo],
+              ["done", "Done", counts.done],
+            ] as Array<[Shelf, string, number]>
+          ).map(([key, label, n]) => (
+            <button
+              key={key}
+              onClick={() => {
+                setShelf(key);
+                setSelectedId(null);
+              }}
+              className={`flex-1 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                shelf === key ? "bg-white text-sand-900 shadow-sm" : "text-sand-500 hover:text-sand-800"
+              }`}
+            >
+              {label}
+              <span className={`ml-1.5 tabular-nums ${shelf === key ? "text-sand-400" : "text-sand-300"}`}>
+                {n}
+              </span>
+            </button>
+          ))}
+        </div>
+
         {/* Separate rows on the page rather than one boxed-in list: each
             gets its own quiet surface and a little air around it, which is
             all that was missing before — they were running together because
@@ -171,7 +218,7 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
         <ul className="mt-3 space-y-1.5">
           {list.length === 0 && (
             <li className="rounded-xl border border-dashed border-sand-200 px-4 py-10 text-center text-[12px] text-sand-400">
-              Nothing left here.
+              {shelf === "done" ? "Nothing marked done here yet." : "Nothing left to post here."}
             </li>
           )}
           {list.map((r) => {
@@ -208,12 +255,6 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
           })}
         </ul>
 
-        <button
-          onClick={() => setShowPosted(!showPosted)}
-          className="mt-3 px-3.5 text-[11px] text-sand-400 transition-colors hover:text-sand-700"
-        >
-          {showPosted ? "Hide the posted ones" : "Show posted too"}
-        </button>
       </aside>
 
       {selected ? (
@@ -477,7 +518,7 @@ interface PhotoChoice {
   width: number;
   height: number;
   source: string;
-  thumb: string;
+  preview: string;
 }
 
 /**
@@ -495,23 +536,29 @@ interface PhotoChoice {
 function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
   const [photos, setPhotos] = useState<PhotoChoice[] | null>(null);
   const [chosen, setChosen] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
+  // Fetched as the event opens rather than on a click. They are a database
+  // read now — gathered when the copy was written — so this is quick, and
+  // asking first for something you always want is a click for nothing.
+  useEffect(() => {
+    let live = true;
+    if (!hasSource) return;
+    setPhotos(null);
+    setChosen(0);
     setError(null);
-    try {
-      const res = await fetch(`/api/fb-events/${taskId}/photos`);
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error ?? "Could not read the photos");
-      setPhotos(json.photos ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not read the photos");
-    } finally {
-      setLoading(false);
-    }
-  }
+    fetch(`/api/fb-events/${taskId}/photos`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!live) return;
+        if (!json.ok) throw new Error(json.error ?? "Could not read the photos");
+        setPhotos(json.photos ?? []);
+      })
+      .catch((e) => live && setError(e instanceof Error ? e.message : "Could not read the photos"));
+    return () => {
+      live = false;
+    };
+  }, [taskId, hasSource]);
 
   if (!hasSource) {
     return (
@@ -523,13 +570,9 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
 
   if (!photos) {
     return (
-      <button
-        onClick={load}
-        disabled={loading}
-        className="w-full rounded-xl border border-dashed border-sand-200 px-5 py-6 text-[12px] text-sand-500 transition-colors hover:border-sand-300 hover:text-sand-800 disabled:opacity-50"
-      >
-        {loading ? "Looking through the flyer…" : error ?? "Show the photos"}
-      </button>
+      <div className="rounded-xl border border-sand-200 bg-white px-5 py-6 text-[12px] text-sand-400 shadow-sm">
+        {error ?? "Loading the photos…"}
+      </div>
     );
   }
 
@@ -563,9 +606,11 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
       </div>
 
       <div className="border-t border-sand-100 bg-sand-50/60 p-4">
+        {/* The stored preview, so it is there the moment the panel is. The
+            full-size original is what Download hands over. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`/api/fb-events/${taskId}/photos/${current.index}`}
+          src={current.preview}
           alt=""
           className="mx-auto block max-h-[320px] w-auto max-w-full rounded-lg"
         />
@@ -585,7 +630,7 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
               }`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.thumb} alt="" className="h-full w-full object-cover" />
+              <img src={p.preview} alt="" className="h-full w-full object-cover" />
             </button>
           ))}
         </div>
@@ -603,7 +648,7 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
  * time the copy is right and the page is about the copy.
  */
 function Flyer({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   if (!hasSource) return null;
 
   return (

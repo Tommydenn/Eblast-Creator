@@ -209,10 +209,18 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
     fail("lib/fb-events.ts would clear the table from an empty list, which means a failed fetch");
   }
   if (!sync.includes("matchNote")) fail("lib/fb-events.ts no longer records why a pairing failed");
-  // Status is what retires one of these, the same way it retires an eblast.
-  // Without this the list kept events that were finished months ago.
-  if (!sync.includes("percentComplete === NOT_STARTED")) {
-    fail("lib/fb-events.ts lists tasks that are finished or already in hand");
+  // Completed is what retires one of these; without it the list kept events
+  // finished months ago. In progress must NOT retire one, because that is
+  // the mark this app puts on a task itself once the copy exists — filtering
+  // it out would delete every event the moment it became ready.
+  if (!sync.includes("percentComplete !== COMPLETED")) {
+    fail("lib/fb-events.ts no longer retires completed tasks, or retires its own in-progress ones");
+  }
+  if (!sync.includes("markTaskInProgress")) {
+    fail("lib/fb-events.ts no longer marks a written event In progress in Planner");
+  }
+  if (!sync.includes("cachePhotos")) {
+    fail("lib/fb-events.ts no longer reads the photos up front, so the page waits for a PDF");
   }
   // And nothing here is kept for ever: these rows hold a copy of an event's
   // words and a note of when it was posted, about a day that has passed.
@@ -244,11 +252,15 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
   }
 
   const panel = readFileSync("components/EventsPanel.tsx", "utf-8");
-  // Marking one posted used to drop it out of the list, which took the
-  // selection with it and read as the button doing nothing.
-  // The filter itself, not the lookup further down that also mentions it.
-  if (!panel.includes("|| r.taskId === selectedId")) {
-    fail("components/EventsPanel.tsx drops the event you are working on out of its own list");
+  // Marking one posted has to take it off the list of things to do without
+  // losing it. It moves to the Done shelf and the view follows it there, so
+  // the thing just acted on is still the thing in front of you — the first
+  // version simply dropped it, which read as the button doing nothing.
+  if (!panel.includes(`setShelf(posted ? "done" : "todo")`)) {
+    fail("components/EventsPanel.tsx does not follow an event onto the shelf it just moved to");
+  }
+  if (!panel.includes(`shelf === "done" ? r.postedToFacebookAt : !r.postedToFacebookAt`)) {
+    fail("components/EventsPanel.tsx no longer keeps the posted ones on a shelf of their own");
   }
   if (!panel.includes("onPosted(false)")) {
     fail("components/EventsPanel.tsx offers no way back from a mis-clicked tick");

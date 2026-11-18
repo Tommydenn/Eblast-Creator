@@ -635,6 +635,8 @@ export const fbEventTasks = pgTable(
 
     /** Set once the event exists in Further, so it is not created twice. */
     furtherEventUuid: text("further_event_uuid"),
+    /** Marked In progress in Planner, the way a drafted eblast marks its task. */
+    markedInProgress: boolean("marked_in_progress").notNull().default(false),
     /** Ticked by hand: nothing on Facebook's side can tell us this. */
     postedToFacebookAt: timestamp("posted_to_facebook_at", { withTimezone: true }),
 
@@ -649,6 +651,28 @@ export const fbEventTasks = pgTable(
 
 export type FbEventTaskRow = InferSelectModel<typeof fbEventTasks>;
 export type NewFbEventTaskRow = InferInsertModel<typeof fbEventTasks>;
+
+/**
+ * The photos found in an event's flyer.
+ *
+ * Previews only — reading a PDF for its images takes seconds and the page
+ * needs them as it opens, so they are gathered once when the copy is written.
+ * A full-size original is re-read from the flyer on the rare download.
+ */
+export const fbEventPhotos = pgTable(
+  "fb_event_photos",
+  {
+    taskId: text("task_id")
+      .notNull()
+      .references(() => fbEventTasks.taskId, { onDelete: "cascade" }),
+    idx: integer("idx").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    source: text("source").notNull(),
+    preview: text("preview").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.taskId, t.idx] }) }),
+);
 
 
 // ---------- app settings (small values the app can change at runtime) -------

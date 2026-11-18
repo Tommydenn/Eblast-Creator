@@ -42,7 +42,13 @@ export default async function EventsPage() {
   ]);
   const bySlug = new Map(communities.map((c) => [c.slug, c]));
 
-  const rows = events.map((e) => {
+  // Only events that are ready to be posted. One without its copy is one the
+  // daily pass has not reached yet — either its deadline is further out than
+  // the lookahead or its flyer is not attached — and there is nothing to do
+  // with it here but look at a blank page.
+  const rows = events
+    .filter((e) => Boolean(e.facebookDescription))
+    .map((e) => {
     const community = e.communitySlug ? bySlug.get(e.communitySlug) ?? null : null;
     const fromText = detailsFromDescription(e.facebookDescription);
     return {
@@ -73,9 +79,9 @@ export default async function EventsPage() {
       postedToFacebookAt: e.postedToFacebookAt ? e.postedToFacebookAt.toISOString() : null,
       // Matched on the name Further holds, since nothing links the two records.
       inFurther: inFurther ? inFurther.has((e.eventTitle ?? e.eventName).trim().toLowerCase()) : null,
-      facebookEventsUrl: facebookEventsUrl(community?.socials?.facebook),
-    };
-  });
+        facebookEventsUrl: facebookEventsUrl(community?.socials?.facebook),
+      };
+    });
 
   const todo = rows.filter((r) => !r.postedToFacebookAt).length;
 

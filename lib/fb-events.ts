@@ -18,6 +18,7 @@ import { and, eq, inArray, isNull, like, lt, notInArray } from "drizzle-orm";
 import { getLookaheadDays, isDueWithinWindow } from "@/lib/planner-settings";
 import { writeFbEventCopy } from "@/lib/fb-event-draft";
 import { NoSourceError, sourceFor } from "@/lib/fb-event-source";
+import { cachePhotos } from "@/lib/fb-event-photos";
 
 /**
  * How long a Facebook event stays on file after its deadline.
@@ -29,7 +30,8 @@ import { NoSourceError, sourceFor } from "@/lib/fb-event-source";
  */
 export const RETAIN_DAYS = 45;
 import {
-  NOT_STARTED,
+  COMPLETED,
+  markTaskInProgress,
   eventNameOf,
   getPlanTitle,
   isFbEventTask,
@@ -57,11 +59,11 @@ export async function syncFbEventTasks(
   planTitleCache?: Map<string, string | null>,
 ): Promise<FbEventSyncSummary> {
   const summary: FbEventSyncSummary = { seen: 0, paired: 0, unpaired: 0, removed: 0 };
-  // Status is what retires one of these, exactly as it retires an eblast
-  // task: posting the event means ticking it off in Planner, and a task
-  // somebody has picked up themselves is theirs. Either way it leaves this
-  // list, and the row below is deleted with it.
-  const fbTasks = all.filter((t) => isFbEventTask(t.title) && t.percentComplete === NOT_STARTED);
+  // Completed is what retires one of these: ticking it off in Planner means
+  // it is done, and the row below is deleted with it. In progress is kept,
+  // because that is the mark this app puts on a task once its copy exists —
+  // filtering it out would have deleted every event the moment it was ready.
+  const fbTasks = all.filter((t) => isFbEventTask(t.title) && t.percentComplete !== COMPLETED);
   summary.seen = fbTasks.length;
 
   const communities = await listCommunities();
@@ -217,6 +219,28 @@ export async function writePendingFbEvents(opts?: {
           updatedAt: new Date(),
         })
         .where(eq(fbEventTasks.taskId, event.taskId));
+
+      // The flyer is read now rather than when somebody opens the page, so
+      // the photos are a database read by the time they are wanted.
+      try {
+        await cachePhotos(event.taskId);
+      } catch (e) {
+        console.error(`[fb-events] could not read the photos for ${event.eventName}:`, e);
+      }
+
+      // And the task is marked In progress, the way a drafted eblast marks
+      // its own, so Planner shows what the app has already handled. Recorded
+      // either way: a Graph failure here must not look like it worked.
+      try {
+        await markTaskInProgress(event.taskId);
+        await db
+          .update(fbEventTasks)
+          .set({ markedInProgress: true })
+          .where(eq(fbEventTasks.taskId, event.taskId));
+      } catch (e) {
+        console.error(`[fb-events] could not mark ${event.eventName} in progress:`, e);
+      }
+
       out.written++;
     } catch (e) {
       // Nothing to build from yet is the ordinary case, not a failure.

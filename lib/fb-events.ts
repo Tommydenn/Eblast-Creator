@@ -13,8 +13,8 @@
  * nothing behind it still needs doing by hand.
  */
 import { db } from "@/lib/db";
-import { fbEventTasks, pendingFlyers, plannerTasks } from "@/lib/db/schema";
-import { and, eq, inArray, isNull, like, lt, notInArray } from "drizzle-orm";
+import { fbEventPhotos, fbEventTasks, pendingFlyers, plannerTasks } from "@/lib/db/schema";
+import { and, eq, inArray, isNotNull, isNull, like, lt, notInArray } from "drizzle-orm";
 import { getLookaheadDays, isDueWithinWindow } from "@/lib/planner-settings";
 import { writeFbEventCopy } from "@/lib/fb-event-draft";
 import { NoSourceError, sourceFor } from "@/lib/fb-event-source";
@@ -252,6 +252,56 @@ export async function writePendingFbEvents(opts?: {
     }
   }
 
+  return out;
+}
+
+/**
+ * Finish off events whose copy exists but whose other two steps do not.
+ *
+ * Reading the flyer for its photos and marking the Planner task came later
+ * than the writing did, so the events written before them are missing both.
+ * Neither costs a model call, so this is cheap and runs every time rather
+ * than being a script somebody has to remember.
+ */
+export async function finishWrittenFbEvents(): Promise<{ photos: number; marked: number }> {
+  const out = { photos: 0, marked: 0 };
+  const written = await db
+    .select({
+      taskId: fbEventTasks.taskId,
+      eventName: fbEventTasks.eventName,
+      markedInProgress: fbEventTasks.markedInProgress,
+    })
+    .from(fbEventTasks)
+    .where(isNotNull(fbEventTasks.facebookDescription));
+
+  for (const event of written) {
+    const have = await db
+      .select({ idx: fbEventPhotos.idx })
+      .from(fbEventPhotos)
+      .where(eq(fbEventPhotos.taskId, event.taskId))
+      .limit(1);
+    if (have.length === 0) {
+      try {
+        const photos = await cachePhotos(event.taskId);
+        if (photos.length > 0) out.photos++;
+      } catch (e) {
+        console.error(`[fb-events] could not read the photos for ${event.eventName}:`, e);
+      }
+    }
+
+    if (!event.markedInProgress) {
+      try {
+        await markTaskInProgress(event.taskId);
+        await db
+          .update(fbEventTasks)
+          .set({ markedInProgress: true })
+          .where(eq(fbEventTasks.taskId, event.taskId));
+        out.marked++;
+      } catch (e) {
+        console.error(`[fb-events] could not mark ${event.eventName} in progress:`, e);
+      }
+    }
+  }
   return out;
 }
 

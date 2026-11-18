@@ -12,7 +12,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGraphToken } from "@/lib/graph";
 import { listAssignedTasks } from "@/lib/planner";
-import { listFbEventTasks, syncFbEventTasks, writePendingFbEvents } from "@/lib/fb-events";
+import {
+  finishWrittenFbEvents,
+  listFbEventTasks,
+  syncFbEventTasks,
+  writePendingFbEvents,
+} from "@/lib/fb-events";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -37,11 +42,13 @@ export async function POST(req: NextRequest) {
     const all = await listAssignedTasks(userEmail, token);
     const summary = await syncFbEventTasks(all, token);
     const wrote = write ? await writePendingFbEvents() : null;
+    const finished = write ? await finishWrittenFbEvents() : null;
     return NextResponse.json({
       ok: true,
       scanned: all.length,
       ...summary,
       wrote,
+      finished,
       events: await listFbEventTasks(),
     });
   } catch (e) {

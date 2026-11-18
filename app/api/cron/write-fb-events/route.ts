@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getGraphToken } from "@/lib/graph";
 import { listAssignedTasks } from "@/lib/planner";
 import { isScheduledHour } from "@/lib/planner-settings";
-import { syncFbEventTasks, writePendingFbEvents } from "@/lib/fb-events";
+import { finishWrittenFbEvents, syncFbEventTasks, writePendingFbEvents } from "@/lib/fb-events";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -44,12 +44,13 @@ export async function GET(req: NextRequest) {
     const all = await listAssignedTasks(process.env.PLANNER_USER_EMAIL, token);
     const sync = await syncFbEventTasks(all, token);
     const wrote = await writePendingFbEvents();
+    const finished = await finishWrittenFbEvents();
     console.log(
       `[cron/write-fb-events] ${sync.seen} open, ${sync.paired} paired; ` +
         `considered ${wrote.considered}, wrote ${wrote.written}, ` +
         `skipped ${wrote.skipped}, failed ${wrote.failed}`,
     );
-    return NextResponse.json({ ok: true, sync, wrote });
+    return NextResponse.json({ ok: true, sync, wrote, finished });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     console.error("[cron/write-fb-events] failed:", error);

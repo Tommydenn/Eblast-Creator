@@ -11,6 +11,7 @@ import { fbEventTasks } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { writeFbEventCopy } from "@/lib/fb-event-draft";
 import { NoSourceError, sourceFor } from "@/lib/fb-event-source";
+import { formatEventDate, formatEventTime } from "@/lib/fb-event-copy";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -47,7 +48,18 @@ export async function POST(_req: Request, { params }: { params: { taskId: string
       })
       .where(eq(fbEventTasks.taskId, params.taskId));
 
-    return NextResponse.json({ ok: true, from: source.kind, ...copy });
+    return NextResponse.json({
+      ok: true,
+      from: source.kind,
+      // Formatted the way the description carries them, so the page can show
+      // the same strings without asking for the row again.
+      details: {
+        date: source.fields.eventDate ? formatEventDate(source.fields.eventDate) : null,
+        time: source.fields.eventTime ? formatEventTime(source.fields.eventTime) : null,
+        location: source.fields.eventLocation ?? null,
+      },
+      ...copy,
+    });
   } catch (e) {
     if (e instanceof NoSourceError) {
       return NextResponse.json({ ok: false, error: e.message }, { status: 400 });

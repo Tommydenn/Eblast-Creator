@@ -78,7 +78,10 @@ async function fromFlyer(taskId: string): Promise<Buffer | null> {
   return null;
 }
 
-export async function GET(_req: Request, { params }: { params: { taskId: string } }) {
+export async function GET(req: Request, { params }: { params: { taskId: string } }) {
+  // ?inline=1 is the same image shown on the page rather than saved, so you
+  // can see the crop before you upload it.
+  const inline = new URL(req.url).searchParams.get("inline") === "1";
   const [task] = await db
     .select({ draftId: fbEventTasks.savedDraftId, name: fbEventTasks.eventName })
     .from(fbEventTasks)
@@ -111,7 +114,9 @@ export async function GET(_req: Request, { params }: { params: { taskId: string 
     return new NextResponse(new Uint8Array(jpeg), {
       headers: {
         "Content-Type": "image/jpeg",
-        "Content-Disposition": `attachment; filename="${safe || "event"}-cover.jpg"`,
+        "Content-Disposition": inline
+          ? "inline"
+          : `attachment; filename="${safe || "event"}-cover.jpg"`,
         "Cache-Control": "no-store",
       },
     });

@@ -11,6 +11,7 @@ import { EventsPanel } from "@/components/EventsPanel";
 import { listFbEventTasks } from "@/lib/fb-events";
 import { listCommunities } from "@/data/communities";
 import { facebookEventsUrl } from "@/lib/db/queries";
+import { formatEventDate, formatEventTime } from "@/lib/fb-event-copy";
 import { hasFurtherKey, listCommunityEvents } from "@/lib/further";
 
 export const dynamic = "force-dynamic";
@@ -51,13 +52,17 @@ export default async function EventsPage() {
       dueAt: e.dueAt ? e.dueAt.toISOString() : null,
       matchNote: e.matchNote,
       eventTitle: e.eventTitle,
-      eventDate: e.eventDate,
-      eventTime: e.eventTime,
+      // Shown and copied exactly as the description carries them, so what
+      // goes in Facebook's date field and what the text says cannot differ.
+      eventDate: e.eventDate ? formatEventDate(e.eventDate) : null,
+      eventTime: e.eventTime ? formatEventTime(e.eventTime) : null,
       eventLocation: e.eventLocation,
       facebookDescription: e.facebookDescription,
       furtherDescription: e.furtherDescription,
-      generatedAt: e.generatedAt ? e.generatedAt.toISOString() : null,
       generatedFrom: e.generatedFrom,
+      // A hint only — the picture itself says whether there is one, and the
+      // card falls back when the request comes back empty.
+      hasCover: Boolean(e.savedDraftId || e.eblastTaskId),
       // Only copy written FROM a draft can be out of date with one.
       stale: Boolean(
         e.generatedAt && e.generatedFromDraftId && e.generatedFromDraftId !== e.savedDraftId,

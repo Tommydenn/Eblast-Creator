@@ -112,20 +112,57 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
 }
 
 // ── The link out to Facebook ──────────────────────────────────────────────
+//
+// All three shapes below are in use across the thirty communities, taken from
+// their own websites, so all three have to land on the events tab.
 {
-  const want = "https://facebook.com/CarettaMaplewood/events";
+  const want = "https://www.facebook.com/CarettaHolmen/events";
   for (const given of [
-    "facebook.com/CarettaMaplewood",
-    "https://facebook.com/CarettaMaplewood",
-    "https://facebook.com/CarettaMaplewood/",
-    "https://facebook.com/CarettaMaplewood/events",
-    "https://facebook.com/CarettaMaplewood/events/",
+    "www.facebook.com/CarettaHolmen",
+    "https://www.facebook.com/CarettaHolmen",
+    "https://www.facebook.com/CarettaHolmen/",
+    "https://www.facebook.com/CarettaHolmen/events",
+    "https://www.facebook.com/CarettaHolmen/events/",
   ]) {
     const got = facebookEventsUrl(given);
     if (got !== want) fail(`"${given}" should link to ${want}, got ${got}`);
   }
-  for (const empty of [null, undefined, "", "   "]) {
-    if (facebookEventsUrl(empty) !== null) fail("a community with no page must not get a link");
+
+  // A name with the page id stuck on the end — Hayden Grove St Anthony's.
+  if (
+    facebookEventsUrl("https://www.facebook.com/Hayden-Grove-Senior-Living-St-Anthony-107216215068628") !==
+    "https://www.facebook.com/Hayden-Grove-Senior-Living-St-Anthony-107216215068628/events"
+  ) {
+    fail("a page named with its id on the end should still reach its events");
+  }
+
+  // Bare numeric, which Amira Lake Elmo and Amira Choice Arvada both use.
+  if (facebookEventsUrl("https://www.facebook.com/61556110831964") !== "https://www.facebook.com/61556110831964/events") {
+    fail("a page with only an id for a name should still reach its events");
+  }
+
+  // profile.php has no name at all, and a path after it is a 404 — this is
+  // the one that has to ask for the tab rather than walk to it.
+  {
+    const got = facebookEventsUrl("https://www.facebook.com/profile.php?id=61554186580603");
+    if (got !== "https://www.facebook.com/profile.php?id=61554186580603&sk=events") {
+      fail(`profile.php should ask for sk=events, got ${got}`);
+    }
+    if (got?.includes("profile.php/events")) fail("walked a path onto profile.php, which is a 404");
+  }
+
+  // What a share link leaves behind.
+  if (
+    facebookEventsUrl("https://www.facebook.com/preserveofroseville?mibextid=LQQJ4d") !==
+    "https://www.facebook.com/preserveofroseville/events"
+  ) {
+    fail("a share link's tracking parameter should be dropped");
+  }
+
+  for (const empty of [null, undefined, "", "   ", "https://www.facebook.com/", "not a url"]) {
+    if (facebookEventsUrl(empty) !== null) {
+      fail(`${JSON.stringify(empty)} is not a page and must not produce a link`);
+    }
   }
 }
 

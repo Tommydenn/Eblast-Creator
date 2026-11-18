@@ -358,16 +358,39 @@ export async function setCommunityFacebookUrl(slug: string, url: string | null):
 /**
  * The events tab of a community's Facebook page.
  *
- * Built rather than stored, so there is one thing to keep up to date. Copes
- * with a page given without a scheme, and with one that already points at its
- * own events.
+ * Built rather than stored, so there is one thing to keep up to date — and it
+ * has to cope with the three shapes Facebook actually hands out, because the
+ * communities have all three:
+ *
+ *   facebook.com/TalamoreWoodbury                      a vanity name
+ *   facebook.com/Amira-Minnetonka-104495805158377      a name with an id
+ *   facebook.com/profile.php?id=61554186580603         no name at all
+ *
+ * The first two take /events on the end. The last one cannot — a path after
+ * profile.php is a 404 — so it asks for the tab the way that page does, with
+ * sk=events. Anything a share link added (mibextid and the like) is dropped.
  */
 export function facebookEventsUrl(facebook: string | null | undefined): string | null {
   const raw = (facebook ?? "").trim();
   if (!raw) return null;
   const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-  const base = withScheme.replace(/\/+$/, "");
-  return /\/events\/?$/i.test(base) ? base : `${base}/events`;
+
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    return null;
+  }
+
+  if (/\/profile\.php$/i.test(url.pathname)) {
+    const id = url.searchParams.get("id");
+    if (!id) return null;
+    return `${url.origin}${url.pathname}?id=${encodeURIComponent(id)}&sk=events`;
+  }
+
+  const path = url.pathname.replace(/\/+$/, "");
+  if (!path || path === "") return null;
+  return /\/events$/i.test(path) ? `${url.origin}${path}` : `${url.origin}${path}/events`;
 }
 
 /**

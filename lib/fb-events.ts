@@ -16,6 +16,7 @@ import { db } from "@/lib/db";
 import { fbEventTasks, plannerTasks } from "@/lib/db/schema";
 import { eq, inArray, notInArray } from "drizzle-orm";
 import {
+  NOT_STARTED,
   eventNameOf,
   getPlanTitle,
   isFbEventTask,
@@ -43,7 +44,11 @@ export async function syncFbEventTasks(
   planTitleCache?: Map<string, string | null>,
 ): Promise<FbEventSyncSummary> {
   const summary: FbEventSyncSummary = { seen: 0, paired: 0, unpaired: 0, removed: 0 };
-  const fbTasks = all.filter((t) => isFbEventTask(t.title));
+  // Status is what retires one of these, exactly as it retires an eblast
+  // task: posting the event means ticking it off in Planner, and a task
+  // somebody has picked up themselves is theirs. Either way it leaves this
+  // list, and the row below is deleted with it.
+  const fbTasks = all.filter((t) => isFbEventTask(t.title) && t.percentComplete === NOT_STARTED);
   summary.seen = fbTasks.length;
 
   const communities = await listCommunities();

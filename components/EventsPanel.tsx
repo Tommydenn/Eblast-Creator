@@ -61,8 +61,30 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
     () => (filter === "all" ? rows : rows.filter((r) => !r.postedToFacebookAt)),
     [rows, filter],
   );
+  /**
+   * The index, by community.
+   *
+   * Grouped this way because the work is done a building at a time: the
+   * flyers, the photos and the voice all belong to one community, and jumping
+   * between them is the expensive part. Within a community the soonest is
+   * first, since that is the one that has to go up.
+   */
+  const byCommunity = useMemo(() => {
+    const groups = new Map<string, EventRow[]>();
+    for (const r of visible) {
+      const key = r.community ?? "No community";
+      groups.set(key, [...(groups.get(key) ?? []), r]);
+    }
+    return [...groups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([community, list]) => {
+        const sorted = [...list].sort((a, b) => (a.dueAt ?? "").localeCompare(b.dueAt ?? ""));
+        return [community, sorted] as const;
+      });
+  }, [visible]);
+
   const [selectedId, setSelectedId] = useState<string | null>(initialRows[0]?.taskId ?? null);
-  const selected = visible.find((r) => r.taskId === selectedId) ?? visible[0] ?? null;
+  const selected = visible.find((r) => r.taskId === selectedId) ?? byCommunity[0]?.[1][0] ?? null;
   const todo = rows.filter((r) => !r.postedToFacebookAt).length;
 
   async function generate(taskId: string) {
@@ -139,42 +161,48 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
 
         <nav className="max-h-[70vh] overflow-y-auto rounded-2xl border border-sand-200 bg-white">
           {visible.length === 0 && (
-            <p className="px-4 py-8 text-center text-xs text-sand-400">All posted.</p>
+            <p className="px-4 py-8 text-center text-xs text-sand-400">Nothing left to do.</p>
           )}
-          {visible.map((r) => {
-            const on = selected?.taskId === r.taskId;
-            return (
-              <button
-                key={r.taskId}
-                onClick={() => setSelectedId(r.taskId)}
-                className={`flex w-full items-center gap-3 border-b border-sand-100 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
-                  on ? "bg-forest-50" : "hover:bg-sand-50"
-                }`}
-              >
-                <span
-                  className={`w-9 shrink-0 text-center ${on ? "text-forest-800" : "text-sand-500"}`}
-                >
-                  <span className="block text-[9px] font-semibold uppercase tracking-wider">
-                    {r.dueAt ? MON.format(new Date(r.dueAt)) : "—"}
-                  </span>
-                  <span className="block text-[15px] font-semibold leading-tight tabular-nums">
-                    {r.dueAt ? DAY.format(new Date(r.dueAt)) : ""}
-                  </span>
+          {byCommunity.map(([community, list]) => (
+            <section key={community}>
+              {/* Sticky, so the building you are looking at is always named,
+                  however far down the column you have scrolled. */}
+              <h3 className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-sand-100 bg-white/95 px-3 py-1.5 backdrop-blur">
+                <span className="truncate text-[10px] font-semibold uppercase tracking-widest text-sand-500">
+                  {community}
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={`block truncate text-[13px] ${on ? "text-forest-900" : "text-sand-900"}`}
+                <span className="shrink-0 text-[10px] tabular-nums text-sand-300">{list.length}</span>
+              </h3>
+              {list.map((r) => {
+                const on = selected?.taskId === r.taskId;
+                return (
+                  <button
+                    key={r.taskId}
+                    onClick={() => setSelectedId(r.taskId)}
+                    className={`flex w-full items-center gap-2.5 border-b border-sand-100 py-2 pl-3 pr-3 text-left transition-colors last:border-b-0 ${
+                      on ? "bg-forest-50" : "hover:bg-sand-50"
+                    }`}
                   >
-                    {r.eventTitle ?? r.eventName}
-                  </span>
-                  <span className="block truncate text-[11px] text-sand-400">
-                    {r.community ?? "No community"}
-                  </span>
-                </span>
-                <Dot row={r} />
-              </button>
-            );
-          })}
+                    <span
+                      className={`w-11 shrink-0 text-[11px] tabular-nums ${
+                        on ? "text-forest-800" : "text-sand-400"
+                      }`}
+                    >
+                      {r.dueAt ? `${MON.format(new Date(r.dueAt))} ${DAY.format(new Date(r.dueAt))}` : "—"}
+                    </span>
+                    <span
+                      className={`min-w-0 flex-1 truncate text-[13px] ${
+                        on ? "text-forest-900" : "text-sand-900"
+                      }`}
+                    >
+                      {r.eventTitle ?? r.eventName}
+                    </span>
+                    <Dot row={r} />
+                  </button>
+                );
+              })}
+            </section>
+          ))}
         </nav>
       </aside>
 

@@ -21,6 +21,8 @@ export interface EventRow {
   postedToFacebookAt: string | null;
   inFurther: boolean | null;
   facebookEventsUrl: string | null;
+  /** Planner called it "FB & Website Event": the website wants this one too. */
+  wantsWebsitePost: boolean;
   /** Whether there is a draft or a flyer behind this, so photos are possible. */
   hasSource: boolean;
 }
@@ -302,9 +304,18 @@ function Detail({
     <article className="min-w-0">
       <header className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4 pb-6">
         <div className="min-w-0">
-          <p className="text-[12px] text-sand-500">
-            {row.community ?? "No community"}
-            {row.dueAt && <> · due {LONG.format(new Date(row.dueAt))}</>}
+          <p className="flex flex-wrap items-center gap-x-2 text-[12px] text-sand-500">
+            <span>
+              {row.community ?? "No community"}
+              {row.dueAt && <> · due {LONG.format(new Date(row.dueAt))}</>}
+            </span>
+            {/* Planner's own distinction, carried through: this one also
+                wants a post on the community's website. */}
+            {row.wantsWebsitePost && (
+              <span className="rounded-full bg-clay-100 px-2 py-0.5 text-[10.5px] font-medium text-clay-700">
+                Website too
+              </span>
+            )}
           </p>
           <h2 className="mt-1.5 font-serif text-[26px] leading-tight text-sand-900">{name}</h2>
         </div>

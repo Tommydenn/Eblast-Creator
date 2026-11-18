@@ -37,6 +37,7 @@ import {
   isFbEventTask,
   matchCommunity,
   matchEblastTask,
+  wantsWebsitePost,
   type PlannerTask,
 } from "@/lib/planner";
 import { listCommunities } from "@/data/communities";
@@ -109,6 +110,7 @@ export async function syncFbEventTasks(
         communitySlug: community?.slug,
         title: task.title,
         eventName: eventNameOf(task.title),
+        wantsWebsitePost: wantsWebsitePost(task.title),
         dueAt: task.dueDateTime ? new Date(task.dueDateTime) : undefined,
         assigneePriority: task.assigneePriority,
         eblastTaskId: twin?.id ?? null,
@@ -122,6 +124,7 @@ export async function syncFbEventTasks(
           communitySlug: community?.slug,
           title: task.title,
           eventName: eventNameOf(task.title),
+          wantsWebsitePost: wantsWebsitePost(task.title),
           dueAt: task.dueDateTime ? new Date(task.dueDateTime) : undefined,
           assigneePriority: task.assigneePriority,
           eblastTaskId: twin?.id ?? null,

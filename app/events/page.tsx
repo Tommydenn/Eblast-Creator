@@ -80,6 +80,7 @@ export default async function EventsPage() {
       // Matched on the name Further holds, since nothing links the two records.
       inFurther: inFurther ? inFurther.has((e.eventTitle ?? e.eventName).trim().toLowerCase()) : null,
         facebookEventsUrl: facebookEventsUrl(community?.socials?.facebook),
+        wantsWebsitePost: e.wantsWebsitePost,
       };
     });
 

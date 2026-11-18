@@ -17,6 +17,7 @@ import {
   isFbEventTask,
   matchEblastTask,
   sameEvent,
+  wantsWebsitePost,
 } from "@/lib/planner";
 import { facebookEventsUrl } from "@/lib/db/queries";
 
@@ -25,6 +26,33 @@ const fail = (m: string) => failures.push(m);
 
 const FB = "FB Event - Home for the Holidays Open House December 8";
 const EB = "Eblast - Home for the Holidays Open House December 8";
+/** The other opening in use, for an event the website wants as well. */
+const FBW = "FB & Website Event - Home for the Holidays Open House December 8";
+
+// ── Both openings count as a Facebook event ───────────────────────────────
+//
+// Matching only the shorter one left every "FB & Website Event" out of the
+// app entirely — they were not unwritten, they were never seen.
+for (const title of [
+  FBW,
+  "FB and Website Event - Fall Social",
+  "FB & Website Event: Fall Social",
+  "FB &Website Event - Fall Social",
+  "fb & website event - fall social",
+]) {
+  if (!isFbEventTask(title)) fail(`"${title}" should count as a Facebook event task`);
+  if (!wantsWebsitePost(title)) fail(`"${title}" should be marked as wanting a website post too`);
+}
+if (wantsWebsitePost(FB)) fail("a plain FB Event must not be marked as wanting a website post");
+if (eventNameOf(FBW) !== "Home for the Holidays Open House December 8") {
+  fail(`the longer opening is not stripped: "${eventNameOf(FBW)}"`);
+}
+if (!sameEvent(FBW, EB)) fail("an FB & Website Event does not pair with its eblast");
+{
+  const fb = { id: "fb1", title: FBW, planId: "planA" };
+  const all = [fb, { id: "eb1", title: EB, planId: "planA" }];
+  if (matchEblastTask(fb, all)?.id !== "eb1") fail("an FB & Website Event found no twin");
+}
 
 // ── Telling the two kinds apart ───────────────────────────────────────────
 if (!isFbEventTask(FB)) fail("a real FB Event title is not recognised");

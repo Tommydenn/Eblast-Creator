@@ -86,14 +86,29 @@ export function isEblastTask(title: string): boolean {
  * under different openings — "Eblast - Home for the Holidays Open House
  * December 8" and "FB Event - Home for the Holidays Open House December 8" —
  * so the flyer for the Facebook one is reached through its eblast twin.
+ *
+ * Two openings, not one. Some of these are written "FB & Website Event",
+ * meaning the same event also wants a post on the community's website, and
+ * everything up to that extra post is identical. Matching only the shorter
+ * opening left those events out of the app entirely, which is why some were
+ * missing rather than merely unwritten.
  */
+const FB_EVENT_OPENING = /^\s*fb\s*(?:&|and)?\s*(?:website\s*)?event\b/i;
+
 export function isFbEventTask(title: string): boolean {
-  return /^\s*fb\s+event\b/i.test(title ?? "");
+  return FB_EVENT_OPENING.test(title ?? "");
+}
+
+/** Whether this one also wants a post on the community's website. */
+export function wantsWebsitePost(title: string): boolean {
+  return /^\s*fb\s*(?:&|and)\s*website\s*event\b/i.test(title ?? "");
 }
 
 /** A title with its opening removed, which is the event's own name. */
 export function eventNameOf(title: string): string {
-  return (title ?? "").replace(/^\s*(eblast|fb\s+event)\b\s*[-–—:]?\s*/i, "").trim();
+  return (title ?? "")
+    .replace(/^\s*(?:eblast|fb\s*(?:&|and)?\s*(?:website\s*)?event)\b\s*[-–—:]?\s*/i, "")
+    .trim();
 }
 
 /**

@@ -635,6 +635,8 @@ export const fbEventTasks = pgTable(
 
     /** Set once the event exists in Further, so it is not created twice. */
     furtherEventUuid: text("further_event_uuid"),
+    /** Also wants a post on the community's website: "FB & Website Event". */
+    wantsWebsitePost: boolean("wants_website_post").notNull().default(false),
     /** Marked In progress in Planner, the way a drafted eblast marks its task. */
     markedInProgress: boolean("marked_in_progress").notNull().default(false),
     /** Ticked by hand: nothing on Facebook's side can tell us this. */

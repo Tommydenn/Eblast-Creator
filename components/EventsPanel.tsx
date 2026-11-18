@@ -17,6 +17,8 @@ export interface EventRow {
   stale: boolean;
   postedToFacebookAt: string | null;
   furtherEventUuid: string | null;
+  /** Whether Further already holds an event of this name. Null if we could not ask. */
+  inFurther: boolean | null;
 }
 
 const MONTH = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
@@ -62,6 +64,28 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
       setError((prev) => ({ ...prev, [taskId]: e instanceof Error ? e.message : "Could not write it" }));
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function setPosted(taskId: string, posted: boolean) {
+    // Shown at once and corrected if the save fails: the tick is a note to
+    // the person who just did the work, not something anything depends on.
+    const was = rows.find((r) => r.taskId === taskId)?.postedToFacebookAt ?? null;
+    setRows((prev) =>
+      prev.map((r) =>
+        r.taskId === taskId ? { ...r, postedToFacebookAt: posted ? new Date().toISOString() : null } : r,
+      ),
+    );
+    try {
+      const res = await fetch(`/api/fb-events/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postedToFacebook: posted }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setRows((prev) => prev.map((r) => (r.taskId === taskId ? { ...r, postedToFacebookAt: was } : r)));
+      setError((e) => ({ ...e, [taskId]: "Could not save that." }));
     }
   }
 
@@ -143,6 +167,18 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
                           >
                             Download cover (1.91:1)
                           </a>
+                          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-sand-600">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(r.postedToFacebookAt)}
+                              onChange={(e) => setPosted(r.taskId, e.target.checked)}
+                              className="h-3.5 w-3.5 accent-forest-700"
+                            />
+                            Posted to Facebook
+                          </label>
+                          {r.inFurther === true && (
+                            <span className="text-xs text-forest-700">Already in Further</span>
+                          )}
                           <button
                             onClick={() => generate(r.taskId)}
                             disabled={busy === r.taskId}

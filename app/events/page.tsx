@@ -10,11 +10,35 @@ import { Header } from "@/components/Header";
 import { EventsPanel } from "@/components/EventsPanel";
 import { listFbEventTasks } from "@/lib/fb-events";
 import { listCommunities } from "@/data/communities";
+import { hasFurtherKey, listCommunityEvents } from "@/lib/further";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The events Further already holds, by name.
+ *
+ * Read so a row can say when the work is already done over there. Further
+ * cannot be written to — their public API offers no way to create an event —
+ * so this is the only half of that job the app can do, and it is the half
+ * that stops the same event being entered twice.
+ */
+async function furtherNames(): Promise<Set<string> | null> {
+  if (!hasFurtherKey()) return null;
+  try {
+    const events = await listCommunityEvents();
+    return new Set(events.map((e) => (e.name ?? "").trim().toLowerCase()).filter(Boolean));
+  } catch {
+    // Their API being down is not a reason for this page to be.
+    return null;
+  }
+}
+
 export default async function EventsPage() {
-  const [events, communities] = await Promise.all([listFbEventTasks(), listCommunities()]);
+  const [events, communities, inFurther] = await Promise.all([
+    listFbEventTasks(),
+    listCommunities(),
+    furtherNames(),
+  ]);
   const nameBySlug = new Map(communities.map((c) => [c.slug, c.displayName]));
 
   const rows = events.map((e) => ({
@@ -31,6 +55,10 @@ export default async function EventsPage() {
     stale: Boolean(e.generatedAt && e.generatedFromDraftId && e.generatedFromDraftId !== e.savedDraftId),
     postedToFacebookAt: e.postedToFacebookAt ? e.postedToFacebookAt.toISOString() : null,
     furtherEventUuid: e.furtherEventUuid,
+    // Matched on the name Further holds, since nothing links the two records.
+    inFurther: inFurther
+      ? inFurther.has((e.eventTitle ?? e.eventName).trim().toLowerCase())
+      : null,
   }));
 
   return (

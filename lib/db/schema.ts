@@ -615,6 +615,23 @@ export const fbEventTasks = pgTable(
     savedDraftId: text("saved_draft_id"),
     /** Why it could not be paired, so the list can say so rather than stay quiet. */
     matchNote: text("match_note"),
+
+    // ---- what has been written, once it has been ----
+    /** The event's name on both Facebook and Further. */
+    eventTitle: text("event_title"),
+    paragraphs: jsonb("paragraphs").$type<string[]>(),
+    facebookDescription: text("facebook_description"),
+    /** The same, without the call-to-RSVP close: Further runs its own form. */
+    furtherDescription: text("further_description"),
+    generatedAt: timestamp("generated_at", { withTimezone: true }),
+    /** Which draft it was written from, so an edited eblast can be noticed. */
+    generatedFromDraftId: text("generated_from_draft_id"),
+
+    /** Set once the event exists in Further, so it is not created twice. */
+    furtherEventUuid: text("further_event_uuid"),
+    /** Ticked by hand: nothing on Facebook's side can tell us this. */
+    postedToFacebookAt: timestamp("posted_to_facebook_at", { withTimezone: true }),
+
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export interface HeaderProps {
   /** The currently active section, used for nav highlighting. */
-  active?: "drafter" | "communities";
+  active?: "drafter" | "communities" | "events";
 }
 
 /**
@@ -31,6 +31,9 @@ export function Header({ active }: HeaderProps) {
           </NavLink>
           <NavLink href="/communities" active={active === "communities"}>
             Communities
+          </NavLink>
+          <NavLink href="/events" active={active === "events"}>
+            Events
           </NavLink>
         </nav>
       </div>

@@ -7,7 +7,8 @@ import {
 } from "@/lib/past-sends-retrieval";
 import { VOICE_DOCTRINE } from "@/lib/voice";
 
-const MODEL = "claude-sonnet-4-6";
+/** Exported so everything the app writes is written by the same model. */
+export const MODEL = "claude-sonnet-4-6";
 
 function client(): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) {

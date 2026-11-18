@@ -107,9 +107,9 @@ export interface EventFacts {
 }
 
 export interface EventDescriptions {
-  /** For Facebook, including the call-to-RSVP close. */
+  /** For Facebook: the paragraphs, the details, and the call-to-RSVP close. */
   facebook: string;
-  /** For Further, which runs its own RSVP form. */
+  /** For Further: the paragraphs alone. */
   further: string;
 }
 
@@ -122,15 +122,17 @@ export function buildDescriptions(facts: EventFacts): EventDescriptions {
     facts.location ? `📍 ${facts.location.trim()}` : null,
   ].filter(Boolean) as string[];
 
-  const base = [body, details.join("\n")].filter(Boolean).join("\n\n");
-
   // No number to call means no line telling anyone to call it.
   const close = facts.phone
     ? [facts.rsvpRequired ? "RSVP required, call today!" : "Call today to let us know you are coming!", `📞 ${facts.phone}`].join("\n")
     : "";
 
   return {
-    facebook: close ? `${base}\n\n${close}` : base,
-    further: base,
+    facebook: [body, details.join("\n"), close].filter(Boolean).join("\n\n"),
+    // Further has a field of its own for the date, the time and the place,
+    // and prints them beside the description. Repeating them underneath says
+    // everything twice on the one page where it is already answered, so
+    // Further gets the prose and nothing else.
+    further: body,
   };
 }

@@ -623,7 +623,13 @@ export const fbEventTasks = pgTable(
     facebookDescription: text("facebook_description"),
     /** The same, without the call-to-RSVP close: Further runs its own form. */
     furtherDescription: text("further_description"),
+    /** The event's own details, which Further needs in fields of its own. */
+    eventDate: text("event_date"),
+    eventTime: text("event_time"),
+    eventLocation: text("event_location"),
     generatedAt: timestamp("generated_at", { withTimezone: true }),
+    /** "draft" or "flyer" — the flyer version has not been past a person. */
+    generatedFrom: text("generated_from").$type<"draft" | "flyer">(),
     /** Which draft it was written from, so an edited eblast can be noticed. */
     generatedFromDraftId: text("generated_from_draft_id"),
 

@@ -1,46 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export interface EventRow {
   taskId: string;
   eventName: string;
   community: string | null;
   dueAt: string | null;
-  hasDraft: boolean;
   matchNote: string | null;
   eventTitle: string | null;
+  eventDate: string | null;
+  eventTime: string | null;
+  eventLocation: string | null;
   facebookDescription: string | null;
   furtherDescription: string | null;
   generatedAt: string | null;
-  /** The eblast was re-drafted after this was written. */
+  /** "draft" or "flyer" — written from the eblast, or straight from the flyer. */
+  generatedFrom: string | null;
+  /** The eblast was drafted again after this was written. */
   stale: boolean;
   postedToFacebookAt: string | null;
-  furtherEventUuid: string | null;
   /** Whether Further already holds an event of this name. Null if we could not ask. */
   inFurther: boolean | null;
+  /** The community's Facebook events tab, when one is on file. */
+  facebookEventsUrl: string | null;
+  communitySlug: string | null;
 }
 
-const MONTH = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-const DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const DAY = new Intl.DateTimeFormat("en-US", { day: "numeric", timeZone: "UTC" });
+const MON = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
+const FULL = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+type Filter = "todo" | "all";
 
 /**
- * One list, grouped by the month the event is due.
+ * Pick an event on the left, work it on the right.
  *
- * Open a row and it shows exactly what has to go into Facebook, field by
- * field, each on its own copy button — because the thing being done here is
- * copying, and a wall of text with one button means picking the title back
- * out of it by hand every time.
+ * The job here is copying four things into two websites, one event at a time.
+ * The first version put all seventy-five in one column and opened each one
+ * into a stack of boxes under its own row, which meant the thing being worked
+ * on was never in the same place twice and never had room. So: a quiet index
+ * on the left that stays put, and one event at a time on the right with the
+ * width to be read.
+ *
+ * Only what still needs doing is shown by default. Most of the list is months
+ * away, and a list that is mostly not-yet is a list nobody trusts.
  */
 export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
   const [rows, setRows] = useState(initialRows);
-  const [open, setOpen] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("todo");
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const visible = useMemo(
+    () => (filter === "all" ? rows : rows.filter((r) => !r.postedToFacebookAt)),
+    [rows, filter],
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(initialRows[0]?.taskId ?? null);
+  const selected = visible.find((r) => r.taskId === selectedId) ?? visible[0] ?? null;
+  const todo = rows.filter((r) => !r.postedToFacebookAt).length;
 
   async function generate(taskId: string) {
     setBusy(taskId);
-    setError((e) => ({ ...e, [taskId]: "" }));
+    setErrors((e) => ({ ...e, [taskId]: "" }));
     try {
       const res = await fetch(`/api/fb-events/${taskId}/generate`, { method: "POST" });
       const json = await res.json();
@@ -54,22 +81,20 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
                 facebookDescription: json.descriptions.facebook,
                 furtherDescription: json.descriptions.further,
                 generatedAt: new Date().toISOString(),
+                generatedFrom: json.from ?? r.generatedFrom,
                 stale: false,
               }
             : r,
         ),
       );
-      setOpen(taskId);
     } catch (e) {
-      setError((prev) => ({ ...prev, [taskId]: e instanceof Error ? e.message : "Could not write it" }));
+      setErrors((p) => ({ ...p, [taskId]: e instanceof Error ? e.message : "Could not write it" }));
     } finally {
       setBusy(null);
     }
   }
 
   async function setPosted(taskId: string, posted: boolean) {
-    // Shown at once and corrected if the save fails: the tick is a note to
-    // the person who just did the work, not something anything depends on.
     const was = rows.find((r) => r.taskId === taskId)?.postedToFacebookAt ?? null;
     setRows((prev) =>
       prev.map((r) =>
@@ -85,142 +110,244 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
       if (!res.ok) throw new Error();
     } catch {
       setRows((prev) => prev.map((r) => (r.taskId === taskId ? { ...r, postedToFacebookAt: was } : r)));
-      setError((e) => ({ ...e, [taskId]: "Could not save that." }));
+      setErrors((e) => ({ ...e, [taskId]: "Could not save that." }));
     }
-  }
-
-  const groups = new Map<string, EventRow[]>();
-  for (const r of rows) {
-    const key = r.dueAt ? MONTH.format(new Date(r.dueAt)) : "No date";
-    groups.set(key, [...(groups.get(key) ?? []), r]);
   }
 
   if (rows.length === 0) {
     return (
-      <p className="rounded-xl border border-sand-200 bg-white px-4 py-8 text-center text-sm text-sand-400">
+      <p className="rounded-2xl border border-sand-200 bg-white px-4 py-10 text-center text-sm text-sand-400">
         Nothing yet. The daily Planner pass picks these up.
       </p>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {Array.from(groups.entries()).map(([month, list]) => (
-        <section key={month}>
-          <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-sand-600">{month}</h2>
-          <div className="overflow-hidden rounded-xl border border-sand-200 bg-white">
-            {list.map((r) => (
-              <div key={r.taskId} className="border-b border-sand-100 last:border-b-0">
-                <button
-                  onClick={() => setOpen(open === r.taskId ? null : r.taskId)}
-                  className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-sand-50"
-                >
-                  <span className="w-14 shrink-0 text-[11px] tabular-nums text-sand-400">
-                    {r.dueAt ? DAY.format(new Date(r.dueAt)) : "—"}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-sand-900">{r.eventTitle ?? r.eventName}</span>
-                    <span className="block truncate text-[11px] text-sand-400">
-                      {r.community ?? "Community not matched"}
-                    </span>
-                  </span>
-                  <Status row={r} />
-                </button>
+    <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <aside className="lg:sticky lg:top-24 lg:self-start">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[11px] text-sand-400">
+            {visible.length} {filter === "todo" ? "to do" : "in all"}
+          </span>
+          <button
+            onClick={() => setFilter(filter === "todo" ? "all" : "todo")}
+            className="text-[11px] text-sand-400 transition-colors hover:text-sand-800"
+          >
+            {filter === "todo" ? "Show posted too" : `Show only the ${todo} to do`}
+          </button>
+        </div>
 
-                {open === r.taskId && (
-                  <div className="space-y-3 border-t border-sand-100 bg-sand-50/60 px-4 py-4">
-                    {!r.hasDraft ? (
-                      <p className="text-xs text-sand-500">
-                        {r.matchNote ?? "No eblast draft for this event yet."} The words and the photo come
-                        from the eblast, so there is nothing to build until that exists.
-                      </p>
-                    ) : !r.facebookDescription ? (
-                      <div>
-                        <button
-                          onClick={() => generate(r.taskId)}
-                          disabled={busy === r.taskId}
-                          className="rounded-lg bg-forest-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-forest-800 disabled:opacity-40"
-                        >
-                          {busy === r.taskId ? "Writing…" : "Write the event"}
-                        </button>
-                        {error[r.taskId] && <p className="mt-2 text-xs text-red-600">{error[r.taskId]}</p>}
-                      </div>
-                    ) : (
-                      <>
-                        {r.stale && (
-                          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                            The eblast has been drafted again since this was written.
-                          </p>
-                        )}
-                        <Field label="Event name" value={r.eventTitle ?? r.eventName} />
-                        <Field label="Facebook description" value={r.facebookDescription} multiline />
-                        <Field
-                          label="Further description"
-                          value={r.furtherDescription ?? ""}
-                          multiline
-                          note="Without the call-to-RSVP close, since Further collects the RSVP itself."
-                        />
-                        <div className="flex flex-wrap items-center gap-3 pt-0.5">
-                          <a
-                            href={`/api/fb-events/${r.taskId}/cover`}
-                            className="rounded-lg border border-sand-200 bg-white px-3 py-1.5 text-xs text-sand-700 transition-colors hover:text-sand-900"
-                          >
-                            Download cover (1.91:1)
-                          </a>
-                          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-sand-600">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(r.postedToFacebookAt)}
-                              onChange={(e) => setPosted(r.taskId, e.target.checked)}
-                              className="h-3.5 w-3.5 accent-forest-700"
-                            />
-                            Posted to Facebook
-                          </label>
-                          {r.inFurther === true && (
-                            <span className="text-xs text-forest-700">Already in Further</span>
-                          )}
-                          <button
-                            onClick={() => generate(r.taskId)}
-                            disabled={busy === r.taskId}
-                            className="text-xs text-sand-400 transition-colors hover:text-sand-700 disabled:opacity-40"
-                          >
-                            {busy === r.taskId ? "Writing…" : "Write it again"}
-                          </button>
-                          {error[r.taskId] && <span className="text-xs text-red-600">{error[r.taskId]}</span>}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+        <nav className="max-h-[70vh] overflow-y-auto rounded-2xl border border-sand-200 bg-white">
+          {visible.length === 0 && (
+            <p className="px-4 py-8 text-center text-xs text-sand-400">All posted.</p>
+          )}
+          {visible.map((r) => {
+            const on = selected?.taskId === r.taskId;
+            return (
+              <button
+                key={r.taskId}
+                onClick={() => setSelectedId(r.taskId)}
+                className={`flex w-full items-center gap-3 border-b border-sand-100 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
+                  on ? "bg-forest-50" : "hover:bg-sand-50"
+                }`}
+              >
+                <span
+                  className={`w-9 shrink-0 text-center ${on ? "text-forest-800" : "text-sand-500"}`}
+                >
+                  <span className="block text-[9px] font-semibold uppercase tracking-wider">
+                    {r.dueAt ? MON.format(new Date(r.dueAt)) : "—"}
+                  </span>
+                  <span className="block text-[15px] font-semibold leading-tight tabular-nums">
+                    {r.dueAt ? DAY.format(new Date(r.dueAt)) : ""}
+                  </span>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={`block truncate text-[13px] ${on ? "text-forest-900" : "text-sand-900"}`}
+                  >
+                    {r.eventTitle ?? r.eventName}
+                  </span>
+                  <span className="block truncate text-[11px] text-sand-400">
+                    {r.community ?? "No community"}
+                  </span>
+                </span>
+                <Dot row={r} />
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {selected ? (
+        <Detail
+          key={selected.taskId}
+          row={selected}
+          busy={busy === selected.taskId}
+          error={errors[selected.taskId]}
+          onGenerate={() => generate(selected.taskId)}
+          onPosted={(v) => setPosted(selected.taskId, v)}
+        />
+      ) : (
+        <div className="rounded-2xl border border-sand-200 bg-white px-6 py-16 text-center text-sm text-sand-400">
+          Nothing selected.
+        </div>
+      )}
     </div>
   );
 }
 
-function Status({ row }: { row: EventRow }) {
-  const [label, tone] = !row.hasDraft
-    ? ["Waiting on the eblast", "text-sand-400"]
-    : row.postedToFacebookAt
-      ? ["Posted", "text-forest-700"]
-      : row.facebookDescription
-        ? [row.stale ? "Needs rewriting" : "Ready to copy", row.stale ? "text-amber-700" : "text-forest-700"]
-        : ["Not written", "text-sand-400"];
-  return <span className={`shrink-0 text-[11px] ${tone}`}>{label}</span>;
+/** Where this one is up to, in one dot. The row's words say the rest. */
+function Dot({ row }: { row: EventRow }) {
+  const [tone, title] = row.postedToFacebookAt
+    ? ["bg-forest-600", "Posted"]
+    : row.facebookDescription
+      ? row.stale
+        ? ["bg-amber-400", "Written, but the eblast changed since"]
+        : ["bg-forest-300", "Written, not posted"]
+      : ["bg-sand-200", "Not written yet"];
+  return <span className={`h-2 w-2 shrink-0 rounded-full ${tone}`} title={title} aria-label={title} />;
 }
 
-function Field({
+function Detail({
+  row,
+  busy,
+  error,
+  onGenerate,
+  onPosted,
+}: {
+  row: EventRow;
+  busy: boolean;
+  error?: string;
+  onGenerate: () => void;
+  onPosted: (v: boolean) => void;
+}) {
+  const written = Boolean(row.facebookDescription);
+
+  return (
+    <article className="min-w-0 rounded-2xl border border-sand-200 bg-white">
+      <header className="border-b border-sand-100 px-6 py-5">
+        <p className="text-[11px] text-sand-400">
+          {row.community ?? "No community"}
+          {row.dueAt && <> · due {FULL.format(new Date(row.dueAt))}</>}
+        </p>
+        <h2 className="mt-1 font-serif text-[22px] leading-tight text-sand-900">
+          {row.eventTitle ?? row.eventName}
+        </h2>
+        {(row.eventDate || row.eventTime || row.eventLocation) && (
+          <p className="mt-2 text-[12px] text-sand-500">
+            {[row.eventDate, row.eventTime, row.eventLocation].filter(Boolean).join(" · ")}
+          </p>
+        )}
+      </header>
+
+      {!written ? (
+        <div className="px-6 py-10 text-center">
+          <p className="mx-auto max-w-sm text-sm text-sand-500">
+            {row.matchNote && !row.facebookDescription
+              ? row.matchNote
+              : "Nothing written for this one yet."}
+          </p>
+          <button
+            onClick={onGenerate}
+            disabled={busy}
+            className="mt-4 rounded-xl bg-forest-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-forest-800 disabled:opacity-40"
+          >
+            {busy ? "Writing…" : "Write it"}
+          </button>
+          {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+        </div>
+      ) : (
+        <div className="divide-y divide-sand-100">
+          {row.stale && (
+            <p className="bg-amber-50 px-6 py-2.5 text-xs text-amber-800">
+              The eblast has been drafted again since this was written.
+            </p>
+          )}
+          {row.generatedFrom === "flyer" && (
+            <p className="px-6 py-2.5 text-[11px] text-sand-400">
+              Written from the flyer, before the eblast was drafted.
+            </p>
+          )}
+
+          <Copyable label="Event name" value={row.eventTitle ?? row.eventName} />
+          <Copyable label="Facebook description" value={row.facebookDescription ?? ""} block />
+          <Copyable
+            label="TalkFurther description"
+            value={row.furtherDescription ?? ""}
+            block
+            note="The prose alone — Further has its own fields for the date, time and place."
+          />
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-6 py-4">
+            <a
+              href={`/api/fb-events/${row.taskId}/cover`}
+              className="rounded-lg border border-sand-200 px-3 py-1.5 text-xs text-sand-700 transition-colors hover:border-sand-300 hover:text-sand-900"
+            >
+              Download cover
+            </a>
+            {row.facebookEventsUrl ? (
+              <a
+                href={row.facebookEventsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-forest-700 transition-colors hover:text-forest-800"
+              >
+                Open Facebook events ↗
+              </a>
+            ) : (
+              row.communitySlug && (
+                <a
+                  href={`/communities/${row.communitySlug}`}
+                  className="text-xs text-sand-400 transition-colors hover:text-sand-700"
+                >
+                  Add this community&rsquo;s Facebook page
+                </a>
+              )
+            )}
+            {row.inFurther === true && (
+              <span className="text-xs text-forest-700">Already in Further</span>
+            )}
+
+            <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-sand-600">
+              <input
+                type="checkbox"
+                checked={Boolean(row.postedToFacebookAt)}
+                onChange={(e) => onPosted(e.target.checked)}
+                className="h-3.5 w-3.5 accent-forest-700"
+              />
+              Posted
+            </label>
+            <button
+              onClick={onGenerate}
+              disabled={busy}
+              className="text-xs text-sand-400 transition-colors hover:text-sand-700 disabled:opacity-40"
+            >
+              {busy ? "Writing…" : "Rewrite"}
+            </button>
+          </div>
+          {error && <p className="px-6 pb-4 text-xs text-red-600">{error}</p>}
+        </div>
+      )}
+    </article>
+  );
+}
+
+/**
+ * One thing to copy.
+ *
+ * The button is the whole label row, because every one of these exists to be
+ * copied and hunting for a small word next to the text is the one motion this
+ * page should not have.
+ */
+function Copyable({
   label,
   value,
-  multiline,
+  block,
   note,
 }: {
   label: string;
   value: string;
-  multiline?: boolean;
+  block?: boolean;
   note?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -229,31 +356,32 @@ function Field({
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Clipboard refused — the text is on screen and selectable either way.
+      // Refused by the browser; the text is on screen and selectable.
     }
   }
 
   return (
-    <div>
-      <div className="mb-1 flex items-center gap-2">
+    <section className="group px-6 py-4">
+      <button onClick={copy} className="mb-1.5 flex w-full items-center gap-2 text-left">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-sand-500">{label}</span>
-        <button
-          onClick={copy}
-          className="text-[11px] text-sand-400 transition-colors hover:text-forest-700"
+        <span
+          className={`text-[11px] transition-colors ${
+            copied ? "text-forest-700" : "text-sand-300 group-hover:text-forest-700"
+          }`}
         >
           {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
+        </span>
+      </button>
       <p
-        className={`whitespace-pre-wrap rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm text-sand-900 ${
-          multiline ? "" : "truncate"
+        className={`text-sand-900 ${
+          block ? "max-w-[64ch] whitespace-pre-wrap text-[13.5px] leading-relaxed" : "text-sm"
         }`}
       >
         {value}
       </p>
-      {note && <p className="mt-1 text-[11px] text-sand-400">{note}</p>}
-    </div>
+      {note && <p className="mt-1.5 text-[11px] text-sand-400">{note}</p>}
+    </section>
   );
 }

@@ -4,6 +4,7 @@ import {
   updateCommunityBrand,
   updateCommunityEmailRoles,
   setCommunityRegionals,
+  setCommunityFacebookUrl,
 } from "@/lib/db/queries";
 import type { Address, CommunityBrand } from "@/lib/db/schema";
 
@@ -52,6 +53,13 @@ export async function PATCH(
       approverEmail?: string | null;
       hubspotFromEmail?: string | null;
     });
+    if (!ok) return NextResponse.json({ error: "Community not found" }, { status: 404 });
+    updatedSomething = true;
+  }
+
+  // Empty clears it, so this too is checked by the key being present.
+  if ("facebookUrl" in body) {
+    const ok = await setCommunityFacebookUrl(params.slug, body.facebookUrl ?? null);
     if (!ok) return NextResponse.json({ error: "Community not found" }, { status: 404 });
     updatedSomething = true;
   }

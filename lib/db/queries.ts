@@ -330,6 +330,47 @@ export async function updateCommunityContact(
 }
 
 /**
+ * The community's Facebook page.
+ *
+ * Kept in the socials object it belongs to rather than given a column of its
+ * own, and merged rather than replaced so setting it cannot drop the other
+ * networks. Empty clears it.
+ */
+export async function setCommunityFacebookUrl(slug: string, url: string | null): Promise<boolean> {
+  const [row] = await db
+    .select({ socials: communities.socials })
+    .from(communities)
+    .where(eq(communities.slug, slug))
+    .limit(1);
+  if (!row) return false;
+  const socials = { ...(row.socials ?? {}) };
+  const trimmed = url?.trim();
+  if (trimmed) socials.facebook = trimmed;
+  else delete socials.facebook;
+  const result = await db
+    .update(communities)
+    .set({ socials, updatedAt: new Date() })
+    .where(eq(communities.slug, slug))
+    .returning({ id: communities.id });
+  return result.length > 0;
+}
+
+/**
+ * The events tab of a community's Facebook page.
+ *
+ * Built rather than stored, so there is one thing to keep up to date. Copes
+ * with a page given without a scheme, and with one that already points at its
+ * own events.
+ */
+export function facebookEventsUrl(facebook: string | null | undefined): string | null {
+  const raw = (facebook ?? "").trim();
+  if (!raw) return null;
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const base = withScheme.replace(/\/+$/, "");
+  return /\/events\/?$/i.test(base) ? base : `${base}/events`;
+}
+
+/**
  * Partial update of a community's brand palette/typography — the fields
  * editable via the Community page's Brand panel. Read-modify-write against
  * the existing `brand` JSONB so unrelated sub-fields (paletteSource,

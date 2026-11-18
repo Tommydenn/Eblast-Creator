@@ -18,6 +18,7 @@ import {
   matchEblastTask,
   sameEvent,
 } from "@/lib/planner";
+import { facebookEventsUrl } from "@/lib/db/queries";
 
 const failures: string[] = [];
 const fail = (m: string) => failures.push(m);
@@ -108,6 +109,53 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
   const fb = task("fb1", FB, "planA");
   const all = [fb, task("fb2", FB, "planA")];
   if (matchEblastTask(fb, all) !== null) fail("a Facebook task paired with a Facebook task");
+}
+
+// ── The link out to Facebook ──────────────────────────────────────────────
+{
+  const want = "https://facebook.com/CarettaMaplewood/events";
+  for (const given of [
+    "facebook.com/CarettaMaplewood",
+    "https://facebook.com/CarettaMaplewood",
+    "https://facebook.com/CarettaMaplewood/",
+    "https://facebook.com/CarettaMaplewood/events",
+    "https://facebook.com/CarettaMaplewood/events/",
+  ]) {
+    const got = facebookEventsUrl(given);
+    if (got !== want) fail(`"${given}" should link to ${want}, got ${got}`);
+  }
+  for (const empty of [null, undefined, "", "   "]) {
+    if (facebookEventsUrl(empty) !== null) fail("a community with no page must not get a link");
+  }
+}
+
+// ── Which source the copy comes from ──────────────────────────────────────
+{
+  const source = readFileSync("lib/fb-event-source.ts", "utf-8");
+  // The order matters. A drafted eblast has been through the voice doctrine
+  // and usually a person; the flyer has been through neither. But a Facebook
+  // event is due more than a week before its eblast, so the flyer has to be
+  // enough on its own or every event is late.
+  const draftAt = source.indexOf("kind: \"draft\"");
+  const flyerAt = source.indexOf("kind: \"flyer\"");
+  if (draftAt === -1 || flyerAt === -1) fail("lib/fb-event-source.ts no longer offers both sources");
+  if (draftAt > flyerAt) fail("lib/fb-event-source.ts reaches for the flyer before the draft");
+  // The call, not the import at the top, which would be satisfied by a file
+  // that imports it and never uses it.
+  if (!source.includes("await extractFlyerContent(")) {
+    fail("lib/fb-event-source.ts can no longer build an event from the flyer alone");
+  }
+  if (!source.includes("await flyerFor(")) {
+    fail("lib/fb-event-source.ts no longer fetches the flyer off the eblast's Planner task");
+  }
+
+  const cover = readFileSync("app/api/fb-events/[taskId]/cover/route.ts", "utf-8");
+  if (!cover.includes("fromFlyer")) {
+    fail("the cover route can no longer fall back to the flyer, so it waits on the eblast");
+  }
+  if (!cover.includes("120_000")) {
+    fail("the cover route no longer skips small images, so a logo can become the cover");
+  }
 }
 
 // ── What the sync does with them ──────────────────────────────────────────

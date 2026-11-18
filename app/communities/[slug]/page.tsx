@@ -10,6 +10,7 @@ import { pastSends } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
 import { SendersPanel } from "@/components/SendersPanel";
 import { EmailRolesPanel } from "@/components/EmailRolesPanel";
+import { FacebookPagePanel } from "@/components/FacebookPagePanel";
 import { primarySender } from "@/lib/email-roles";
 import { ContactPanel } from "@/components/ContactPanel";
 import { BrandPanel } from "@/components/BrandPanel";
@@ -348,6 +349,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 regionals={c.regionals}
                 allRegionals={allRegionals.map((r) => ({ id: r.id, name: r.name, email: r.email }))}
               />
+              <FacebookPagePanel slug={c.slug} initialUrl={c.socials?.facebook ?? null} />
             </Section>
           </div>
         </div>

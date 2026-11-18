@@ -7,12 +7,13 @@
  */
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { fbEventTasks, savedDrafts } from "@/lib/db/schema";
+import { fbEventTasks } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { writeFbEventCopy, type DraftFields } from "@/lib/fb-event-draft";
+import { writeFbEventCopy } from "@/lib/fb-event-draft";
+import { NoSourceError, sourceFor } from "@/lib/fb-event-source";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export async function POST(_req: Request, { params }: { params: { taskId: string } }) {
@@ -22,26 +23,11 @@ export async function POST(_req: Request, { params }: { params: { taskId: string
     .where(eq(fbEventTasks.taskId, params.taskId))
     .limit(1);
   if (!task) return NextResponse.json({ ok: false, error: "No such event task" }, { status: 404 });
-  if (!task.savedDraftId) {
-    return NextResponse.json(
-      { ok: false, error: task.matchNote ?? "This event has no eblast draft to work from yet" },
-      { status: 400 },
-    );
-  }
-
-  const [draft] = await db
-    .select({ data: savedDrafts.data, communityName: savedDrafts.communityName })
-    .from(savedDrafts)
-    .where(eq(savedDrafts.id, task.savedDraftId))
-    .limit(1);
-  if (!draft) {
-    return NextResponse.json({ ok: false, error: "The eblast draft has been deleted" }, { status: 400 });
-  }
-
-  const fields = ((draft.data as { fields?: DraftFields })?.fields ?? {}) as DraftFields;
 
   try {
-    const copy = await writeFbEventCopy(fields, draft.communityName, task.eventName);
+    const source = await sourceFor(params.taskId);
+    const copy = await writeFbEventCopy(source.fields, source.communityName, task.eventName);
+
     await db
       .update(fbEventTasks)
       .set({
@@ -49,14 +35,23 @@ export async function POST(_req: Request, { params }: { params: { taskId: string
         paragraphs: copy.paragraphs,
         facebookDescription: copy.descriptions.facebook,
         furtherDescription: copy.descriptions.further,
+        eventDate: source.fields.eventDate ?? null,
+        eventTime: source.fields.eventTime ?? null,
+        eventLocation: source.fields.eventLocation ?? null,
         generatedAt: new Date(),
-        generatedFromDraftId: task.savedDraftId,
+        generatedFrom: source.kind,
+        // Null when it came from the flyer, which is also what makes the
+        // "written before the eblast changed" warning mean something.
+        generatedFromDraftId: source.draftId,
         updatedAt: new Date(),
       })
       .where(eq(fbEventTasks.taskId, params.taskId));
 
-    return NextResponse.json({ ok: true, ...copy });
+    return NextResponse.json({ ok: true, from: source.kind, ...copy });
   } catch (e) {
+    if (e instanceof NoSourceError) {
+      return NextResponse.json({ ok: false, error: e.message }, { status: 400 });
+    }
     const error = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ ok: false, error }, { status: 500 });
   }

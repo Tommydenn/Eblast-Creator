@@ -107,14 +107,16 @@ eq(
     fail(`the Facebook description is not the house format:\n--- got ---\n${facebook}\n--- want ---\n${want}`);
   }
 
-  // Further runs its own RSVP form, so the close must not be there.
-  if (further.includes("651-360-1691")) fail("Further's copy still tells people to phone");
-  if (further.includes("RSVP required")) fail("Further's copy still carries the RSVP close");
-  if (!further.includes("📍 1910 County Road C East, Maplewood, MN")) {
-    fail("Further's copy lost the detail block, which is more than the tail");
+  // Further has its own fields for all of this and prints them beside the
+  // description, so its copy is the prose alone.
+  if (further !== "First paragraph.\n\nSecond paragraph.") {
+    fail(`Further's copy should be the paragraphs alone, got ${JSON.stringify(further)}`);
+  }
+  for (const repeated of ["📅", "🕐", "📍", "📞", "RSVP required"]) {
+    if (further.includes(repeated)) fail(`Further's copy repeats ${repeated}, which Further already shows`);
   }
   if (!facebook.startsWith(further)) {
-    fail("Further's copy should be the Facebook one with the close removed, nothing else changed");
+    fail("the two should open with the same prose");
   }
 }
 {

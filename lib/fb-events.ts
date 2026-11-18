@@ -13,8 +13,18 @@
  * nothing behind it still needs doing by hand.
  */
 import { db } from "@/lib/db";
-import { fbEventTasks, plannerTasks } from "@/lib/db/schema";
-import { eq, inArray, notInArray } from "drizzle-orm";
+import { fbEventTasks, pendingFlyers, plannerTasks } from "@/lib/db/schema";
+import { and, eq, inArray, like, lt, notInArray } from "drizzle-orm";
+
+/**
+ * How long a Facebook event stays on file after its deadline.
+ *
+ * Long enough that an event posted late, or one somebody is still checking,
+ * is still here — and not a day longer. These rows hold a copy of the event's
+ * words and a note of when it was posted, and neither is worth keeping about
+ * a day that has already happened.
+ */
+export const RETAIN_DAYS = 45;
 import {
   NOT_STARTED,
   eventNameOf,
@@ -127,6 +137,22 @@ export async function syncFbEventTasks(
       ? await db.delete(fbEventTasks).where(notInArray(fbEventTasks.taskId, keep)).returning({ id: fbEventTasks.taskId })
       : await db.delete(fbEventTasks).returning({ id: fbEventTasks.taskId });
     summary.removed = removed.length;
+
+    // And an age limit on top of that, for a task nobody ever ticks off in
+    // Planner. Nothing here is worth keeping once the day has been and gone:
+    // the words describe a date in the past and the record of having posted
+    // it is on Facebook, which is the thing that actually holds it.
+    const cutoff = new Date(Date.now() - RETAIN_DAYS * 86_400_000);
+    const aged = await db
+      .delete(fbEventTasks)
+      .where(lt(fbEventTasks.dueAt, cutoff))
+      .returning({ id: fbEventTasks.taskId });
+    summary.removed += aged.length;
+
+    // The flyers cached for them go too, or the cache grows for ever.
+    await db.delete(pendingFlyers).where(
+      and(like(pendingFlyers.key, "fb:%"), lt(pendingFlyers.createdAt, cutoff)),
+    );
   }
 
   return summary;

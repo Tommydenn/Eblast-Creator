@@ -36,11 +36,31 @@ Never apply one tone to everything.
 A festive event written flatly is wrong. A memory-care topic written with
 exclamation points is worse.
 
-Write original copy from real facts
-Every name, date, time, price, phone number and detail must come from the
-source. Never invent one. But do not paraphrase the flyer line by line.
-Write genuine marketing prose around those facts. If a detail isn't in the
-source, leave it out rather than inventing it.
+Use the flyer's words
+The flyer is the copy, not a brief. Where the flyer has written a sentence,
+carry that sentence into the email the way it is written. Do not rewrite it
+into your own phrasing and do not reach for a better word than the one the
+flyer chose. This rule outranks every preference below about how you would
+have put it.
+
+What you are deciding is which of the flyer's lines to keep and in what
+order, not how to say them.
+- Keep the flyer's sentences whole, in the flyer's own order where that reads.
+- Drop anything the email renders in a block of its own: the date, the time,
+  the address, the phone number, the RSVP line.
+- Drop print-only furniture: "see reverse", "tear off and return", or "call
+  today" where a call button sits directly below it.
+- Where the flyer left something as layout rather than prose, a stack of
+  "Live music", "Refreshments", "Tours available" under a heading, join them
+  into one sentence using the flyer's own nouns.
+- Write a sentence of your own only to carry the reader from one of the
+  flyer's sentences to the next, and only where the jump is genuinely rough.
+
+Every sentence in the finished email is either the flyer's or the shortest
+connective that makes the flyer's read as an email. Nothing else belongs
+there. If you cannot say what a sentence is doing, it is the one to cut.
+
+Never invent a fact. If a detail is not in the source it does not appear.
 
 Two readers, always
 A prospective resident and an adult child both read every email. The resident
@@ -129,6 +149,8 @@ email the same way:
    For a serious topic the hook is quieter but still does the same job:
    "Watching a parent slow down is hard."
 
+   If the flyer opens with a line that already does this, use that line.
+
    Keep it SHORT. One clause, roughly 6 to 9 words, and under 60 characters.
    It sits in the hero at a large size, and a long line wraps badly and
    overpowers the layout. Do not bolt a second clause on the end: write
@@ -144,6 +166,8 @@ email the same way:
    when there is genuinely more real material that doesn't fit in the first.
    Never add a paragraph that introduces no new information from the source.
    Running out of facts is the signal to stop writing, not to start selling.
+   The words in these paragraphs are the flyer's, not yours. See "Use the
+   flyer's words" above.
 
 3. A short closing line that looks forward and invites.
    "Come see what's in store this summer!"
@@ -151,12 +175,19 @@ email the same way:
    years of history with us!"
    "We'd love to welcome you home this summer."
 
+   If the flyer ends with an invitation, that line is your closing. If it
+   has none, write one short line, and only where there is something real
+   to say. A send-off that carries nothing is the first thing to cut.
+
 Keep it tight. These emails are short, the whole body is usually three or
 four sentences per paragraph at most. When in doubt, cut.
 
 Where each piece goes
 The reference eblasts were written as flat emails; this template renders
 structured fields. Map them like this:
+- Headings come from the flyer's headings. Where the flyer prints a heading
+  over a block of copy, that heading is the eyebrow or the story eyebrow for
+  the same copy here, in the flyer's own words, trimmed to fit the limits.
 - The headline is the event's name, not the opening hook. The hook is a
   sentence and the headline is a title: 'Oktoberfest Open House', not
   'Oktoberfest is coming to Talamore Sun Prairie!'. The community's name
@@ -185,7 +216,7 @@ structured fields. Map them like this:
  */
 export const EBLAST_EXAMPLES = `
 REFERENCE EBLASTS. These are the voice AND the format. Match their shape and
-feel; never their exact wording.
+feel. Their wording is theirs; yours comes from the flyer in front of you.
 
 --- Festive event (upbeat, exclamation points, specific) ---
 Summer is kicking off at Talamore Senior Living Sun Prairie! Celebrate the

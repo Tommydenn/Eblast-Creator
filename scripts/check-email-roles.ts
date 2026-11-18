@@ -150,6 +150,13 @@ const NAME_ONLY = sender("Pat Who", null, true);
   }
   if (!panel.includes("regionalIds,")) fail("components/EmailRolesPanel.tsx no longer saves the coverage it edits");
 
+  // One person is often both the regional and the approver. They must not be
+  // shown as copied, because the mailer will not copy them.
+  const modal = require("node:fs").readFileSync("components/drafter/ApprovalModal.tsx", "utf8") as string;
+  if (!modal.includes("!== reviewer")) {
+    fail("components/drafter/ApprovalModal.tsx lists a regional who is already the reviewer as copied");
+  }
+
   const mailer = require("node:fs").readFileSync("lib/email.ts", "utf8") as string;
   if (!/ccRecipients/.test(mailer)) fail("lib/email.ts does not put the copies on the message");
   if (!/toLower\.has/.test(mailer)) {

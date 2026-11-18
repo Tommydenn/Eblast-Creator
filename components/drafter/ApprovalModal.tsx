@@ -31,7 +31,16 @@ export default function ApprovalModal({ onClose, mode = "real" }: Props) {
   // Regionals covering this community. They are copied automatically, and can
   // be dropped from one send without changing who they cover. A test copies
   // nobody, so there is nothing to show.
-  const regionals = isTest ? [] : community?.regionals ?? [];
+  //
+  // A regional who is also the reviewer is left out: they are on the To: line
+  // already. The mailer drops a duplicate address before sending, so listing
+  // them here would be describing a copy that never goes out — and on the
+  // communities where one person is both, every approval would claim a copy
+  // that was never made.
+  const reviewer = recipientEmail.trim().toLowerCase();
+  const regionals = isTest
+    ? []
+    : (community?.regionals ?? []).filter((r) => r.email.trim().toLowerCase() !== reviewer);
   const [droppedCc, setDroppedCc] = useState<string[]>([]);
   const keptRegionals = regionals.filter((r) => !droppedCc.includes(r.id));
   const ccEmails = keptRegionals.map((r) => r.email);

@@ -162,37 +162,47 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
           ))}
         </select>
 
-        <ul className="mt-3 space-y-1">
+        {/* One surface with hairlines between the rows, rather than rows
+            floating on the page background — which is what made one event
+            hard to tell from the next. The selected one carries an edge on
+            its left as well as a tint, so it is obvious at a glance which
+            row the right-hand side belongs to. */}
+        <ul className="mt-3 overflow-hidden rounded-xl border border-sand-200 bg-white shadow-sm">
           {list.length === 0 && (
-            <li className="rounded-xl border border-dashed border-sand-200 px-4 py-10 text-center text-[12px] text-sand-400">
-              Nothing left here.
-            </li>
+            <li className="px-4 py-10 text-center text-[12px] text-sand-400">Nothing left here.</li>
           )}
           {list.map((r) => {
             const on = selected?.taskId === r.taskId;
             const done = Boolean(r.postedToFacebookAt);
             return (
-              <li key={r.taskId}>
+              <li key={r.taskId} className="border-b border-sand-100 last:border-b-0">
                 <button
                   onClick={() => setSelectedId(r.taskId)}
-                  className={`flex w-full items-baseline gap-3 rounded-xl px-3.5 py-3 text-left transition-colors ${
-                    on ? "bg-forest-700 text-white shadow-sm" : "hover:bg-white"
+                  className={`flex w-full items-baseline gap-3 border-l-[3px] py-3 pl-3 pr-3.5 text-left transition-colors ${
+                    on
+                      ? "border-l-forest-700 bg-forest-50"
+                      : "border-l-transparent hover:bg-sand-50"
                   }`}
                 >
                   <span
                     className={`w-11 shrink-0 text-[11px] tabular-nums ${
-                      on ? "text-white/70" : "text-sand-400"
+                      on ? "text-forest-700" : "text-sand-400"
                     }`}
                   >
                     {r.dueAt ? DATE.format(new Date(r.dueAt)) : "—"}
                   </span>
                   <span
                     className={`min-w-0 flex-1 truncate text-[13px] ${
-                      on ? "text-white" : done ? "text-sand-400 line-through" : "text-sand-800"
+                      on
+                        ? "font-medium text-forest-900"
+                        : done
+                          ? "text-sand-400 line-through"
+                          : "text-sand-800"
                     }`}
                   >
                     {r.eventTitle ?? r.eventName}
                   </span>
+                  {done && !on && <Check className="h-3 w-3 shrink-0 text-sand-300" />}
                 </button>
               </li>
             );

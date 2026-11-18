@@ -14,7 +14,10 @@
  */
 import { db } from "@/lib/db";
 import { fbEventTasks, pendingFlyers, plannerTasks } from "@/lib/db/schema";
-import { and, eq, inArray, like, lt, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, like, lt, notInArray } from "drizzle-orm";
+import { getLookaheadDays, isDueWithinWindow } from "@/lib/planner-settings";
+import { writeFbEventCopy } from "@/lib/fb-event-draft";
+import { NoSourceError, sourceFor } from "@/lib/fb-event-source";
 
 /**
  * How long a Facebook event stays on file after its deadline.
@@ -156,6 +159,76 @@ export async function syncFbEventTasks(
   }
 
   return summary;
+}
+
+/**
+ * Write the copy for every event whose deadline is close enough.
+ *
+ * The same window the eblasts are drafted on, from the same setting, so one
+ * number governs how far ahead the app works. An event with copy already
+ * written is left alone; an event with nothing to build from is skipped
+ * quietly and tried again tomorrow, because "no flyer yet" is a thing that
+ * stops being true on its own.
+ *
+ * Capped and timed, because each one costs a model call. Whatever is missed
+ * is picked up by the next run, and a deadline a month out has thirty
+ * chances.
+ */
+export async function writePendingFbEvents(opts?: {
+  limit?: number;
+  budgetMs?: number;
+}): Promise<{ considered: number; written: number; skipped: number; failed: number }> {
+  const limit = opts?.limit ?? 12;
+  const budgetMs = opts?.budgetMs ?? 240_000;
+  const startedAt = Date.now();
+  const out = { considered: 0, written: 0, skipped: 0, failed: 0 };
+
+  const lookaheadDays = await getLookaheadDays();
+  const waiting = await db
+    .select()
+    .from(fbEventTasks)
+    .where(isNull(fbEventTasks.facebookDescription))
+    .orderBy(fbEventTasks.dueAt);
+
+  const due = waiting.filter((e) =>
+    isDueWithinWindow(e.dueAt ? e.dueAt.toISOString() : null, lookaheadDays),
+  );
+  out.considered = due.length;
+
+  for (const event of due) {
+    if (out.written >= limit) break;
+    if (Date.now() - startedAt > budgetMs) break;
+    try {
+      const source = await sourceFor(event.taskId);
+      const copy = await writeFbEventCopy(source.fields, source.communityName, event.eventName);
+      await db
+        .update(fbEventTasks)
+        .set({
+          eventTitle: copy.name,
+          paragraphs: copy.paragraphs,
+          facebookDescription: copy.descriptions.facebook,
+          furtherDescription: copy.descriptions.further,
+          eventDate: source.fields.eventDate ?? null,
+          eventTime: source.fields.eventTime ?? null,
+          eventLocation: source.fields.eventLocation ?? null,
+          generatedAt: new Date(),
+          generatedFrom: source.kind,
+          generatedFromDraftId: source.draftId,
+          updatedAt: new Date(),
+        })
+        .where(eq(fbEventTasks.taskId, event.taskId));
+      out.written++;
+    } catch (e) {
+      // Nothing to build from yet is the ordinary case, not a failure.
+      if (e instanceof NoSourceError) out.skipped++;
+      else {
+        out.failed++;
+        console.error(`[fb-events] could not write ${event.eventName}:`, e);
+      }
+    }
+  }
+
+  return out;
 }
 
 /** Every Facebook event on file, newest deadline first, with its pairing. */

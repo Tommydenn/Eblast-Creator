@@ -215,6 +215,26 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
   if (!sync.includes("pendingFlyers")) {
     fail("lib/fb-events.ts no longer clears the flyers it cached, so the cache grows for ever");
   }
+  // The events are written ahead of their deadline on the same window the
+  // eblasts are drafted on, so one setting governs how far ahead the app
+  // works and the two cannot drift apart.
+  if (!sync.includes("getLookaheadDays") || !sync.includes("isDueWithinWindow")) {
+    fail("lib/fb-events.ts no longer writes ahead on the eblasts' own lookahead window");
+  }
+  // A missing flyer is the ordinary case and must not count as a failure, or
+  // a run that is simply early looks broken.
+  if (!sync.includes("e instanceof NoSourceError")) {
+    fail("lib/fb-events.ts treats having nothing to build from yet as a failure");
+  }
+
+  const cron = readFileSync("app/api/cron/write-fb-events/route.ts", "utf-8");
+  if (!cron.includes("syncFbEventTasks") || !cron.includes("writePendingFbEvents")) {
+    fail("the write-ahead cron no longer reads Planner before writing");
+  }
+  const crons = readFileSync("vercel.json", "utf-8");
+  if ((crons.match(/write-fb-events/g) ?? []).length !== 2) {
+    fail("vercel.json should fire write-fb-events twice, since only one hour is 9am Central");
+  }
 
   const panel = readFileSync("components/EventsPanel.tsx", "utf-8");
   // Marking one posted used to drop it out of the list, which took the

@@ -139,10 +139,19 @@ if (communityAddressLine(community).includes(community.displayName)
   fail("the default address line still carries the community name");
 }
 
-// ── 3. Every colourable section is one the email actually draws ───────────
+// ── 3. Every colourable surface really reaches the email ──────────────────
+//
+// This used to look for a data-bgfield tag on the section, which was how a
+// colour got picked back when picking one meant clicking the right part of
+// the preview. Colours are chosen in the panel now, and the rule across the
+// top of the header is a border on a cell rather than a cell of its own, so
+// it has no tag of its own to find. The tag was never the point: what matters
+// is whether setting the colour changes the email, so that is what is asked.
 for (const field of SECTION_COLOR_FIELDS) {
-  if (!html.includes(`data-bgfield="${field}"`)) {
-    fail(`${field} can be coloured in the editor but the email has no section tagged with it`);
+  const probe = "#A1B2C3";
+  const painted = buildEblastHtml({ ...populated, [field]: probe } as any, community, opts);
+  if (!painted.includes(probe)) {
+    fail(`${field} can be coloured in the editor and never reaches the email`);
   }
 }
 // And the other way: nothing the email offers is missing from the list, or it

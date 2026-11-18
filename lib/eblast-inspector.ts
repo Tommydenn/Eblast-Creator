@@ -36,7 +36,10 @@ export interface SectionPanel {
 export const SECTION_PANELS: Record<string, SectionPanel> = {
   Header: {
     note: "The community's logo. It is set on the Community page, so there is nothing to type here.",
-    colors: [{ field: "headerBgColor", label: "Background" }],
+    colors: [
+      { field: "headerBgColor", label: "Background" },
+      { field: "headerStripeColor", label: "Top line" },
+    ],
   },
   Hero: {
     photo: "hero",
@@ -89,6 +92,7 @@ export function defaultColor(
   const brand = community?.brand;
   switch (field) {
     case "headerBgColor": return brand?.background ?? "#ffffff";
+    case "headerStripeColor": return brand?.accent ?? "#000000";
     case "heroBgColor": return brand?.primary ?? "#000000";
     case "finalCtaBgColor": return brand?.accent ?? "#000000";
     case "ctaButtonBgColor": return brand?.accent ?? "#000000";

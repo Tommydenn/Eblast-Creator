@@ -171,6 +171,8 @@ export interface ExtractedFlyer {
    * usual color for that section when unset (see lib/render-email.ts).
    */
   headerBgColor?: string;
+  /** The rule across the very top, above the logo. Defaults to the accent. */
+  headerStripeColor?: string;
   heroBgColor?: string;
   finalCtaBgColor?: string;
   footerBgColor?: string;

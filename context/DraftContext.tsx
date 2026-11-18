@@ -1295,6 +1295,14 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
     setSelectedCommunitySlug(draft.communitySlug);
     setLockInfo(computeLockInfo(draft));
     setCopyPromptOpen(false);
+    // What the last draft's push or approval did belongs to that draft. These
+    // two confirm an action somebody just took, and opening a different eblast
+    // is not that action — leaving them set is what had a draft that had never
+    // been near HubSpot reporting that it had been pushed to it. Whether this
+    // one really went is said by the folder it sits in and by its lock.
+    setPushResult(null);
+    setPushError(null);
+    setApprovalStatus(null);
 
     // ── Load the photos, in the order they're needed ──────────────────────
     // The photos in the eblast come first so the draft stops looking empty,

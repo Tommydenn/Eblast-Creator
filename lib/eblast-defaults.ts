@@ -107,6 +107,7 @@ export const FIELD_FONT_SIZES = {
  */
 export const SECTION_COLOR_FIELDS = [
   "headerBgColor",
+  "headerStripeColor",
   "heroBgColor",
   "finalCtaBgColor",
   "footerBgColor",

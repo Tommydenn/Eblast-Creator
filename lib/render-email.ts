@@ -514,7 +514,10 @@ export function buildEblastHtml(
       : brand.background; // warm/beige light surface -> keep it
   // Manual per-draft override, set from the editor's section-color picker.
   const headerBg = flyer.headerBgColor ?? defaultHeaderBg;
-  const headerStripe = brand.accent;
+  // The rule across the very top of the email. It followed the community's
+  // accent and could not be changed for one eblast; it is a colourable
+  // surface like any other now, and falls back to that accent untouched.
+  const headerStripe = flyer.headerStripeColor ?? brand.accent;
 
   // The three sections that sit on the shell's white. Each falls back to
   // that same white, so an eblast with nothing chosen looks exactly as it

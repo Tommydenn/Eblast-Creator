@@ -212,6 +212,43 @@ function contextLine(draft: DraftMeta): { text: string; tone: string } | null {
   }
 }
 
+/**
+ * The deadline, on a card that is waiting on somebody else.
+ *
+ * Every other folder puts the deadline in the line under the subject, where
+ * it is the one fact that matters. Waiting has a fact of its own there —
+ * how long the approver has had it — and running the two together made one
+ * long grey sentence holding two unrelated things. A date you must hit and a
+ * wait you are enduring are different kinds of news, so the deadline moves
+ * down to the row where the badges are and becomes one.
+ *
+ * It is also the folder where a deadline bites hardest: the work is done and
+ * the only thing left is to chase someone.
+ */
+function DueByPill({ dueAt }: { dueAt: string }) {
+  const when = new Date(dueAt).toLocaleDateString(undefined, {
+    weekday: "short", month: "short", day: "numeric",
+  });
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const late = Math.floor((midnight.getTime() - new Date(dueAt).getTime()) / 86400000);
+  const overdue = late > 0;
+  return (
+    <span
+      title={overdue ? `Was due ${when}` : `Due ${when}`}
+      className={[
+        "inline-flex items-center gap-1 text-[10px] font-medium",
+        overdue ? "text-[#b3312c]" : "text-[#8a6d3b]",
+      ].join(" ")}
+    >
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" />
+      </svg>
+      {overdue ? `Overdue — was ${when}` : `Send by ${when}`}
+    </span>
+  );
+}
+
 function DraftCard({
   draft,
   accentColor,
@@ -305,6 +342,7 @@ function DraftCard({
               </span>
             )}
             {draft.folder !== "done" && draft.folder !== "waiting" && <StatusPill draft={draft} />}
+            {draft.folder === "waiting" && draft.dueAt && <DueByPill dueAt={draft.dueAt} />}
             {isLegacy && (
               <span className="text-[10px] text-[#b0a89f] italic">Outdated</span>
             )}

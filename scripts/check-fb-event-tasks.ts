@@ -186,12 +186,19 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
     fail("lib/fb-event-source.ts no longer fetches the flyer off the eblast's Planner task");
   }
 
-  const cover = readFileSync("app/api/fb-events/[taskId]/cover/route.ts", "utf-8");
-  if (!cover.includes("fromFlyer")) {
-    fail("the cover route can no longer fall back to the flyer, so it waits on the eblast");
+  const photos = readFileSync("lib/fb-event-photos.ts", "utf-8");
+  if (!photos.includes("flyerFor")) {
+    fail("lib/fb-event-photos.ts can no longer reach the flyer, so photos wait on the eblast");
   }
-  if (!cover.includes("120_000")) {
-    fail("the cover route no longer skips small images, so a logo can become the cover");
+  if (!photos.includes("MIN_AREA")) {
+    fail("lib/fb-event-photos.ts no longer skips small images, so logos are offered as photos");
+  }
+  // Both platforms crop on upload and show what they are doing. Cropping
+  // first only takes the choice away, and a 1.91:1 cover is unusable
+  // anywhere that wants another shape.
+  const one = readFileSync("app/api/fb-events/[taskId]/photos/[index]/route.ts", "utf-8");
+  if (/\.resize\(/.test(one)) {
+    fail("the photo route resizes or crops, and it should hand over the original");
   }
 }
 

@@ -11,7 +11,7 @@ import { EventsPanel } from "@/components/EventsPanel";
 import { listFbEventTasks } from "@/lib/fb-events";
 import { listCommunities } from "@/data/communities";
 import { facebookEventsUrl } from "@/lib/db/queries";
-import { formatEventDate, formatEventTime } from "@/lib/fb-event-copy";
+import { detailsFromDescription, formatEventDate, formatEventTime } from "@/lib/fb-event-copy";
 import { hasFurtherKey, listCommunityEvents } from "@/lib/further";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +44,7 @@ export default async function EventsPage() {
 
   const rows = events.map((e) => {
     const community = e.communitySlug ? bySlug.get(e.communitySlug) ?? null : null;
+    const fromText = detailsFromDescription(e.facebookDescription);
     return {
       taskId: e.taskId,
       eventName: e.eventName,
@@ -54,15 +55,17 @@ export default async function EventsPage() {
       eventTitle: e.eventTitle,
       // Shown and copied exactly as the description carries them, so what
       // goes in Facebook's date field and what the text says cannot differ.
-      eventDate: e.eventDate ? formatEventDate(e.eventDate) : null,
-      eventTime: e.eventTime ? formatEventTime(e.eventTime) : null,
-      eventLocation: e.eventLocation,
+      // An event written before these had columns of their own has them only
+      // inside the text, so they are read back off it rather than left blank.
+      eventDate: e.eventDate ? formatEventDate(e.eventDate) : fromText.date,
+      eventTime: e.eventTime ? formatEventTime(e.eventTime) : fromText.time,
+      eventLocation: e.eventLocation ?? fromText.location,
       facebookDescription: e.facebookDescription,
       furtherDescription: e.furtherDescription,
       generatedFrom: e.generatedFrom,
       // A hint only — the picture itself says whether there is one, and the
       // card falls back when the request comes back empty.
-      hasCover: Boolean(e.savedDraftId || e.eblastTaskId),
+      hasSource: Boolean(e.savedDraftId || e.eblastTaskId),
       // Only copy written FROM a draft can be out of date with one.
       stale: Boolean(
         e.generatedAt && e.generatedFromDraftId && e.generatedFromDraftId !== e.savedDraftId,

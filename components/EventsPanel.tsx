@@ -21,14 +21,16 @@ export interface EventRow {
   postedToFacebookAt: string | null;
   inFurther: boolean | null;
   facebookEventsUrl: string | null;
-  hasCover: boolean;
+  /** Whether there is a draft or a flyer behind this, so photos are possible. */
+  hasSource: boolean;
 }
 
 const ALL = "__all__";
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const LONG = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
 
-const FURTHER_URL = "https://app.talkfurther.com";
+const FURTHER_URL =
+  "https://dashboard.talkfurther.com/advanced/community-events/list-of-events/active-events";
 
 /**
  * Two forms, filled from one screen.
@@ -162,42 +164,39 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
           ))}
         </select>
 
-        {/* One surface with hairlines between the rows, rather than rows
-            floating on the page background — which is what made one event
-            hard to tell from the next. The selected one carries an edge on
-            its left as well as a tint, so it is obvious at a glance which
-            row the right-hand side belongs to. */}
-        <ul className="mt-3 overflow-hidden rounded-xl border border-sand-200 bg-white shadow-sm">
+        {/* Separate rows on the page rather than one boxed-in list: each
+            gets its own quiet surface and a little air around it, which is
+            all that was missing before — they were running together because
+            nothing told one from the next, not because they needed a frame. */}
+        <ul className="mt-3 space-y-1.5">
           {list.length === 0 && (
-            <li className="px-4 py-10 text-center text-[12px] text-sand-400">Nothing left here.</li>
+            <li className="rounded-xl border border-dashed border-sand-200 px-4 py-10 text-center text-[12px] text-sand-400">
+              Nothing left here.
+            </li>
           )}
           {list.map((r) => {
             const on = selected?.taskId === r.taskId;
             const done = Boolean(r.postedToFacebookAt);
             return (
-              <li key={r.taskId} className="border-b border-sand-100 last:border-b-0">
+              <li key={r.taskId}>
                 <button
                   onClick={() => setSelectedId(r.taskId)}
-                  className={`flex w-full items-baseline gap-3 border-l-[3px] py-3 pl-3 pr-3.5 text-left transition-colors ${
+                  className={`flex w-full items-baseline gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors ${
                     on
-                      ? "border-l-forest-700 bg-forest-50"
-                      : "border-l-transparent hover:bg-sand-50"
+                      ? "border-forest-700 bg-forest-700 shadow-sm"
+                      : "border-sand-200/70 bg-white/70 hover:border-sand-300 hover:bg-white"
                   }`}
                 >
                   <span
                     className={`w-11 shrink-0 text-[11px] tabular-nums ${
-                      on ? "text-forest-700" : "text-sand-400"
+                      on ? "text-white/70" : "text-sand-400"
                     }`}
                   >
                     {r.dueAt ? DATE.format(new Date(r.dueAt)) : "—"}
                   </span>
                   <span
                     className={`min-w-0 flex-1 truncate text-[13px] ${
-                      on
-                        ? "font-medium text-forest-900"
-                        : done
-                          ? "text-sand-400 line-through"
-                          : "text-sand-800"
+                      on ? "text-white" : done ? "text-sand-400 line-through" : "text-sand-800"
                     }`}
                   >
                     {r.eventTitle ?? r.eventName}
@@ -377,7 +376,8 @@ function Detail({
                   : undefined
               }
             />
-            <Cover taskId={row.taskId} hasCover={row.hasCover} />
+            <Photos taskId={row.taskId} hasSource={row.hasSource} />
+            <Flyer taskId={row.taskId} hasSource={row.hasSource} />
           </div>
 
           <div className="mt-5 flex items-center justify-between text-[11px] text-sand-400">
@@ -472,39 +472,171 @@ function Field({
   );
 }
 
-/** The cover, shown at the shape it will be, because a crop is worth seeing. */
-function Cover({ taskId, hasCover }: { taskId: string; hasCover: boolean }) {
-  const [failed, setFailed] = useState(false);
+interface PhotoChoice {
+  index: number;
+  width: number;
+  height: number;
+  source: string;
+  thumb: string;
+}
 
-  if (!hasCover || failed) {
+/**
+ * The photos from the flyer, to pick from.
+ *
+ * One is chosen automatically — the eblast's hero, or the largest the flyer
+ * has — but it is only a default. Which photo reads best as an event cover
+ * is a judgement, so the rest are here, and none of them is cropped: both
+ * platforms crop on upload and show you what they are doing while you do it.
+ *
+ * Loaded when asked for rather than with the page, because gathering them
+ * means reading a PDF and most events are posted without ever looking past
+ * the first one.
+ */
+function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
+  const [photos, setPhotos] = useState<PhotoChoice[] | null>(null);
+  const [chosen, setChosen] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/fb-events/${taskId}/photos`);
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Could not read the photos");
+      setPhotos(json.photos ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not read the photos");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!hasSource) {
     return (
       <div className="rounded-xl border border-dashed border-sand-200 px-5 py-6 text-[12px] text-sand-400">
-        No photo for this one — the flyer has none big enough and the eblast has no hero yet.
+        No flyer behind this one yet, so there are no photos.
       </div>
     );
   }
+
+  if (!photos) {
+    return (
+      <button
+        onClick={load}
+        disabled={loading}
+        className="w-full rounded-xl border border-dashed border-sand-200 px-5 py-6 text-[12px] text-sand-500 transition-colors hover:border-sand-300 hover:text-sand-800 disabled:opacity-50"
+      >
+        {loading ? "Looking through the flyer…" : error ?? "Show the photos"}
+      </button>
+    );
+  }
+
+  if (photos.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-sand-200 px-5 py-6 text-[12px] text-sand-400">
+        The flyer has no photo big enough to use.
+      </div>
+    );
+  }
+
+  const current = photos[chosen] ?? photos[0];
 
   return (
     <div className="overflow-hidden rounded-xl border border-sand-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 px-5 py-3">
         <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sand-400">
-          Cover photo
+          Photo
+          {photos.length > 1 && (
+            <span className="ml-2 font-normal tracking-normal text-sand-300">
+              {chosen + 1} of {photos.length}
+            </span>
+          )}
         </span>
         <a
-          href={`/api/fb-events/${taskId}/cover`}
+          href={`/api/fb-events/${taskId}/photos/${current.index}?download=1`}
           className="text-[11px] text-forest-700 transition-colors hover:text-forest-900"
         >
           Download
         </a>
       </div>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/fb-events/${taskId}/cover?inline=1`}
-        alt=""
-        onError={() => setFailed(true)}
-        className="block w-full border-t border-sand-100"
-        style={{ aspectRatio: "1.91 / 1", objectFit: "cover" }}
-      />
+
+      <div className="border-t border-sand-100 bg-sand-50/60 p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`/api/fb-events/${taskId}/photos/${current.index}`}
+          alt=""
+          className="mx-auto block max-h-[320px] w-auto max-w-full rounded-lg"
+        />
+        <p className="mt-2 text-center text-[11px] text-sand-400">
+          {current.width} × {current.height}, uncropped
+        </p>
+      </div>
+
+      {photos.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto border-t border-sand-100 px-4 py-3">
+          {photos.map((p, i) => (
+            <button
+              key={p.index}
+              onClick={() => setChosen(i)}
+              className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
+                i === chosen ? "border-forest-700" : "border-transparent hover:border-sand-300"
+              }`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.thumb} alt="" className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The flyer itself.
+ *
+ * The same thing the eblast editor shows beside the preview, for the same
+ * reason: checking a detail against its source should not mean going back to
+ * Planner to find the original. Folded away by default, because most of the
+ * time the copy is right and the page is about the copy.
+ */
+function Flyer({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!hasSource) return null;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-sand-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 px-5 py-3">
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-sand-400 transition-colors hover:text-sand-700"
+        >
+          <span className={`transition-transform ${open ? "rotate-90" : ""}`}>›</span>
+          Flyer
+        </button>
+        <a
+          href={`/api/fb-events/${taskId}/flyer`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[11px] text-forest-700 transition-colors hover:text-forest-900"
+        >
+          Open in a tab ↗
+        </a>
+      </div>
+      {open && (
+        <div className="border-t border-sand-100 bg-sand-100">
+          {/* The browser's own viewer with its toolbar off, as the editor
+              does it: that toolbar is wider than this column and makes the
+              page scroll sideways when it does not fit. */}
+          <iframe
+            src={`/api/fb-events/${taskId}/flyer#toolbar=0&view=FitH`}
+            title="The flyer this event was written from"
+            className="block h-[560px] w-full border-0"
+          />
+        </div>
+      )}
     </div>
   );
 }

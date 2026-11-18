@@ -96,6 +96,34 @@ function tenDigits(source: string | null | undefined): string | null {
   return ten.length === 10 ? ten : null;
 }
 
+/**
+ * The date, time and place read back out of a finished description.
+ *
+ * Events written before those were stored in their own columns have them
+ * only inside the text, which is why some rows showed the detail in the
+ * description and offered no box to copy it from. Rather than leave those
+ * events half-usable until somebody rewrites them, the three lines are read
+ * back off the text they were built into — they are on their own lines,
+ * each behind a known marker, because this file put them there.
+ */
+export function detailsFromDescription(description: string | null | undefined): {
+  date: string | null;
+  time: string | null;
+  location: string | null;
+} {
+  const after = (marker: string) => {
+    for (const line of (description ?? "").split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith(marker)) {
+        const value = trimmed.slice(marker.length).trim();
+        if (value) return value;
+      }
+    }
+    return null;
+  };
+  return { date: after("📅"), time: after("🕐"), location: after("📍") };
+}
+
 export interface EventFacts {
   /** The two paragraphs, already written. */
   paragraphs: string[];

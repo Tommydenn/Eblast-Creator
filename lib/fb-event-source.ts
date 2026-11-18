@@ -18,7 +18,7 @@
  * and the copy is usually written more than once.
  */
 import { db } from "@/lib/db";
-import { fbEventTasks, pendingFlyers, savedDrafts } from "@/lib/db/schema";
+import { draftFlyers, fbEventTasks, pendingFlyers, savedDrafts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getGraphToken } from "@/lib/graph";
 import { downloadTaskFlyer } from "@/lib/planner";
@@ -41,8 +41,29 @@ export interface EventSource {
 
 export class NoSourceError extends Error {}
 
-/** The flyer PDF for this event, from the cache or from Planner. */
+/**
+ * The flyer PDF for this event.
+ *
+ * Three places, cheapest first: the eblast draft's own copy, this event's
+ * cache, and finally Planner — which costs a Graph call and is the only one
+ * that can be slow.
+ */
 export async function flyerFor(taskId: string): Promise<Buffer | null> {
+  const [task] = await db
+    .select({ eblastTaskId: fbEventTasks.eblastTaskId, savedDraftId: fbEventTasks.savedDraftId })
+    .from(fbEventTasks)
+    .where(eq(fbEventTasks.taskId, taskId))
+    .limit(1);
+
+  if (task?.savedDraftId) {
+    const [onDraft] = await db
+      .select({ pdfBase64: draftFlyers.pdfBase64 })
+      .from(draftFlyers)
+      .where(eq(draftFlyers.draftId, task.savedDraftId))
+      .limit(1);
+    if (onDraft) return Buffer.from(onDraft.pdfBase64, "base64");
+  }
+
   const key = flyerKey(taskId);
   const [cached] = await db
     .select({ pdfBase64: pendingFlyers.pdfBase64 })
@@ -51,11 +72,6 @@ export async function flyerFor(taskId: string): Promise<Buffer | null> {
     .limit(1);
   if (cached) return Buffer.from(cached.pdfBase64, "base64");
 
-  const [task] = await db
-    .select({ eblastTaskId: fbEventTasks.eblastTaskId })
-    .from(fbEventTasks)
-    .where(eq(fbEventTasks.taskId, taskId))
-    .limit(1);
   if (!task?.eblastTaskId) return null;
 
   const token = await getGraphToken();

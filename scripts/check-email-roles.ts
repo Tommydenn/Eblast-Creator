@@ -137,8 +137,16 @@ const NAME_ONLY = sender("Pat Who", null, true);
     fail("the community PATCH no longer accepts regionalIds, so coverage cannot be edited there");
   }
   const panel = require("node:fs").readFileSync("components/EmailRolesPanel.tsx", "utf8") as string;
-  if (!panel.includes("allRegionals.map") || !panel.includes("setRegionalIds")) {
+  if (!panel.includes("roster.map") || !panel.includes("setRegionalIds")) {
     fail("components/EmailRolesPanel.tsx no longer offers every regional as a choice");
+  }
+  // Adding a person and taking one off the roster are both reachable: the
+  // first inline here, the second on the page that owns the list.
+  if (!panel.includes("/api/regionals")) {
+    fail("components/EmailRolesPanel.tsx can no longer add a regional who is not on the list yet");
+  }
+  if (!panel.includes("/communities#regionals")) {
+    fail("components/EmailRolesPanel.tsx no longer points anywhere to edit or remove a regional");
   }
   if (!panel.includes("regionalIds,")) fail("components/EmailRolesPanel.tsx no longer saves the coverage it edits");
 

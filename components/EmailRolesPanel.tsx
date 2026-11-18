@@ -20,6 +20,8 @@ interface Props {
 
 const INPUT =
   "w-full rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm text-sand-900 placeholder:text-sand-400 shadow-sm focus:border-forest-400 focus:ring-2 focus:ring-forest-600/20 focus:outline-none transition-all";
+/** The same field sharing a row rather than owning one. */
+const NARROW = INPUT.replace("w-full", "min-w-[8rem] flex-1").replace("py-2", "py-1.5");
 
 /**
  * The addresses that are not the signature.
@@ -45,11 +47,48 @@ export function EmailRolesPanel({
   const [approverEmail, setApproverEmail] = useState(initialApproverEmail ?? "");
   const [hubspotFromEmail, setHubspotFromEmail] = useState(initialHubspotFromEmail ?? "");
   const [regionalIds, setRegionalIds] = useState(regionals.map((r) => r.id));
+  // The roster is held locally so somebody added here appears at once,
+  // already ticked, without a round trip to the page that owns the list.
+  const [roster, setRoster] = useState(allRegionals);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [addingBusy, setAddingBusy] = useState(false);
+
+  async function addRegional() {
+    if (!newName.trim() || !newEmail.trim()) {
+      setError("A new regional needs a name and an address.");
+      return;
+    }
+    setAddingBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/regionals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), email: newEmail.trim(), communityIds: [] }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Could not add them");
+      setRoster((prev) => [...prev, json.regional]);
+      setRegionalIds((prev) => [...prev, json.regional.id]);
+      setNewName("");
+      setNewEmail("");
+      setAdding(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add them");
+    } finally {
+      setAddingBusy(false);
+    }
+  }
 
   function cancel() {
     setApproverEmail(initialApproverEmail ?? "");
     setHubspotFromEmail(initialHubspotFromEmail ?? "");
     setRegionalIds(regionals.map((r) => r.id));
+    setAdding(false);
+    setNewName("");
+    setNewEmail("");
     setError(null);
     setEditing(false);
   }
@@ -156,36 +195,73 @@ export function EmailRolesPanel({
 
       <div>
         <SectionLabel>Copied on approvals</SectionLabel>
-        {allRegionals.length === 0 ? (
-          <p className="mt-1 text-xs">
-            <Link href="/communities#regionals" className="text-sand-400 transition-colors hover:text-sand-700">
-              Add a regional first
-            </Link>
-          </p>
-        ) : (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {allRegionals.map((r) => {
-              const on = regionalIds.includes(r.id);
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  title={r.email}
-                  onClick={() =>
-                    setRegionalIds((prev) => (on ? prev.filter((x) => x !== r.id) : [...prev, r.id]))
-                  }
-                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                    on
-                      ? "border-forest-300 bg-forest-50 text-forest-700"
-                      : "border-sand-200 bg-white text-sand-400 hover:text-sand-800"
-                  }`}
-                >
-                  {r.name}
-                </button>
-              );
-            })}
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {roster.map((r) => {
+            const on = regionalIds.includes(r.id);
+            return (
+              <button
+                key={r.id}
+                type="button"
+                title={r.email}
+                onClick={() =>
+                  setRegionalIds((prev) => (on ? prev.filter((x) => x !== r.id) : [...prev, r.id]))
+                }
+                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  on
+                    ? "border-forest-300 bg-forest-50 text-forest-700"
+                    : "border-sand-200 bg-white text-sand-400 hover:text-sand-800"
+                }`}
+              >
+                {r.name}
+              </button>
+            );
+          })}
+          {!adding && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="rounded-full border border-dashed border-sand-300 px-2.5 py-1 text-xs text-sand-400 transition-colors hover:text-sand-800"
+            >
+              + Someone new
+            </button>
+          )}
+        </div>
+
+        {adding && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input
+              className={NARROW}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Name"
+            />
+            <input
+              className={NARROW}
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="Email"
+            />
+            <button
+              onClick={addRegional}
+              disabled={addingBusy}
+              className="rounded-lg border border-sand-200 px-3 py-1.5 text-xs text-sand-700 transition-colors hover:text-sand-900 disabled:opacity-40"
+            >
+              {addingBusy ? "Adding…" : "Add"}
+            </button>
+            <button
+              onClick={() => { setAdding(false); setNewName(""); setNewEmail(""); }}
+              className="text-xs text-sand-400 transition-colors hover:text-sand-700"
+            >
+              Cancel
+            </button>
           </div>
         )}
+
+        <p className="mt-2 text-[11px]">
+          <Link href="/communities#regionals" className="text-sand-400 transition-colors hover:text-sand-700">
+            Edit or remove a regional
+          </Link>
+        </p>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex gap-2">

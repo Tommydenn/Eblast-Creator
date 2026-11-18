@@ -109,7 +109,11 @@ export default async function CommunitiesPage() {
             <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-clay-600">Control center</p>
             <h1 className="mt-1 font-serif text-[30px] font-bold leading-tight text-sand-900">Communities</h1>
             <p className="mt-1.5 text-sm text-sand-500">
-              {total} communities · Great Lakes Management
+              {total} communities ·{" "}
+              <a href="#regionals" className="underline-offset-2 transition-colors hover:text-sand-800 hover:underline">
+                {regionals.length} regionals
+              </a>{" "}
+              · Great Lakes Management
             </p>
           </div>
 

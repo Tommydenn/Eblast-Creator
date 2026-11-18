@@ -39,6 +39,7 @@ import {
   type PlannerTask,
 } from "@/lib/planner";
 import { getGraphToken } from "@/lib/graph";
+import { syncFbEventTasks, type FbEventSyncSummary } from "@/lib/fb-events";
 import { generateDraft } from "@/lib/generate-draft";
 import { buildImageRows, dedupeImageRows } from "@/lib/image-bank";
 import { getLookaheadDays, isDueWithinWindow } from "@/lib/planner-settings";
@@ -64,6 +65,8 @@ export interface PlannerRunSummary {
   clearedSkips: number;
   /** Candidates still waiting when this run stopped. Non-zero means hand off. */
   remaining: number;
+  /** The Facebook event tasks seen in the same list, and how many have a twin. */
+  fbEvents: FbEventSyncSummary | null;
 }
 
 export async function runPlannerDraftPass(opts?: {
@@ -89,6 +92,7 @@ export async function runPlannerDraftPass(opts?: {
     recovered: 0,
     clearedSkips: 0,
     remaining: 0,
+    fbEvents: null,
   };
 
   const token = await getGraphToken();
@@ -155,6 +159,19 @@ export async function runPlannerDraftPass(opts?: {
 
   const communities = await listCommunities();
   const planTitleCache = new Map<string, string | null>();
+
+  // The Facebook event tasks sit in the same list, so they are recorded from
+  // the list already in memory and share the plan-title lookups below. This
+  // writes nothing to Planner and generates nothing; it only notes what exists
+  // and which eblast task each one's flyer will come from. A failure here must
+  // not cost the run its eblasts, which are the thing with a deadline.
+  if (!opts?.dryRun) {
+    try {
+      summary.fbEvents = await syncFbEventTasks(all, token, planTitleCache);
+    } catch (e) {
+      console.error("[planner] could not record the Facebook event tasks:", e);
+    }
+  }
 
   for (const task of workable) {
     if (opts?.limit && summary.drafted.length >= opts.limit) break;

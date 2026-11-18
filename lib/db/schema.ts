@@ -590,6 +590,44 @@ export type PlannerTaskRow = InferSelectModel<typeof plannerTasks>;
 export type NewPlannerTaskRow = InferInsertModel<typeof plannerTasks>;
 
 
+// ---------- Facebook event tasks -------------------------------------------
+// The other half of the Planner list. Beside every "Eblast - <event>" there is
+// an "FB Event - <event>", and the Facebook one carries no flyer: its content
+// comes from the eblast twin's draft. Kept apart from planner_tasks because
+// nothing else about the two is alike — these are never claimed, never drafted
+// and never marked In progress.
+
+export const fbEventTasks = pgTable(
+  "fb_event_tasks",
+  {
+    taskId: text("task_id").primaryKey(),
+    planId: text("plan_id").notNull(),
+    /** Resolved from the PLAN's title, the same way an eblast task's is. */
+    communitySlug: varchar("community_slug", { length: 64 }),
+    title: text("title").notNull(),
+    /** The title with "FB Event" removed: what the pair has in common. */
+    eventName: text("event_name").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    assigneePriority: text("assignee_priority"),
+    /** The eblast task of the same name, or null when there is not exactly one. */
+    eblastTaskId: text("eblast_task_id"),
+    /** That task's draft, which holds the flyer and the event's details. */
+    savedDraftId: text("saved_draft_id"),
+    /** Why it could not be paired, so the list can say so rather than stay quiet. */
+    matchNote: text("match_note"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    eventNameIdx: index("fb_event_tasks_event_name_idx").on(t.eventName),
+    draftIdx: index("fb_event_tasks_draft_idx").on(t.savedDraftId),
+  }),
+);
+
+export type FbEventTaskRow = InferSelectModel<typeof fbEventTasks>;
+export type NewFbEventTaskRow = InferInsertModel<typeof fbEventTasks>;
+
+
 // ---------- app settings (small values the app can change at runtime) -------
 // Currently just how far ahead the Planner pass drafts. In the database rather
 // than an env var so changing it takes effect at once and survives deploys.

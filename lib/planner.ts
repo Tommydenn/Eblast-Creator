@@ -80,6 +80,56 @@ export function isEblastTask(title: string): boolean {
 }
 
 /**
+ * The Facebook event tasks, which sit beside the eblast ones in the same plans.
+ *
+ * They carry no flyer of their own. One event is two tasks with the same name
+ * under different openings — "Eblast - Home for the Holidays Open House
+ * December 8" and "FB Event - Home for the Holidays Open House December 8" —
+ * so the flyer for the Facebook one is reached through its eblast twin.
+ */
+export function isFbEventTask(title: string): boolean {
+  return /^\s*fb\s+event\b/i.test(title ?? "");
+}
+
+/** A title with its opening removed, which is the event's own name. */
+export function eventNameOf(title: string): string {
+  return (title ?? "").replace(/^\s*(eblast|fb\s+event)\b\s*[-–—:]?\s*/i, "").trim();
+}
+
+/**
+ * Whether two titles name the same event.
+ *
+ * Case and run-together spaces are ignored, because these are typed by hand
+ * twice. Nothing else is: a near miss is left unmatched and reported rather
+ * than guessed, for the same reason an unrecognised plan is.
+ */
+export function sameEvent(a: string, b: string): boolean {
+  const norm = (s: string) => eventNameOf(s).toLowerCase().replace(/\s+/g, " ");
+  const left = norm(a);
+  return left.length > 0 && left === norm(b);
+}
+
+export interface TaskLike {
+  id: string;
+  title: string;
+  planId: string;
+}
+
+/**
+ * The eblast task a Facebook event task belongs to, or null.
+ *
+ * Two of the same name in one plan, or none anywhere, both come back null:
+ * the flyer that would be used is the whole content of the event, so pairing
+ * the wrong one is worse than saying it could not be paired.
+ */
+export function matchEblastTask<T extends TaskLike>(fb: TaskLike, all: readonly T[]): T | null {
+  const named = all.filter((t) => isEblastTask(t.title) && sameEvent(t.title, fb.title));
+  const samePlan = named.filter((t) => t.planId === fb.planId);
+  const pool = samePlan.length > 0 ? samePlan : named;
+  return pool.length === 1 ? pool[0] : null;
+}
+
+/**
  * Download the flyer attached to a task, if there is one.
  *
  * Planner stores an attachment as a reference keyed by the file's URL, so the

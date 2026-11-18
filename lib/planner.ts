@@ -215,6 +215,11 @@ const PLAN_ALIASES: Record<string, string> = {
   // The Pillars of Grand Rapids became Talamore Grand Rapids. The plan is
   // still called the old name, and its eblasts are Talamore's now.
   pillarsofgrandrapids: "talamoregrandrapids",
+  // Broadwell became Talamore Plymouth. Found the same way: four Facebook
+  // event tasks sitting in a plan called "Broadwell Plymouth" that matched
+  // no community, so nothing could be built for them.
+  broadwellplymouth: "talamoreplymouth",
+  broadwell: "talamoreplymouth",
 };
 
 export function matchCommunity<T extends { slug: string; displayName: string }>(

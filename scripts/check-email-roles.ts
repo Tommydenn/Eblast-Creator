@@ -129,6 +129,19 @@ const NAME_ONLY = sender("Pat Who", null, true);
     fail("app/api/draft-approval/route.ts no longer falls back to the community's regionals");
   }
 
+  // Who is copied has to be changeable from the community page. It was
+  // read-only there at first, and the only way to the list was a link shown
+  // when nobody was on it — which disappeared the moment anybody was.
+  const community = require("node:fs").readFileSync("app/api/communities/[slug]/route.ts", "utf8") as string;
+  if (!community.includes("Array.isArray(body.regionalIds)")) {
+    fail("the community PATCH no longer accepts regionalIds, so coverage cannot be edited there");
+  }
+  const panel = require("node:fs").readFileSync("components/EmailRolesPanel.tsx", "utf8") as string;
+  if (!panel.includes("allRegionals.map") || !panel.includes("setRegionalIds")) {
+    fail("components/EmailRolesPanel.tsx no longer offers every regional as a choice");
+  }
+  if (!panel.includes("regionalIds,")) fail("components/EmailRolesPanel.tsx no longer saves the coverage it edits");
+
   const mailer = require("node:fs").readFileSync("lib/email.ts", "utf8") as string;
   if (!/ccRecipients/.test(mailer)) fail("lib/email.ts does not put the copies on the message");
   if (!/toLower\.has/.test(mailer)) {

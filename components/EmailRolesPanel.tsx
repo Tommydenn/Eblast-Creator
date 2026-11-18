@@ -12,7 +12,10 @@ interface Props {
   fallbackName: string;
   initialApproverEmail: string | null;
   initialHubspotFromEmail: string | null;
+  /** The regionals covering this community today. */
   regionals: Array<{ id: string; name: string; email: string }>;
+  /** Everyone on the list, which is who this community could be covered by. */
+  allRegionals: Array<{ id: string; name: string; email: string }>;
 }
 
 const INPUT =
@@ -33,6 +36,7 @@ export function EmailRolesPanel({
   initialApproverEmail,
   initialHubspotFromEmail,
   regionals,
+  allRegionals,
 }: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -40,10 +44,12 @@ export function EmailRolesPanel({
   const [error, setError] = useState<string | null>(null);
   const [approverEmail, setApproverEmail] = useState(initialApproverEmail ?? "");
   const [hubspotFromEmail, setHubspotFromEmail] = useState(initialHubspotFromEmail ?? "");
+  const [regionalIds, setRegionalIds] = useState(regionals.map((r) => r.id));
 
   function cancel() {
     setApproverEmail(initialApproverEmail ?? "");
     setHubspotFromEmail(initialHubspotFromEmail ?? "");
+    setRegionalIds(regionals.map((r) => r.id));
     setError(null);
     setEditing(false);
   }
@@ -58,6 +64,7 @@ export function EmailRolesPanel({
         body: JSON.stringify({
           approverEmail: approverEmail.trim() || null,
           hubspotFromEmail: hubspotFromEmail.trim() || null,
+          regionalIds,
         }),
       });
       if (!res.ok) {
@@ -108,7 +115,14 @@ export function EmailRolesPanel({
                 nobody yet
               </Link>
             ) : (
-              <span className="text-sand-900">{regionals.map((r) => r.name).join(", ")}</span>
+              // Linked because this is where somebody goes looking for the
+              // list, and the list itself lives on the other page.
+              <Link
+                href="/communities#regionals"
+                className="text-sand-900 transition-colors hover:text-forest-700"
+              >
+                {regionals.map((r) => r.name).join(", ")}
+              </Link>
             )}
           </p>
         </div>
@@ -136,9 +150,43 @@ export function EmailRolesPanel({
           placeholder={fallback}
         />
       </div>
-      <p className="text-xs text-sand-500">
+      <p className="-mt-2 text-xs text-sand-500">
         Left empty, both are {fallbackName || "the primary sender"}.
       </p>
+
+      <div>
+        <SectionLabel>Copied on approvals</SectionLabel>
+        {allRegionals.length === 0 ? (
+          <p className="mt-1 text-xs">
+            <Link href="/communities#regionals" className="text-sand-400 transition-colors hover:text-sand-700">
+              Add a regional first
+            </Link>
+          </p>
+        ) : (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {allRegionals.map((r) => {
+              const on = regionalIds.includes(r.id);
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  title={r.email}
+                  onClick={() =>
+                    setRegionalIds((prev) => (on ? prev.filter((x) => x !== r.id) : [...prev, r.id]))
+                  }
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    on
+                      ? "border-forest-300 bg-forest-50 text-forest-700"
+                      : "border-sand-200 bg-white text-sand-400 hover:text-sand-800"
+                  }`}
+                >
+                  {r.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex gap-2">
         <button

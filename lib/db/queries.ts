@@ -235,6 +235,24 @@ export async function setRegionalCommunities(regionalId: string, communityIds: s
 }
 
 /**
+ * Replace the set of regionals copied on one community's approvals.
+ *
+ * The same table read from the other side, because that is the side the
+ * community page edits from: there the question is who covers this building,
+ * not which buildings this person covers.
+ */
+export async function setCommunityRegionals(slug: string, regionalIds: string[]): Promise<boolean> {
+  const [row] = await db.select({ id: communities.id }).from(communities).where(eq(communities.slug, slug)).limit(1);
+  if (!row) return false;
+  await db.delete(regionalCommunities).where(eq(regionalCommunities.communityId, row.id));
+  const unique = [...new Set(regionalIds)];
+  if (unique.length) {
+    await db.insert(regionalCommunities).values(unique.map((regionalId) => ({ regionalId, communityId: row.id })));
+  }
+  return true;
+}
+
+/**
  * The two addresses that are not the signature: who approves, and what
  * HubSpot sends as. Empty means "the primary sender", which is the answer
  * almost everywhere, so both are cleared by sending an empty string.

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateCommunityContact, updateCommunityBrand, updateCommunityEmailRoles } from "@/lib/db/queries";
+import {
+  updateCommunityContact,
+  updateCommunityBrand,
+  updateCommunityEmailRoles,
+  setCommunityRegionals,
+} from "@/lib/db/queries";
 import type { Address, CommunityBrand } from "@/lib/db/schema";
 
 const CONTACT_ALLOWED = [
@@ -47,6 +52,14 @@ export async function PATCH(
       approverEmail?: string | null;
       hubspotFromEmail?: string | null;
     });
+    if (!ok) return NextResponse.json({ error: "Community not found" }, { status: 404 });
+    updatedSomething = true;
+  }
+
+  // An empty array is a real answer here — nobody copied — so this is checked
+  // by the key being present rather than by the array having anything in it.
+  if (Array.isArray(body.regionalIds)) {
+    const ok = await setCommunityRegionals(params.slug, body.regionalIds as string[]);
     if (!ok) return NextResponse.json({ error: "Community not found" }, { status: 404 });
     updatedSomething = true;
   }

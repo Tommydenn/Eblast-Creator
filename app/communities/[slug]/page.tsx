@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq, sql, and } from "drizzle-orm";
-import { getCommunity } from "@/lib/db/queries";
+import { getCommunity, listRegionals } from "@/lib/db/queries";
 import { db } from "@/lib/db";
 import { pastSends } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
@@ -78,9 +78,10 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
   const community = await getCommunity(params.slug);
   if (!community) notFound();
 
-  const [recentSends, aggregates] = await Promise.all([
+  const [recentSends, aggregates, allRegionals] = await Promise.all([
     loadRecentSends(community.id, 12),
     loadAggregates(community.id),
+    listRegionals(),
   ]);
 
   const c = community;
@@ -345,6 +346,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 initialApproverEmail={c.approverEmail}
                 initialHubspotFromEmail={c.hubspotFromEmail}
                 regionals={c.regionals}
+                allRegionals={allRegionals.map((r) => ({ id: r.id, name: r.name, email: r.email }))}
               />
             </Section>
           </div>

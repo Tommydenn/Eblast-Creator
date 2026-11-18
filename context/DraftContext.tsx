@@ -80,6 +80,9 @@ export interface CommunityLogo { url: string; variant: string; onColor: string }
 export interface CommunitySender { id: string; name: string; email: string | null; title?: string | null; isPrimary: boolean }
 export interface CommunityHubspot { acronym?: string; listId?: number; includedListIds?: number[]; excludedListIds?: number[] }
 
+/** A regional copied on this community's approval requests. */
+export interface ClientRegional { id: string; name: string; email: string; title?: string | null }
+
 export interface ClientCommunity {
   id: string;
   slug: string;
@@ -95,6 +98,12 @@ export interface ClientCommunity {
   brand: CommunityBrand;
   logos: CommunityLogo[];
   senders: CommunitySender[];
+  /** Who approves, when that is not the primary sender. */
+  approverEmail?: string | null;
+  /** What HubSpot sends as, when that is not the primary sender either. */
+  hubspotFromEmail?: string | null;
+  /** Regionals covering this community, copied on its approval requests. */
+  regionals?: ClientRegional[];
   hubspot: CommunityHubspot;
   templates?: string[];
 }
@@ -331,7 +340,7 @@ export interface DraftContextValue {
   discard: () => void;
   loadSavedDraft: (draft: SavedDraft) => void;
   push: () => Promise<void>;
-  sendForApproval: (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string; note?: string; isTest?: boolean }) => Promise<void>;
+  sendForApproval: (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string; ccEmails?: string[]; note?: string; isTest?: boolean }) => Promise<void>;
   setActiveSection: (section: EditorSection) => void;
   swapSubjectLine: (subject: string, previewText: string) => void;
   buildHtml: () => string;
@@ -1534,7 +1543,7 @@ export function DraftProvider({ children }: { children: React.ReactNode }) {
   // Not lock-guarded either — sending for approval mails the draft out, it
   // doesn't edit it. Re-sending to a second reviewer, or re-sending after an
   // expired link, are both normal and were blocked by the copy prompt.
-  const sendForApproval = useCallback(async (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string; note?: string; isTest?: boolean }) => {
+  const sendForApproval = useCallback(async (opts: { recipientEmail: string; recipientName?: string; notifyEmail?: string; ccEmails?: string[]; note?: string; isTest?: boolean }) => {
     if (!draftId) throw new Error("Save the draft first before sending for approval.");
     const c = communityRef.current;
     if (!c) throw new Error("No community selected.");

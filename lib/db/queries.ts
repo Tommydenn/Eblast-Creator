@@ -6,6 +6,8 @@ import { db } from "./index";
 import {
   communities,
   communitySenders,
+  regionals as regionalsTable,
+  regionalCommunities,
   type CommunityRow,
   type CommunitySenderRow,
   type Address,
@@ -34,6 +36,16 @@ export interface Community extends Omit<CommunityRow, "address" | "brand" | "soc
 
   /** All senders for this community. Editorial choice per send picks one. */
   senders: CommunitySender[];
+
+  /** Regionals covering this community, copied on its approval requests. */
+  regionals: CommunityRegional[];
+}
+
+export interface CommunityRegional {
+  id: string;
+  name: string;
+  email: string;
+  title: string | null;
 }
 
 export interface CommunitySender {
@@ -62,7 +74,11 @@ function sortSenders(a: CommunitySender, b: CommunitySender): number {
   return a.name.localeCompare(b.name);
 }
 
-function rowToCommunity(row: CommunityRow, senders: CommunitySender[]): Community {
+function rowToCommunity(
+  row: CommunityRow,
+  senders: CommunitySender[],
+  regionals: CommunityRegional[] = [],
+): Community {
   return {
     ...row,
     address: (row.address ?? {}) as Address,
@@ -74,6 +90,7 @@ function rowToCommunity(row: CommunityRow, senders: CommunitySender[]): Communit
     photoLibrary: (row.photoLibrary ?? []) as CommunityAsset[],
     brandGuideExtracted: (row.brandGuideExtracted ?? null) as BrandGuideExtracted | null,
     senders: senders.sort(sortSenders),
+    regionals: regionals.sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
@@ -87,7 +104,17 @@ export async function getCommunity(slug: string): Promise<Community | undefined>
     .select()
     .from(communitySenders)
     .where(eq(communitySenders.communityId, row.id));
-  return rowToCommunity(row, sendersRows.map(rowToSender));
+  const regionalRows = await db
+    .select({
+      id: regionalsTable.id,
+      name: regionalsTable.name,
+      email: regionalsTable.email,
+      title: regionalsTable.title,
+    })
+    .from(regionalCommunities)
+    .innerJoin(regionalsTable, eq(regionalsTable.id, regionalCommunities.regionalId))
+    .where(eq(regionalCommunities.communityId, row.id));
+  return rowToCommunity(row, sendersRows.map(rowToSender), regionalRows);
 }
 
 export async function listCommunities(): Promise<Community[]> {
@@ -103,9 +130,124 @@ export async function listCommunities(): Promise<Community[]> {
     byCommunity.set(s.communityId, list);
   }
 
+  // Same again for regionals: one query, grouped in memory.
+  const allLinks = await db
+    .select({
+      communityId: regionalCommunities.communityId,
+      id: regionalsTable.id,
+      name: regionalsTable.name,
+      email: regionalsTable.email,
+      title: regionalsTable.title,
+    })
+    .from(regionalCommunities)
+    .innerJoin(regionalsTable, eq(regionalsTable.id, regionalCommunities.regionalId));
+  const regionalsByCommunity = new Map<string, CommunityRegional[]>();
+  for (const { communityId, ...r } of allLinks) {
+    const list = regionalsByCommunity.get(communityId) ?? [];
+    list.push(r);
+    regionalsByCommunity.set(communityId, list);
+  }
+
   return rows
-    .map((r) => rowToCommunity(r, byCommunity.get(r.id) ?? []))
+    .map((r) => rowToCommunity(r, byCommunity.get(r.id) ?? [], regionalsByCommunity.get(r.id) ?? []))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
+// ---------- regionals -----------------------------------------------------
+
+export interface Regional extends CommunityRegional {
+  /** Every community this regional is copied on. */
+  communityIds: string[];
+}
+
+export async function listRegionals(): Promise<Regional[]> {
+  const rows = await db.select().from(regionalsTable);
+  if (rows.length === 0) return [];
+  const links = await db.select().from(regionalCommunities);
+  const byRegional = new Map<string, string[]>();
+  for (const l of links) {
+    const list = byRegional.get(l.regionalId) ?? [];
+    list.push(l.communityId);
+    byRegional.set(l.regionalId, list);
+  }
+  return rows
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      title: r.title,
+      communityIds: byRegional.get(r.id) ?? [],
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function addRegional(data: {
+  name: string;
+  email: string;
+  title?: string | null;
+  communityIds: string[];
+}): Promise<Regional> {
+  const [row] = await db
+    .insert(regionalsTable)
+    .values({ name: data.name, email: data.email, title: data.title?.trim() || null })
+    .returning();
+  await setRegionalCommunities(row.id, data.communityIds);
+  return { id: row.id, name: row.name, email: row.email, title: row.title, communityIds: data.communityIds };
+}
+
+export async function updateRegional(
+  id: string,
+  data: { name?: string; email?: string; title?: string | null; communityIds?: string[] },
+): Promise<Regional | null> {
+  const patch: Partial<typeof regionalsTable.$inferInsert> = {};
+  if (data.name !== undefined) patch.name = data.name;
+  if (data.email !== undefined) patch.email = data.email;
+  if (data.title !== undefined) patch.title = data.title?.trim() || null;
+  const [row] = Object.keys(patch).length
+    ? await db.update(regionalsTable).set(patch).where(eq(regionalsTable.id, id)).returning()
+    : await db.select().from(regionalsTable).where(eq(regionalsTable.id, id)).limit(1);
+  if (!row) return null;
+  if (data.communityIds !== undefined) await setRegionalCommunities(id, data.communityIds);
+  const links = await db
+    .select({ communityId: regionalCommunities.communityId })
+    .from(regionalCommunities)
+    .where(eq(regionalCommunities.regionalId, id));
+  return { id: row.id, name: row.name, email: row.email, title: row.title, communityIds: links.map((l) => l.communityId) };
+}
+
+export async function deleteRegional(id: string): Promise<boolean> {
+  const result = await db.delete(regionalsTable).where(eq(regionalsTable.id, id)).returning({ id: regionalsTable.id });
+  return result.length > 0;
+}
+
+/**
+ * Replace a regional's coverage.
+ *
+ * Deleted then re-inserted rather than diffed: the driver has no interactive
+ * transactions, the table holds nothing but the pair, so there is nothing to
+ * lose in the gap and no cheaper correct version of this.
+ */
+export async function setRegionalCommunities(regionalId: string, communityIds: string[]): Promise<void> {
+  await db.delete(regionalCommunities).where(eq(regionalCommunities.regionalId, regionalId));
+  const unique = [...new Set(communityIds)];
+  if (unique.length === 0) return;
+  await db.insert(regionalCommunities).values(unique.map((communityId) => ({ regionalId, communityId })));
+}
+
+/**
+ * The two addresses that are not the signature: who approves, and what
+ * HubSpot sends as. Empty means "the primary sender", which is the answer
+ * almost everywhere, so both are cleared by sending an empty string.
+ */
+export async function updateCommunityEmailRoles(
+  slug: string,
+  data: { approverEmail?: string | null; hubspotFromEmail?: string | null },
+): Promise<boolean> {
+  const patch: Partial<typeof communities.$inferInsert> = { updatedAt: new Date() };
+  if (data.approverEmail !== undefined) patch.approverEmail = data.approverEmail?.trim() || null;
+  if (data.hubspotFromEmail !== undefined) patch.hubspotFromEmail = data.hubspotFromEmail?.trim() || null;
+  const result = await db.update(communities).set(patch).where(eq(communities.slug, slug)).returning({ id: communities.id });
+  return result.length > 0;
 }
 
 // ---------- sender CRUD ---------------------------------------------------

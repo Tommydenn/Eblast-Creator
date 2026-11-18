@@ -33,6 +33,8 @@ async function getGraphToken(): Promise<string> {
 
 async function sendMail(opts: {
   to: string | string[];
+  /** Copied, and visible to everyone on the mail, which is the point. */
+  cc?: string[];
   subject: string;
   html: string;
 }): Promise<void> {
@@ -43,6 +45,12 @@ async function sendMail(opts: {
   const toAddresses = (Array.isArray(opts.to) ? opts.to : [opts.to]).map((address) => ({
     emailAddress: { address },
   }));
+  // Anyone already on the To: line is dropped rather than listed twice, and a
+  // blank entry would make Graph reject the whole message.
+  const toLower = new Set(toAddresses.map((r) => r.emailAddress.address.toLowerCase()));
+  const ccAddresses = [...new Set((opts.cc ?? []).map((a) => a.trim()).filter(Boolean))]
+    .filter((address) => !toLower.has(address.toLowerCase()))
+    .map((address) => ({ emailAddress: { address } }));
 
   const token = await getGraphToken();
   const res = await fetch(`${GRAPH}/users/${encodeURIComponent(from)}/sendMail`, {
@@ -57,6 +65,7 @@ async function sendMail(opts: {
         body: { contentType: "HTML", content: opts.html },
         from: fromName ? { emailAddress: { name: fromName, address: from } } : undefined,
         toRecipients: toAddresses,
+        ...(ccAddresses.length ? { ccRecipients: ccAddresses } : {}),
       },
       saveToSentItems: true,
     }),
@@ -101,6 +110,8 @@ function escapeHtmlText(s: string): string {
 
 export interface SendApprovalEmailParams {
   to: string;
+  /** Regionals covering this community. They see the request, they don't act on it. */
+  cc?: string[];
   recipientName: string | null | undefined;
   communityName: string;
   draftSubject: string;
@@ -118,7 +129,7 @@ export interface SendApprovalEmailParams {
 }
 
 export async function sendApprovalEmail(params: SendApprovalEmailParams) {
-  const { to, recipientName, communityName, draftSubject, draftHtml, token, note, isTest } = params;
+  const { to, cc, recipientName, communityName, draftSubject, draftHtml, token, note, isTest } = params;
   const testStamp = isTest
     ? ` [test ${new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" })}]`
     : "";
@@ -271,6 +282,7 @@ ${eblastStyleBlock}
 
   return sendMail({
     to,
+    cc,
     subject: `Draft review${testStamp}: ${draftSubject} — ${communityName}`,
     html,
   });

@@ -177,6 +177,21 @@ export const communities = pgTable("communities", {
    */
   trackingPhone: text("tracking_phone"),
 
+  /**
+   * Who the approval request is sent to, when that is not the primary sender.
+   *
+   * The sender is right most of the time, which is why this is empty almost
+   * everywhere. It exists for the communities where the person who signs the
+   * email is not the person who approves it.
+   */
+  approverEmail: text("approver_email"),
+  /**
+   * The From: address on the HubSpot marketing email, when that is not the
+   * primary sender either. Kept apart from the footer signature: the footer is
+   * who the reader is hearing from, this is what the mail server sends as.
+   */
+  hubspotFromEmail: text("hubspot_from_email"),
+
   hubspot: jsonb("hubspot").$type<CommunityHubSpot>().notNull().default({}),
 
   brand: jsonb("brand").$type<CommunityBrand>().notNull(),
@@ -217,6 +232,42 @@ export const communitySenders = pgTable("community_senders", {
 
 export type CommunitySenderRow = InferSelectModel<typeof communitySenders>;
 export type NewCommunitySenderRow = InferInsertModel<typeof communitySenders>;
+
+// ---------- regionals -----------------------------------------------------
+// Copied on every approval request for the communities they cover, so an
+// eblast never goes out to a list without the regional having seen it.
+//
+// Their own table rather than a column on the community, because one regional
+// covers several buildings and the relationship is the point: the Communities
+// page shows it from the regional's side, the approval email reads it from the
+// community's.
+
+export const regionals = pgTable("regionals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  title: text("title"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const regionalCommunities = pgTable(
+  "regional_communities",
+  {
+    regionalId: uuid("regional_id")
+      .notNull()
+      .references(() => regionals.id, { onDelete: "cascade" }),
+    communityId: uuid("community_id")
+      .notNull()
+      .references(() => communities.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.regionalId, t.communityId] }),
+    index("regional_communities_community_idx").on(t.communityId),
+  ],
+);
+
+export type RegionalRow = InferSelectModel<typeof regionals>;
+export type NewRegionalRow = InferInsertModel<typeof regionals>;
 
 // ---------- past sends (HubSpot history mirror) ---------------------------
 
@@ -371,6 +422,13 @@ export const savedDraftApprovals = pgTable("saved_draft_approvals", {
   recipientEmail: text("recipient_email").notNull(),
   /** Who receives the edit-request notification email. */
   notifyEmail: text("notify_email"),
+  /**
+   * The regionals copied on this request, recorded at send time.
+   *
+   * Written down rather than derived later, because coverage changes and the
+   * question worth answering is who actually saw this one.
+   */
+  ccEmails: text("cc_emails").array(),
   /** Subject line of the draft — for context in notification emails. */
   draftSubject: text("draft_subject"),
   /**

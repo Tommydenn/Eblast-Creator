@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCommunity } from "@/data/communities";
 import { uploadEmailTemplate, createEmail, swapDataUrisForHostedImages, generateHubspotEmailName } from "@/lib/hubspot";
 import { inlineRelativeImages } from "@/lib/inline-images";
+import { hubspotFromFor } from "@/lib/email-roles";
 import { resolveSegmentsFromRecentSend } from "@/lib/past-sends-retrieval";
 import { updateCommunitySegments } from "@/lib/db/queries";
 import { db } from "@/lib/db";
@@ -161,6 +162,9 @@ export async function POST(req: NextRequest) {
     includedListIds: segments.includedListIds,
     excludedListIds: segments.excludedListIds,
   };
+  // Who HubSpot sends as. The community's own override when it has one, and
+  // the primary sender otherwise, which is what this always used to be.
+  const { fromName, replyTo } = hubspotFromFor(community);
   const create = await createEmail({
     name: body.name ?? generateHubspotEmailName({
       acronym: community.hubspot.acronym,
@@ -168,8 +172,8 @@ export async function POST(req: NextRequest) {
     }),
     subject: body.subject,
     previewText: body.previewText,
-    fromName: community.senders[0]?.name ?? community.displayName,
-    replyTo: community.senders.find((s) => s.email?.trim())?.email ?? "",
+    fromName,
+    replyTo,
     templatePath: hubspotPath,
     account: hubspotAccount,
     ...segmentsPayload,
@@ -200,7 +204,7 @@ export async function POST(req: NextRequest) {
         communityId: community.id,
         subject: body.subject,
         state,
-        fromName: community.senders[0]?.name ?? community.displayName,
+        fromName,
       })
       .onConflictDoUpdate({
         target: pastSends.hubspotEmailId,

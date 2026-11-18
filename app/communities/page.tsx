@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { savedDraftApprovals, savedDrafts } from "@/lib/db/schema";
 import { isApprovalActionable, newestApprovalTokenByDraft } from "@/lib/approval-status";
 import { Header } from "@/components/Header";
+import { RegionalsPanel } from "@/components/RegionalsPanel";
+import { listRegionals } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +84,11 @@ function missingPieces(c: Awaited<ReturnType<typeof listCommunities>>[number]): 
 }
 
 export default async function CommunitiesPage() {
-  const [communities, awaitingApproval] = await Promise.all([listCommunities(), countAwaitingApproval()]);
+  const [communities, awaitingApproval, regionals] = await Promise.all([
+    listCommunities(),
+    countAwaitingApproval(),
+    listRegionals(),
+  ]);
 
   const grouped = new Map<string, typeof communities>();
   for (const c of communities) {
@@ -214,6 +220,11 @@ export default async function CommunitiesPage() {
               </section>
             ))}
         </div>
+
+        <RegionalsPanel
+          initialRegionals={regionals}
+          communities={communities.map((c) => ({ id: c.id, displayName: c.displayName }))}
+        />
       </main>
     </>
   );

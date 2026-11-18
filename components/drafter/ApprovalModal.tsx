@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useDraft } from "@/context/DraftContext";
+import { approverEmailFor } from "@/lib/email-roles";
 
 interface Props {
   onClose: () => void;
@@ -21,16 +22,19 @@ export default function ApprovalModal({ onClose, mode = "real" }: Props) {
   // senders set up yet.
   // A test defaults to you rather than the salesperson — the address is still
   // editable so a test can be sent to a colleague to check rendering.
-  const primarySender = community?.senders?.find((s) => s.isPrimary) ?? community?.senders?.[0] ?? null;
   // A sender may be on the record by name alone. The reviewer has to be an
-  // address, so fall back to the first sender who has one.
-  const firstSenderEmail =
-    primarySender?.email?.trim() ||
-    community?.senders?.find((s) => s.email?.trim())?.email?.trim() ||
-    "";
+  // address, so this falls through to the first sender who has one.
+  const approverEmail = community ? approverEmailFor(community) : "";
   const [recipientEmail, setRecipientEmail] = useState(
-    isTest ? "jwalls@greatlakesmc.com" : firstSenderEmail || "jwalls@greatlakesmc.com",
+    isTest ? "jwalls@greatlakesmc.com" : approverEmail || "jwalls@greatlakesmc.com",
   );
+  // Regionals covering this community. They are copied automatically, and can
+  // be dropped from one send without changing who they cover. A test copies
+  // nobody, so there is nothing to show.
+  const regionals = isTest ? [] : community?.regionals ?? [];
+  const [droppedCc, setDroppedCc] = useState<string[]>([]);
+  const keptRegionals = regionals.filter((r) => !droppedCc.includes(r.id));
+  const ccEmails = keptRegionals.map((r) => r.email);
   const [notifyEmail, setNotifyEmail] = useState("jwalls@greatlakesmc.com");
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
@@ -48,6 +52,7 @@ export default function ApprovalModal({ onClose, mode = "real" }: Props) {
       await sendForApproval({
         recipientEmail: recipientEmail.trim(),
         notifyEmail: notifyEmail.trim() || undefined,
+        ccEmails,
         note: note.trim() || undefined,
         isTest,
       });
@@ -87,6 +92,11 @@ export default function ApprovalModal({ onClose, mode = "real" }: Props) {
               {isTest ? "Test email sent!" : "Approval request sent!"}
             </p>
             <p className="mt-1 text-xs text-[#7a8c85]">We notified {recipientEmail}.</p>
+            {ccEmails.length > 0 && (
+              <p className="mt-0.5 text-xs text-[#9aaba4]">
+                Copied {keptRegionals.map((r) => r.name).join(", ")}.
+              </p>
+            )}
             <button
               onClick={onClose}
               className="mt-5 text-sm font-medium text-[#1F4538] hover:underline"
@@ -144,6 +154,34 @@ export default function ApprovalModal({ onClose, mode = "real" }: Props) {
             <div className="bg-[#f5f3ef] rounded-lg px-3 py-2.5 text-xs text-[#7a8c85] space-y-0.5">
               <p><span className="font-medium text-[#5a6b63]">Community:</span> {community.displayName}</p>
               <p><span className="font-medium text-[#5a6b63]">Subject:</span> {fields.subject || "(no subject)"}</p>
+              {regionals.length > 0 && (
+                <p className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="font-medium text-[#5a6b63]">Copied:</span>
+                  {regionals.map((r) => {
+                    const dropped = droppedCc.includes(r.id);
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        title={r.email}
+                        onClick={() =>
+                          setDroppedCc((prev) =>
+                            dropped ? prev.filter((id) => id !== r.id) : [...prev, r.id],
+                          )
+                        }
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                          dropped
+                            ? "border-dashed border-[#ddd8d0] text-[#b3beb8] line-through hover:text-[#7a8c85]"
+                            : "border-[#ddd8d0] bg-white text-[#5a6b63] hover:border-[#c3bcb1]"
+                        }`}
+                      >
+                        {r.name}
+                        <span aria-hidden className="text-[#aab5af]">{dropped ? "+" : "×"}</span>
+                      </button>
+                    );
+                  })}
+                </p>
+              )}
             </div>
 
             {error && (

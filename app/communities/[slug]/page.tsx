@@ -9,6 +9,8 @@ import { db } from "@/lib/db";
 import { pastSends } from "@/lib/db/schema";
 import { Header } from "@/components/Header";
 import { SendersPanel } from "@/components/SendersPanel";
+import { EmailRolesPanel } from "@/components/EmailRolesPanel";
+import { primarySender } from "@/lib/email-roles";
 import { ContactPanel } from "@/components/ContactPanel";
 import { BrandPanel } from "@/components/BrandPanel";
 import { RecentSendsPanel } from "@/components/RecentSendsPanel";
@@ -334,8 +336,16 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
             </Section>
 
             {/* Sending */}
-            <Section title="Sending" description="Who appears in the From: field for this community.">
+            <Section title="Sending" description="Who signs this community's eblasts, and who else is involved in getting one out.">
               <SendersPanel slug={c.slug} initialSenders={c.senders} />
+              <EmailRolesPanel
+                slug={c.slug}
+                fallbackEmail={primarySender(c)?.email?.trim() ?? ""}
+                fallbackName={primarySender(c)?.name ?? ""}
+                initialApproverEmail={c.approverEmail}
+                initialHubspotFromEmail={c.hubspotFromEmail}
+                regionals={c.regionals}
+              />
             </Section>
           </div>
         </div>

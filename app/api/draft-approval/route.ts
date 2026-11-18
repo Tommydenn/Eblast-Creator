@@ -74,6 +74,12 @@ export async function POST(req: NextRequest) {
     recipientEmail: string;
     recipientName?: string;
     notifyEmail?: string;
+    /**
+     * Regionals to copy. Sent explicitly by the modal, which lists them and
+     * lets one be dropped for a single send, so an empty array means "none"
+     * and a missing field means "whoever covers this community".
+     */
+    ccEmails?: string[];
     html?: string;
     /** Optional personal note shown to the reviewer above the preview. */
     note?: string;
@@ -86,7 +92,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Body must be JSON" }, { status: 400 });
   }
 
-  const { savedDraftId, communitySlug, recipientEmail, recipientName, notifyEmail, html: bodyHtml, note, isTest } = body;
+  const { savedDraftId, communitySlug, recipientEmail, recipientName, notifyEmail, ccEmails, html: bodyHtml, note, isTest } = body;
   if (!savedDraftId || !communitySlug || !recipientEmail) {
     return NextResponse.json({ ok: false, error: "Missing required fields" }, { status: 400 });
   }
@@ -126,6 +132,15 @@ export async function POST(req: NextRequest) {
 
   const resolvedRecipientName = await resolveReviewerName(recipientEmail, recipientName, community);
 
+  // A test send never copies anybody. The whole point of a test is that it is
+  // invisible, and a regional seeing a draft that is not really going out is
+  // the opposite of that.
+  const cc = isTest
+    ? []
+    : (ccEmails ?? community.regionals.map((r) => r.email))
+        .map((e) => e.trim())
+        .filter(Boolean);
+
   // Generate a random opaque token for the magic link.
   const token = randomBytes(24).toString("base64url");
 
@@ -138,6 +153,7 @@ export async function POST(req: NextRequest) {
       recipientName: resolvedRecipientName ?? null,
       recipientEmail,
       notifyEmail: notifyEmail ?? null,
+      ccEmails: cc.length ? cc : null,
       draftSubject,
       decision: "pending",
       isTest: !!isTest,
@@ -180,6 +196,7 @@ export async function POST(req: NextRequest) {
   try {
     await sendApprovalEmail({
       to: recipientEmail,
+      cc,
       recipientName: resolvedRecipientName ?? null,
       communityName: community.displayName,
       draftSubject,

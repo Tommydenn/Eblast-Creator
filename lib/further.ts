@@ -104,3 +104,49 @@ export async function probeCommunityEvents(): Promise<{
 
   return { base: BASE, keyPrefix, get, options };
 }
+
+/**
+ * The address the Further dashboard itself uses for community events.
+ *
+ * Their published API — api.talkfurther.com/api/v1/openapi.json, "Further
+ * Public API" 1.0.0 — declares community-events as GET only, and no path in
+ * it creates an event. But the dashboard's own JavaScript names a second,
+ * unversioned family under /api/communities/events/, and asked with no
+ * credentials at all that address answers `Allow: GET, POST, HEAD, OPTIONS`.
+ *
+ * So a create method exists. What cannot be known from outside is whether an
+ * organisation API key opens it, or whether it only accepts the session the
+ * dashboard logs in with. This asks.
+ *
+ * Read-only on purpose: nothing here creates, changes or deletes anything.
+ * If the key does turn out to work, what to do about it is a decision to
+ * take deliberately rather than a side effect of finding out.
+ */
+export async function probeDashboardEvents(): Promise<{
+  path: string;
+  get: { status: number; allow: string | null; body: string };
+  options: { status: number; allow: string | null };
+}> {
+  const path = "/api/communities/events/";
+
+  const get = { status: 0, allow: null as string | null, body: "" };
+  try {
+    const res = await call(`${path}?page_size=1`);
+    get.status = res.status;
+    get.allow = res.headers.get("allow");
+    get.body = (await res.text()).replace(/\s+/g, " ").slice(0, 400);
+  } catch (e) {
+    get.body = e instanceof Error ? e.message : String(e);
+  }
+
+  const options = { status: 0, allow: null as string | null };
+  try {
+    const res = await call(path, { method: "OPTIONS" });
+    options.status = res.status;
+    options.allow = res.headers.get("allow");
+  } catch {
+    // The GET is the half that matters.
+  }
+
+  return { path, get, options };
+}

@@ -5,7 +5,7 @@
  * theirs to change: if a write method appears, this is what says so.
  */
 import { NextResponse } from "next/server";
-import { hasFurtherKey, probeCommunityEvents } from "@/lib/further";
+import { hasFurtherKey, probeCommunityEvents, probeDashboardEvents } from "@/lib/further";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,5 +14,9 @@ export async function GET() {
   if (!hasFurtherKey()) {
     return NextResponse.json({ ok: false, error: "FURTHER_API_KEY is not set" }, { status: 400 });
   }
-  return NextResponse.json({ ok: true, ...(await probeCommunityEvents()) });
+  // Both surfaces: the published one, which only reads, and the one the
+  // dashboard uses, which declares a create method. Whether this key opens
+  // the second is the whole question.
+  const [published, dashboard] = await Promise.all([probeCommunityEvents(), probeDashboardEvents()]);
+  return NextResponse.json({ ok: true, ...published, dashboard });
 }

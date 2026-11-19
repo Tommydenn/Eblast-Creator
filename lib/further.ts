@@ -150,3 +150,36 @@ export async function probeDashboardEvents(): Promise<{
 
   return { path, get, options };
 }
+
+/**
+ * Does the official API accept a create request for an event?
+ *
+ * The documented endpoint is /api/v1/community-events, and an authenticated
+ * OPTIONS on it answered `Allow: GET, HEAD, OPTIONS` — no POST. This sends a
+ * real POST anyway, with the real key, so the answer is the server's own
+ * words rather than an inference from a header.
+ *
+ * The body is empty on purpose. If the route somehow existed, an empty body
+ * could not pass validation, so nothing can be created by this. A 405 means
+ * the method is not there at all; a 400/422 would mean it is there and the
+ * body was the only thing wrong — which would be the good surprise.
+ */
+export async function probeOfficialCreate(): Promise<{
+  method: string;
+  path: string;
+  status: number;
+  allow: string | null;
+  body: string;
+}> {
+  const path = "/api/v1/community-events";
+  const out = { method: "POST", path, status: 0, allow: null as string | null, body: "" };
+  try {
+    const res = await call(path, { method: "POST", body: JSON.stringify({}) });
+    out.status = res.status;
+    out.allow = res.headers.get("allow");
+    out.body = (await res.text()).replace(/\s+/g, " ").slice(0, 400);
+  } catch (e) {
+    out.body = e instanceof Error ? e.message : String(e);
+  }
+  return out;
+}

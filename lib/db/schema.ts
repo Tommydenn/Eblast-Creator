@@ -176,6 +176,8 @@ export const communities = pgTable("communities", {
    * The drafter must use this in CTA labels and tel: hrefs in emails.
    */
   trackingPhone: text("tracking_phone"),
+  /** What a Facebook event tells people to call. Empty falls back to above. */
+  facebookPhone: text("facebook_phone"),
 
   /**
    * Who the approval request is sent to, when that is not the primary sender.

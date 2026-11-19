@@ -133,6 +133,25 @@ eq(
   if (facebook.endsWith("\n") || facebook.includes("\n\n\n")) fail("left a gap where the close would be");
 }
 {
+  // No RSVP wanted: no close at all, even with a number on file. The close
+  // exists to collect an RSVP, and a number under "call today" turns a
+  // walk-in event into one you apparently have to ring first.
+  const { facebook } = buildDescriptions({
+    paragraphs: ["Only this."],
+    date: "Thursday, November 19",
+    time: "2:00 PM",
+    location: "Somewhere",
+    phone: "651-360-1691",
+    rsvpRequired: false,
+  });
+  if (/rsvp/i.test(facebook)) fail("asked for an RSVP on an event that does not want one");
+  if (/call/i.test(facebook)) fail("told people to call an event that does not want an RSVP");
+  if (facebook.includes("651-360-1691") || facebook.includes("📞")) {
+    fail("printed a number to call on an event that does not want an RSVP");
+  }
+  if (facebook.endsWith("\n") || facebook.includes("\n\n\n")) fail("left a gap where the close would be");
+}
+{
   // A missing detail drops its own line rather than printing an empty icon.
   const { facebook } = buildDescriptions({
     paragraphs: ["Only this."],

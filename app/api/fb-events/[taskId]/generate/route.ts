@@ -27,7 +27,7 @@ export async function POST(_req: Request, { params }: { params: { taskId: string
 
   try {
     const source = await sourceFor(params.taskId);
-    const copy = await writeFbEventCopy(source.fields, source.communityName, task.eventName);
+    const copy = await writeFbEventCopy(source.fields, source.communityName, task.eventName, source.phone);
 
     await db
       .update(fbEventTasks)

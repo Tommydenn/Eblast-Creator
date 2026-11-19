@@ -313,6 +313,7 @@ export async function updateCommunityContact(
     displayName?: string;
     address?: Address;
     trackingPhone?: string | null;
+    facebookPhone?: string | null;
     websiteUrl?: string | null;
   }
 ): Promise<boolean> {
@@ -320,6 +321,7 @@ export async function updateCommunityContact(
   if (data.displayName !== undefined) patch.displayName = data.displayName;
   if ("address" in data) patch.address = data.address;
   if ("trackingPhone" in data) patch.trackingPhone = data.trackingPhone;
+  if ("facebookPhone" in data) patch.facebookPhone = data.facebookPhone;
   if ("websiteUrl" in data) patch.websiteUrl = data.websiteUrl;
   const result = await db
     .update(communities)

@@ -29,6 +29,7 @@ export interface EventRow {
 
 const ALL = "__all__";
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const SHORT = new Intl.DateTimeFormat("en-US", { month: "numeric", day: "numeric", timeZone: "UTC" });
 const LONG = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
 
 const FURTHER_URL =
@@ -63,20 +64,30 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+/**
+   * Communities in the order their next deadline falls.
+   *
+   * Alphabetical put Amira at the top every day regardless of whether
+   * anything there was due, which is a list that never tells you anything.
+   * The one with work due soonest is the one to open first.
+   */
   const communities = useMemo(() => {
-    const counts = new Map<string, number>();
+    const byName = new Map<string, { open: number; next: string }>();
     for (const r of rows) {
       const name = r.community ?? "No community";
-      counts.set(name, (counts.get(name) ?? 0) + (r.postedToFacebookAt ? 0 : 1));
+      const entry = byName.get(name) ?? { open: 0, next: "￿" };
+      if (!r.postedToFacebookAt) {
+        entry.open++;
+        if (r.dueAt && r.dueAt < entry.next) entry.next = r.dueAt;
+      }
+      byName.set(name, entry);
     }
-    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return [...byName.entries()].sort(
+      ([aName, a], [bName, b]) => a.next.localeCompare(b.next) || aName.localeCompare(bName),
+    );
   }, [rows]);
 
-  const firstCommunity = useMemo(() => {
-    const open = rows.filter((r) => !r.postedToFacebookAt && r.dueAt);
-    const soonest = [...open].sort((a, b) => (a.dueAt ?? "").localeCompare(b.dueAt ?? ""))[0];
-    return soonest?.community ?? communities[0]?.[0] ?? ALL;
-  }, [rows, communities]);
+  const firstCommunity = useMemo(() => communities[0]?.[0] ?? ALL, [communities]);
 
   const [community, setCommunity] = useState<string>(firstCommunity);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -180,10 +191,10 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
           className="w-full cursor-pointer rounded-xl border border-sand-200 bg-white px-3.5 py-3 text-[13px] text-sand-900 shadow-sm transition-colors hover:border-sand-300 focus:border-forest-400 focus:outline-none focus:ring-2 focus:ring-forest-600/15"
         >
           <option value={ALL}>All communities</option>
-          {communities.map(([name, open]) => (
+          {communities.map(([name, c]) => (
             <option key={name} value={name}>
               {name}
-              {open > 0 ? ` · ${open}` : ""}
+              {c.open > 0 ? ` · ${c.open} due ${SHORT.format(new Date(c.next))}` : ""}
             </option>
           ))}
         </select>
@@ -230,25 +241,28 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
               <li key={r.taskId}>
                 <button
                   onClick={() => setSelectedId(r.taskId)}
-                  className={`flex w-full items-baseline gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors ${
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
                     on
                       ? "border-forest-700 bg-forest-700 shadow-sm"
                       : "border-sand-200/70 bg-white/70 hover:border-sand-300 hover:bg-white"
                   }`}
                 >
-                  <span
-                    className={`w-11 shrink-0 text-[11px] tabular-nums ${
-                      on ? "text-white/70" : "text-sand-400"
-                    }`}
-                  >
-                    {r.dueAt ? DATE.format(new Date(r.dueAt)) : "—"}
-                  </span>
-                  <span
-                    className={`min-w-0 flex-1 truncate text-[13px] ${
-                      on ? "text-white" : done ? "text-sand-400 line-through" : "text-sand-800"
-                    }`}
-                  >
-                    {r.eventTitle ?? r.eventName}
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={`block truncate text-[13px] ${
+                        on ? "text-white" : done ? "text-sand-400 line-through" : "text-sand-800"
+                      }`}
+                    >
+                      {r.eventTitle ?? r.eventName}
+                    </span>
+                    <span
+                      className={`mt-0.5 block truncate text-[11px] ${
+                        on ? "text-white/70" : "text-sand-400"
+                      }`}
+                    >
+                      {community === ALL && r.community ? `${r.community} · ` : ""}
+                      {r.dueAt ? `Due ${DATE.format(new Date(r.dueAt))}` : "No date"}
+                    </span>
                   </span>
                   {done && !on && <Check className="h-3 w-3 shrink-0 text-sand-300" />}
                 </button>

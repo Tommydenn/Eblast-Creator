@@ -205,7 +205,7 @@ export async function writePendingFbEvents(opts?: {
     if (Date.now() - startedAt > budgetMs) break;
     try {
       const source = await sourceFor(event.taskId);
-      const copy = await writeFbEventCopy(source.fields, source.communityName, event.eventName);
+      const copy = await writeFbEventCopy(source.fields, source.communityName, event.eventName, source.phone);
       await db
         .update(fbEventTasks)
         .set({

@@ -290,6 +290,21 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
   if (!panel.includes(`shelf === "done" ? r.postedToFacebookAt : !r.postedToFacebookAt`)) {
     fail("components/EventsPanel.tsx no longer keeps the posted ones on a shelf of their own");
   }
+  // The picker is ordered by when work is actually due. Alphabetical put
+  // the same community on top every day whether or not anything was due
+  // there, which is a list that tells you nothing.
+  if (!panel.includes("a.next.localeCompare(b.next)")) {
+    fail("components/EventsPanel.tsx no longer orders communities by their soonest deadline");
+  }
+  // A bare date on a row does not say it is a deadline, and in the
+  // all-communities view the row has to say which building it belongs to.
+  if (!panel.includes("`Due ${DATE.format")) {
+    fail("components/EventsPanel.tsx shows a date on each row without saying it is the due date");
+  }
+  if (!panel.includes("community === ALL && r.community")) {
+    fail("components/EventsPanel.tsx does not name the community on a row when showing all of them");
+  }
+
   if (!panel.includes("onPosted(false)")) {
     fail("components/EventsPanel.tsx offers no way back from a mis-clicked tick");
   }

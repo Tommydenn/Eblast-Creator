@@ -13,7 +13,7 @@
  */
 import { MODEL } from "@/lib/anthropic";
 import Anthropic from "@anthropic-ai/sdk";
-import { buildDescriptions, phoneFrom, type EventDescriptions } from "@/lib/fb-event-copy";
+import { buildDescriptions, type EventDescriptions } from "@/lib/fb-event-copy";
 
 /** The eblast fields this reads. A subset of the draft's `fields` object. */
 export interface DraftFields {
@@ -81,6 +81,7 @@ export async function writeFbEventCopy(
   fields: DraftFields,
   communityName: string,
   fallbackName: string,
+  phone: string | null,
 ): Promise<FbEventCopy> {
   const body = (fields.bodyParagraphs ?? []).filter(Boolean);
   const source = [
@@ -146,8 +147,10 @@ export async function writeFbEventCopy(
       date: fields.eventDate ?? "",
       time: fields.eventTime ?? "",
       location: fields.eventLocation ?? "",
-      phone: phoneFrom(fields.ctaButtonHref, fields.ctaButtonLabel),
-      rsvpRequired: fields.rsvpRequired !== false,
+      phone,
+      // Only when the source says so: an event that wants no RSVP gets no
+      // number and no line telling anyone to ring it.
+      rsvpRequired: fields.rsvpRequired === true,
     }),
   };
 }

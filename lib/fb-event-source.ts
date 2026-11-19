@@ -25,6 +25,7 @@ import { downloadTaskFlyer } from "@/lib/planner";
 import { extractFlyerContent } from "@/lib/anthropic";
 import { getCommunity } from "@/lib/db/queries";
 import type { DraftFields } from "@/lib/fb-event-draft";
+import { phoneFrom } from "@/lib/fb-event-copy";
 
 /** pending_flyers is keyed by a free string; this is the one we use. */
 export const flyerKey = (taskId: string) => `fb:${taskId}`;
@@ -35,6 +36,16 @@ export interface EventSource {
   kind: SourceKind;
   fields: DraftFields;
   communityName: string;
+  /**
+   * The number this event tells people to ring, already decided.
+   *
+   * Facebook has its own tracking number so a call from an event can be told
+   * apart from a call from an eblast, and the flyer carries neither — it has
+   * whichever line the designer printed. So the community's Facebook number
+   * wins, and the eblast's is the fallback for a community that has not been
+   * given one yet.
+   */
+  phone: string | null;
   /** The draft the fields came from, when they came from one. */
   draftId: string | null;
 }
@@ -114,7 +125,16 @@ export async function sourceFor(taskId: string): Promise<EventSource> {
       .limit(1);
     if (draft) {
       const fields = ((draft.data as { fields?: DraftFields })?.fields ?? {}) as DraftFields;
-      return { kind: "draft", fields, communityName: draft.communityName, draftId: task.savedDraftId };
+      return {
+        kind: "draft",
+        fields,
+        communityName: draft.communityName,
+        draftId: task.savedDraftId,
+        phone:
+          phoneFrom(community.facebookPhone) ??
+          phoneFrom(fields.ctaButtonHref, fields.ctaButtonLabel) ??
+          phoneFrom(community.trackingPhone),
+      };
     }
   }
 
@@ -133,6 +153,7 @@ export async function sourceFor(taskId: string): Promise<EventSource> {
     kind: "flyer",
     draftId: null,
     communityName: community.displayName,
+    phone: phoneFrom(community.facebookPhone) ?? phoneFrom(community.trackingPhone),
     fields: {
       headline: flyer.headline,
       storyScriptTitle: flyer.storyScriptTitle,
@@ -144,8 +165,9 @@ export async function sourceFor(taskId: string): Promise<EventSource> {
       bodyParagraphs: flyer.bodyParagraphs,
       // The flyer has no call button, so the number is the community's own —
       // which is what the eblast's button ends up carrying anyway.
-      ctaButtonHref: community.trackingPhone ? `tel:${community.trackingPhone}` : undefined,
-      rsvpRequired: true,
+      // Only when the flyer says so. Assuming it meant every walk-in event
+      // was printed with a number and told people to call first.
+      rsvpRequired: flyer.rsvpRequired === true,
     },
   };
 }

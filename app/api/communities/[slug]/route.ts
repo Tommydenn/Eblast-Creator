@@ -14,6 +14,7 @@ const CONTACT_ALLOWED = [
   "eventsAddress",
   "useEventsAddress",
   "trackingPhone",
+  "facebookPhone",
   "websiteUrl",
 ];
 /** The two addresses that are not the signature. Empty string clears them. */

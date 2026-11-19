@@ -150,10 +150,12 @@ export function buildDescriptions(facts: EventFacts): EventDescriptions {
     facts.location ? `📍 ${facts.location.trim()}` : null,
   ].filter(Boolean) as string[];
 
-  // No number to call means no line telling anyone to call it.
-  const close = facts.phone
-    ? [facts.rsvpRequired ? "RSVP required, call today!" : "Call today to let us know you are coming!", `📞 ${facts.phone}`].join("\n")
-    : "";
+  // The close exists to collect an RSVP. An event that does not want one is
+  // a walk-in, and printing a number under "call today" turns an open door
+  // into a hurdle — so when no RSVP is asked for, neither the line nor the
+  // number appears. No number on file means the same thing.
+  const close =
+    facts.rsvpRequired && facts.phone ? `RSVP required, call today!\n📞 ${facts.phone}` : "";
 
   return {
     facebook: [body, details.join("\n"), close].filter(Boolean).join("\n\n"),

@@ -29,8 +29,6 @@ export interface EventRow {
 
 const ALL = "__all__";
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-const SHORT = new Intl.DateTimeFormat("en-US", { month: "numeric", day: "numeric", timeZone: "UTC" });
-const LONG = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
 
 const FURTHER_URL =
   "https://dashboard.talkfurther.com/advanced/community-events/list-of-events/active-events";
@@ -194,7 +192,7 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
           {communities.map(([name, c]) => (
             <option key={name} value={name}>
               {name}
-              {c.open > 0 ? ` · ${c.open} due ${SHORT.format(new Date(c.next))}` : ""}
+              {c.open > 0 ? ` · ${c.open} to post` : ""}
             </option>
           ))}
         </select>
@@ -260,7 +258,7 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
                         on ? "text-white/70" : "text-sand-400"
                       }`}
                     >
-                      {community === ALL && r.community ? `${r.community} · ` : ""}
+                      {r.community ? `${r.community} · ` : ""}
                       {r.dueAt ? `Due ${DATE.format(new Date(r.dueAt))}` : "No date"}
                     </span>
                   </span>
@@ -318,10 +316,12 @@ function Detail({
     <article className="min-w-0">
       <header className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4 pb-6">
         <div className="min-w-0">
-          <p className="flex flex-wrap items-center gap-x-2 text-[12px] text-sand-500">
-            <span>
+          {/* The community, not the deadline. Which building this belongs to
+              is the thing you check before pasting anything into a form; the
+              due date is already on the row you clicked to get here. */}
+          <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <span className="text-[12.5px] font-semibold uppercase tracking-[0.1em] text-forest-800">
               {row.community ?? "No community"}
-              {row.dueAt && <> · due {LONG.format(new Date(row.dueAt))}</>}
             </span>
             {/* Planner's own distinction, carried through: this one also
                 wants a post on the community's website. */}

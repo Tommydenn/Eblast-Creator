@@ -296,13 +296,25 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
   if (!panel.includes("a.next.localeCompare(b.next)")) {
     fail("components/EventsPanel.tsx no longer orders communities by their soonest deadline");
   }
-  // A bare date on a row does not say it is a deadline, and in the
-  // all-communities view the row has to say which building it belongs to.
+  // A bare date on a row does not say it is a deadline, and every row names
+  // its community — not only the all-communities view, because the row is
+  // what gets read when the list is scanned, not the picker above it.
   if (!panel.includes("`Due ${DATE.format")) {
     fail("components/EventsPanel.tsx shows a date on each row without saying it is the due date");
   }
-  if (!panel.includes("community === ALL && r.community")) {
-    fail("components/EventsPanel.tsx does not name the community on a row when showing all of them");
+  if (!panel.includes("r.community ? `${r.community} · `")) {
+    fail("components/EventsPanel.tsx does not name the community on every row");
+  }
+  // And names it unconditionally. Hanging it off the all-communities view
+  // leaves the substring above intact while the name disappears from every
+  // row you actually work from.
+  if (panel.includes("community === ALL && r.community")) {
+    fail("components/EventsPanel.tsx names the community on a row only in the all-communities view");
+  }
+  // The deadline belongs on the row, not over the event's own name, where it
+  // crowded the one thing that heading is there to say.
+  if (/row\.dueAt && [^\n]*format\(new Date\(row\.dueAt\)\)/.test(panel)) {
+    fail("components/EventsPanel.tsx still prints the due date beside the community name");
   }
 
   if (!panel.includes("onPosted(false)")) {

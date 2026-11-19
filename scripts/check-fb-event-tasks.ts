@@ -221,12 +221,14 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
   if (!photos.includes("MIN_AREA")) {
     fail("lib/fb-event-photos.ts no longer skips small images, so logos are offered as photos");
   }
-  // Both platforms crop on upload and show what they are doing. Cropping
-  // first only takes the choice away, and a 1.91:1 cover is unusable
-  // anywhere that wants another shape.
+  // Facebook and Further crop on upload and show what they are doing, so for
+  // them the photo is handed over whole — cropping first only takes the
+  // choice away. The website is the one exception, and it crops only when
+  // asked: a resize must be guarded by the crop parameter, never run on
+  // every request. (The crop itself is checked in check-wordpress-crop.ts.)
   const one = readFileSync("app/api/fb-events/[taskId]/photos/[index]/route.ts", "utf-8");
-  if (/\.resize\(/.test(one)) {
-    fail("the photo route resizes or crops, and it should hand over the original");
+  if (/\.resize\(/.test(one) && !/if\s*\(\s*crop\s*\)/.test(one)) {
+    fail("the photo route resizes unconditionally; it should hand over the original unless a crop is asked for");
   }
 }
 

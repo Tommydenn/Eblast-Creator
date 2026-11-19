@@ -309,7 +309,10 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
   );
 }
 
-type Tab = "facebook" | "further";
+type Tab = "facebook" | "further" | "wordpress";
+
+/** The size the community website wants its event photos, exactly. */
+const WORDPRESS_CROP = { w: 1000, h: 667 };
 
 function Detail({
   row,
@@ -436,12 +439,16 @@ function Detail({
       ) : (
         <>
           {/* One destination at a time, because that is how the work is done:
-              Facebook's form, then Further's. */}
+              Facebook's form, then Further's, then the website. WordPress
+              carries the same copy as Further — both want prose and keep
+              their own fields — and differs only in the photos, which the
+              website has no cropping tool for, so they are cut to size here. */}
           <div className="flex items-center gap-1 border-b border-sand-200">
             {(
               [
                 ["facebook", "Facebook"],
                 ["further", "TalkFurther"],
+                ["wordpress", "WordPress"],
               ] as Array<[Tab, string]>
             ).map(([key, label]) => (
               <button
@@ -456,18 +463,23 @@ function Detail({
                 {label}
               </button>
             ))}
-            <a
-              href={tab === "facebook" ? row.facebookEventsUrl ?? "#" : FURTHER_URL}
-              target="_blank"
-              rel="noreferrer"
-              className={`ml-auto mr-1 text-[12px] transition-colors ${
-                tab === "facebook" && !row.facebookEventsUrl
-                  ? "pointer-events-none text-sand-300"
-                  : "text-forest-700 hover:text-forest-900"
-              }`}
-            >
-              Open {tab === "facebook" ? "Facebook" : "Further"} ↗
-            </a>
+            {/* Facebook and Further each open to one place; the website is a
+                different site per community and the app holds no link to it,
+                so WordPress shows no shortcut rather than a dead one. */}
+            {tab !== "wordpress" && (
+              <a
+                href={tab === "facebook" ? row.facebookEventsUrl ?? "#" : FURTHER_URL}
+                target="_blank"
+                rel="noreferrer"
+                className={`ml-auto mr-1 text-[12px] transition-colors ${
+                  tab === "facebook" && !row.facebookEventsUrl
+                    ? "pointer-events-none text-sand-300"
+                    : "text-forest-700 hover:text-forest-900"
+                }`}
+              >
+                Open {tab === "facebook" ? "Facebook" : "Further"} ↗
+              </a>
+            )}
           </div>
 
           {(row.stale || error || noPhone || mismatch || row.inFurther === true) && (
@@ -527,10 +539,16 @@ function Detail({
               hint={
                 tab === "further"
                   ? "The prose alone — Further has its own fields for the three above."
-                  : undefined
+                  : tab === "wordpress"
+                    ? "The same prose as TalkFurther. The photos below are cropped to fit the website."
+                    : undefined
               }
             />
-            <Photos taskId={row.taskId} hasSource={row.hasSource} />
+            <Photos
+              taskId={row.taskId}
+              hasSource={row.hasSource}
+              crop={tab === "wordpress" ? WORDPRESS_CROP : undefined}
+            />
             <Flyer taskId={row.taskId} hasSource={row.hasSource} />
             </div>
           </div>
@@ -631,14 +649,27 @@ interface PhotoChoice {
  *
  * One is chosen automatically — the eblast's hero, or the largest the flyer
  * has — but it is only a default. Which photo reads best as an event cover
- * is a judgement, so the rest are here, and none of them is cropped: both
- * platforms crop on upload and show you what they are doing while you do it.
+ * is a judgement, so the rest are here.
+ *
+ * `crop` is passed on the WordPress tab and nowhere else. Facebook and
+ * Further crop on upload and show you what they are doing, so there the photo
+ * is offered whole. The website has no cropping tool, so for it the photo is
+ * shown and downloaded already cut to the exact size the site wants — cut to
+ * keep the subject, not the middle of the frame.
  *
  * Loaded when asked for rather than with the page, because gathering them
  * means reading a PDF and most events are posted without ever looking past
  * the first one.
  */
-function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
+function Photos({
+  taskId,
+  hasSource,
+  crop,
+}: {
+  taskId: string;
+  hasSource: boolean;
+  crop?: { w: number; h: number };
+}) {
   const [photos, setPhotos] = useState<PhotoChoice[] | null>(null);
   const [chosen, setChosen] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -694,6 +725,10 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
   }
 
   const current = photos[chosen] ?? photos[0];
+  const cropSuffix = crop ? `crop=${crop.w}x${crop.h}` : "";
+  const downloadHref = `/api/fb-events/${taskId}/photos/${current.index}?download=1${
+    crop ? `&${cropSuffix}` : ""
+  }`;
 
   return (
     <div className="overflow-hidden rounded-xl border border-sand-200 bg-white shadow-sm">
@@ -711,26 +746,47 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
           )}
         </button>
         <a
-          href={`/api/fb-events/${taskId}/photos/${current.index}?download=1`}
+          href={downloadHref}
           className="text-[11px] text-forest-700 transition-colors hover:text-forest-900"
         >
-          Download
+          {crop ? `Download ${crop.w}×${crop.h}` : "Download"}
         </a>
       </div>
 
       {open && (
       <>
       <div className="border-t border-sand-100 bg-sand-50/60 p-4">
-        {/* The stored preview, so it is there the moment the panel is. The
-            full-size original is what Download hands over. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={current.preview}
-          alt=""
-          className="mx-auto block max-h-[320px] w-auto max-w-full rounded-lg"
-        />
+        {crop ? (
+          // The real cropped output, cut by the server so what is shown is
+          // exactly what Download hands over — the subject kept in frame, not
+          // a centre cut. The box holds the website's aspect so the panel
+          // does not jump between photos of different shapes.
+          <div
+            className="mx-auto overflow-hidden rounded-lg bg-sand-100"
+            style={{ aspectRatio: `${crop.w} / ${crop.h}`, maxWidth: 480 }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              key={`${current.index}-${crop.w}x${crop.h}`}
+              src={`/api/fb-events/${taskId}/photos/${current.index}?${cropSuffix}`}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          </div>
+        ) : (
+          // The stored preview, so it is there the moment the panel is. The
+          // full-size original is what Download hands over.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={current.preview}
+            alt=""
+            className="mx-auto block max-h-[320px] w-auto max-w-full rounded-lg"
+          />
+        )}
         <p className="mt-2 text-center text-[11px] text-sand-400">
-          {current.width} × {current.height}, uncropped
+          {crop
+            ? `${crop.w} × ${crop.h}, cropped to keep the subject in frame`
+            : `${current.width} × ${current.height}, uncropped`}
         </p>
       </div>
 

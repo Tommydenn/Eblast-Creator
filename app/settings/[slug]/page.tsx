@@ -15,8 +15,35 @@ import { primarySender } from "@/lib/email-roles";
 import { ContactPanel } from "@/components/ContactPanel";
 import { BrandPanel } from "@/components/BrandPanel";
 import { RecentSendsPanel } from "@/components/RecentSendsPanel";
+import { TrackingNumberPanel } from "@/components/TrackingNumberPanel";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The community's settings, grouped by what each one drives.
+ *
+ * They used to be grouped by kind of data — "Contact & identity", "Sending",
+ * "Brand" — which sounds tidy and put related settings in different cards.
+ * The Facebook page lived under Sending; the number Facebook events print
+ * lived under Contact; neither affects anything but the Social tab. So the
+ * cuts follow the destination instead, and they are named after the sections
+ * at the top of the app: what this community's eblasts need, what its social
+ * posts need, how it looks, and who and where it is.
+ */
+const TABS = [
+  ["details", "Details"],
+  ["eblasts", "Eblasts"],
+  ["social", "Social"],
+  ["brand", "Brand"],
+] as const;
+
+type Tab = (typeof TABS)[number][0];
+
+/** The community's own name in the browser tab, for when several are open. */
+export async function generateMetadata({ params }: { params: { slug: string } }) {
+  const community = await getCommunity(params.slug);
+  return { title: community?.displayName ?? "Settings" };
+}
 
 interface RecentSend {
   hubspotEmailId: string;
@@ -75,9 +102,18 @@ async function loadAggregates(communityId: string) {
   };
 }
 
-export default async function CommunityDetailPage({ params }: { params: { slug: string } }) {
+export default async function CommunityDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { slug: string };
+  searchParams?: { tab?: string };
+}) {
   const community = await getCommunity(params.slug);
   if (!community) notFound();
+
+  const tab: Tab =
+    (TABS.find(([key]) => key === searchParams?.tab)?.[0] as Tab | undefined) ?? "details";
 
   const [recentSends, aggregates, allRegionals] = await Promise.all([
     loadRecentSends(community.id, 12),
@@ -108,7 +144,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
 
   return (
     <>
-      <Header active="communities" />
+      <Header active="settings" />
 
       {/* ── Brand hero ───────────────────────────────────────────────────────── */}
       <div className="relative" style={{ borderTop: `4px solid ${c.brand.accent}` }}>
@@ -119,7 +155,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
         />
         <div className="relative mx-auto max-w-[1240px] px-6 py-10">
           <Link
-            href="/communities"
+            href="/settings"
             className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-sand-500 hover:text-sand-700 mb-6"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -233,12 +269,26 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
 
       {/* ── Main content ─────────────────────────────────────────────────────── */}
       <main className="mx-auto max-w-[1240px] px-6 pb-24 pt-8">
-        <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+        {/* Links rather than client state: each group is a thing to go to,
+            and a settings page is somewhere you send people. */}
+        <div className="mb-6 inline-flex gap-1 rounded-xl bg-sand-100/80 p-1">
+          {TABS.map(([key, label]) => (
+            <Link
+              key={key}
+              href={key === "details" ? `/settings/${c.slug}` : `/settings/${c.slug}?tab=${key}`}
+              className={`rounded-lg px-4 py-1.5 text-[12.5px] font-medium transition-colors ${
+                tab === key ? "bg-white text-sand-900 shadow-sm" : "text-sand-500 hover:text-sand-800"
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
 
-          {/* ── LEFT COLUMN: Brand & Identity ─────────────────────────────── */}
-          <div className="space-y-6">
+        <div className="max-w-[820px] space-y-6">
 
-            {/* Brand card */}
+          {/* ── BRAND: how this community looks ───────────────────────────── */}
+          {tab === "brand" && (
             <Section title="Brand" badge={hasBrand ? "From guide" : "Placeholder"} badgeVariant={hasBrand ? "success" : "warning"}>
 
               {/* Color palette + typography — user-owned, edited only via BrandPanel */}
@@ -300,31 +350,67 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 </div>
               )}
             </Section>
+          )}
 
-          </div>
-
-          {/* ── RIGHT COLUMN: Contact, Sending ───────────────────────────── */}
-          <div className="space-y-6">
-
-            {/* Contact & Identity */}
-            <Section title="Contact &amp; identity">
+          {/* ── DETAILS: who and where this community is ──────────────────── */}
+          {tab === "details" && (
+            <Section title="Name &amp; address">
               <ContactPanel
                 slug={c.slug}
                 initialDisplayName={c.displayName}
                 initialAddress={c.address}
                 initialEventsAddress={c.eventsAddress ?? null}
                 initialUseEventsAddress={c.useEventsAddress ?? false}
-                initialTrackingPhone={c.trackingPhone ?? null}
-                initialFacebookPhone={c.facebookPhone ?? null}
                 initialWebsiteUrl={c.websiteUrl ?? null}
               />
-              {c.hubspot?.acronym && (
-                <Field label="HubSpot acronym">
-                  <span className="font-mono text-sm">{c.hubspot.acronym}</span>
-                </Field>
-              )}
+            </Section>
+          )}
+
+          {/* ── EBLASTS: everything an eblast needs before it can go out ──── */}
+          {tab === "eblasts" && (
+            <>
+              <Section title="Who sends and who approves" description="Who signs this community's eblasts, and who else is involved in getting one out.">
+                <SendersPanel slug={c.slug} initialSenders={c.senders} />
+                <EmailRolesPanel
+                  slug={c.slug}
+                  fallbackEmail={primarySender(c)?.email?.trim() ?? ""}
+                  fallbackName={primarySender(c)?.name ?? ""}
+                  initialApproverEmail={c.approverEmail}
+                  initialHubspotFromEmail={c.hubspotFromEmail}
+                  regionals={c.regionals}
+                  allRegionals={allRegionals.map((r) => ({ id: r.id, name: r.name, email: r.email }))}
+                />
+              </Section>
+
+              <Section title="Tracking &amp; routing" description="The number an eblast prints, and the account it is published into.">
+                <TrackingNumberPanel
+                  slug={c.slug}
+                  field="trackingPhone"
+                  label="Tracking phone — eblasts"
+                  initialValue={c.trackingPhone ?? null}
+                />
+                {c.hubspot?.acronym && (
+                  <Field label="HubSpot acronym">
+                    <span className="font-mono text-sm">{c.hubspot.acronym}</span>
+                  </Field>
+                )}
+              </Section>
+            </>
+          )}
+
+          {/* ── SOCIAL: everything a Facebook or Further event needs ──────── */}
+          {tab === "social" && (
+            <Section title="Facebook &amp; social" description="Where this community's events are posted, and the number they print.">
+              <FacebookPagePanel slug={c.slug} initialUrl={c.socials?.facebook ?? null} />
+              <TrackingNumberPanel
+                slug={c.slug}
+                field="facebookPhone"
+                label="Tracking phone — Facebook events"
+                hint="Left empty, Facebook copy says the number is missing rather than borrowing the eblast's."
+                initialValue={c.facebookPhone ?? null}
+              />
               {c.socials && Object.values(c.socials).some(Boolean) && (
-                <Field label="Social media">
+                <Field label="All social accounts">
                   <span className="flex flex-wrap gap-3 text-sm">
                     {Object.entries(c.socials)
                       .filter(([, v]) => v)
@@ -337,22 +423,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 </Field>
               )}
             </Section>
-
-            {/* Sending */}
-            <Section title="Sending" description="Who signs this community's eblasts, and who else is involved in getting one out.">
-              <SendersPanel slug={c.slug} initialSenders={c.senders} />
-              <EmailRolesPanel
-                slug={c.slug}
-                fallbackEmail={primarySender(c)?.email?.trim() ?? ""}
-                fallbackName={primarySender(c)?.name ?? ""}
-                initialApproverEmail={c.approverEmail}
-                initialHubspotFromEmail={c.hubspotFromEmail}
-                regionals={c.regionals}
-                allRegionals={allRegionals.map((r) => ({ id: r.id, name: r.name, email: r.email }))}
-              />
-              <FacebookPagePanel slug={c.slug} initialUrl={c.socials?.facebook ?? null} />
-            </Section>
-          </div>
+          )}
         </div>
 
         {/* ── Recent sends — full width, collapsible ───────────────────────── */}

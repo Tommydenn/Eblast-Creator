@@ -190,17 +190,18 @@ export function buildDescriptions(facts: EventFacts): EventDescriptions {
     facts.location ? `📍 ${facts.location.trim()}` : null,
   ].filter(Boolean) as string[];
 
-  // The close exists to collect an RSVP. An event that does not want one is
-  // a walk-in, and printing a number under "call today" turns an open door
-  // into a hurdle — so when no RSVP is asked for, neither the line nor the
-  // number appears.
+  // Both answers are worth printing. "RSVP required" with a number is an
+  // instruction; "no RSVP required" is the reassurance that gets someone
+  // through the door on the day, and an event that says nothing either way
+  // leaves the reader to guess. What a walk-in must not carry is a number
+  // under "call today", which turns an open door into a hurdle.
   //
-  // When one is asked for and there is no number, the line stays and says
+  // When an RSVP is wanted and there is no number, the line stays and says
   // what is missing. Dropping it quietly would hide the gap behind copy that
   // looks finished, and the event would go up asking nobody to call.
   const close = facts.rsvpRequired
     ? `RSVP required, call today!\n📞 ${facts.phone ?? NO_FB_PHONE}`
-    : "";
+    : "No RSVP required — just stop in.";
 
   return {
     facebook: [body, details.join("\n"), close].filter(Boolean).join("\n\n"),

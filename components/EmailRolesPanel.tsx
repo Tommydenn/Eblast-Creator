@@ -150,14 +150,14 @@ export function EmailRolesPanel({
           <SectionLabel>Copied on approvals</SectionLabel>
           <p className="mt-0.5 text-sm">
             {regionals.length === 0 ? (
-              <Link href="/communities#regionals" className="text-sand-400 hover:text-sand-700 transition-colors">
+              <Link href="/settings?view=regionals" className="text-sand-400 hover:text-sand-700 transition-colors">
                 nobody yet
               </Link>
             ) : (
               // Linked because this is where somebody goes looking for the
               // list, and the list itself lives on the other page.
               <Link
-                href="/communities#regionals"
+                href="/settings?view=regionals"
                 className="text-sand-900 transition-colors hover:text-forest-700"
               >
                 {regionals.map((r) => r.name).join(", ")}
@@ -258,7 +258,7 @@ export function EmailRolesPanel({
         )}
 
         <p className="mt-2 text-[11px]">
-          <Link href="/communities#regionals" className="text-sand-400 transition-colors hover:text-sand-700">
+          <Link href="/settings?view=regionals" className="text-sand-400 transition-colors hover:text-sand-700">
             Edit or remove a regional
           </Link>
         </p>

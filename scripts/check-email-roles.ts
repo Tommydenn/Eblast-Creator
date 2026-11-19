@@ -145,7 +145,10 @@ const NAME_ONLY = sender("Pat Who", null, true);
   if (!panel.includes("/api/regionals")) {
     fail("components/EmailRolesPanel.tsx can no longer add a regional who is not on the list yet");
   }
-  if (!panel.includes("/communities#regionals")) {
+  // The roster moved from an anchor at the foot of the community list to a
+  // tab of its own under Settings, so this follows it rather than keep
+  // pointing at a heading that page no longer has.
+  if (!panel.includes("/settings?view=regionals")) {
     fail("components/EmailRolesPanel.tsx no longer points anywhere to edit or remove a regional");
   }
   if (!panel.includes("regionalIds,")) fail("components/EmailRolesPanel.tsx no longer saves the coverage it edits");

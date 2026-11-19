@@ -8,6 +8,7 @@ import { Header } from "@/components/Header";
 import { RegionalsPanel } from "@/components/RegionalsPanel";
 import { listRegionals } from "@/lib/db/queries";
 
+export const metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
 
 const FAMILY_COLORS: Record<string, string> = {
@@ -114,7 +115,7 @@ export default async function CommunitiesPage({
 
   return (
     <>
-      <Header active="communities" />
+      <Header active="settings" />
       <main className="mx-auto max-w-[1160px] px-6 pb-24 pt-10">
 
         {/* Page header */}
@@ -153,7 +154,7 @@ export default async function CommunitiesPage({
           ).map(([key, label, n]) => (
             <Link
               key={key}
-              href={key === "communities" ? "/communities" : "/communities?view=regionals"}
+              href={key === "communities" ? "/settings" : "/settings?view=regionals"}
               className={`rounded-lg px-4 py-1.5 text-[12.5px] font-medium transition-colors ${
                 view === key ? "bg-white text-sand-900 shadow-sm" : "text-sand-500 hover:text-sand-800"
               }`}
@@ -208,7 +209,7 @@ export default async function CommunitiesPage({
                         return (
                           <tr key={c.slug} className="group align-middle hover:bg-sand-50 transition-colors duration-100">
                             <td className="px-5 py-3">
-                              <Link href={`/communities/${c.slug}`} className="block">
+                              <Link href={`/settings/${c.slug}`} className="block">
                                 <div className="flex items-center gap-3">
                                   <span
                                     className="h-6 w-[3px] shrink-0 rounded-full opacity-70"

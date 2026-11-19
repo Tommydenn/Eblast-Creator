@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export interface HeaderProps {
   /** The currently active section, used for nav highlighting. */
-  active?: "drafter" | "communities" | "events";
+  active?: "eblasts" | "social" | "settings";
 }
 
 /**
@@ -31,13 +31,13 @@ export function Header({ active }: HeaderProps) {
               them read from. "Communities" undersold the third — it holds
               brands, logos, senders, approvers, numbers and the regionals
               roster as much as it holds communities. */}
-          <NavLink href="/" active={active === "drafter"}>
+          <NavLink href="/" active={active === "eblasts"}>
             Eblasts
           </NavLink>
-          <NavLink href="/events" active={active === "events"}>
+          <NavLink href="/social" active={active === "social"}>
             Social
           </NavLink>
-          <NavLink href="/communities" active={active === "communities"}>
+          <NavLink href="/settings" active={active === "settings"}>
             Settings
           </NavLink>
         </nav>

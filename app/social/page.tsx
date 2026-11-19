@@ -19,6 +19,7 @@ import {
 } from "@/lib/fb-event-copy";
 import { hasFurtherKey, listCommunityEvents } from "@/lib/further";
 
+export const metadata = { title: "Social" };
 export const dynamic = "force-dynamic";
 
 /**
@@ -96,7 +97,7 @@ export default async function EventsPage() {
 
   return (
     <>
-      <Header active="events" />
+      <Header active="social" />
       <main className="mx-auto max-w-[1160px] px-6 pb-24 pt-10">
         <div className="mb-6">
           <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-clay-600">Control center</p>

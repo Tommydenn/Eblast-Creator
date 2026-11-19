@@ -329,6 +329,28 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
     fail("components/EventsPanel.tsx does not compare the printed number with the one on file");
   }
 
+  // The picker filters the shelf you are on, so it can only offer what that
+  // shelf holds: a community with nothing left to post is not a choice, and
+  // Done is a different set of communities entirely.
+  if (!panel.includes(`shelf === "done" ? Boolean(r.postedToFacebookAt) : !r.postedToFacebookAt`)) {
+    fail("components/EventsPanel.tsx offers communities the current shelf has nothing for");
+  }
+  // And switching shelf cannot strand the view on a community the picker no
+  // longer lists, which reads as the app having lost the work.
+  if (!panel.includes("offered.has(picked)")) {
+    fail("components/EventsPanel.tsx can be left on a community that is no longer offered");
+  }
+
+  // Both tracking numbers stay editable, each beside what prints it. The
+  // page tells you to go and set the Facebook one; that has to lead
+  // somewhere.
+  const settings = readFileSync("app/settings/[slug]/page.tsx", "utf-8");
+  for (const field of ["trackingPhone", "facebookPhone"]) {
+    if (!settings.includes(`field="${field}"`)) {
+      fail(`app/settings/[slug]/page.tsx has no way to edit ${field}`);
+    }
+  }
+
   if (!panel.includes("onPosted(false)")) {
     fail("components/EventsPanel.tsx offers no way back from a mis-clicked tick");
   }

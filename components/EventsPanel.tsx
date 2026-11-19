@@ -66,32 +66,50 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
 /**
-   * Communities in the order their next deadline falls.
+   * The communities on the shelf you are looking at, soonest deadline first.
    *
-   * Alphabetical put Amira at the top every day regardless of whether
-   * anything there was due, which is a list that never tells you anything.
-   * The one with work due soonest is the one to open first.
+   * Two rules, both learned the same way. Alphabetical put Amira at the top
+   * every day regardless of whether anything there was due, which is a list
+   * that tells you nothing — so this is ordered by when work falls.
+   *
+   * And it only lists communities that have something on this shelf. A
+   * community with nothing left to post is not a choice worth offering, and
+   * the counterpart matters just as much: Done is a different set, so its
+   * list is built from the posted rows rather than the pending ones. The
+   * picker filters the shelf; it cannot offer a community the shelf has
+   * nothing for.
    */
   const communities = useMemo(() => {
     const byName = new Map<string, { open: number; next: string }>();
     for (const r of rows) {
+      const onShelf = shelf === "done" ? Boolean(r.postedToFacebookAt) : !r.postedToFacebookAt;
+      if (!onShelf) continue;
       const name = r.community ?? "No community";
       const entry = byName.get(name) ?? { open: 0, next: "￿" };
-      if (!r.postedToFacebookAt) {
-        entry.open++;
-        if (r.dueAt && r.dueAt < entry.next) entry.next = r.dueAt;
-      }
+      entry.open++;
+      if (r.dueAt && r.dueAt < entry.next) entry.next = r.dueAt;
       byName.set(name, entry);
     }
     return [...byName.entries()].sort(
       ([aName, a], [bName, b]) => a.next.localeCompare(b.next) || aName.localeCompare(bName),
     );
-  }, [rows]);
+  }, [rows, shelf]);
 
   const firstCommunity = useMemo(() => communities[0]?.[0] ?? ALL, [communities]);
 
-  const [community, setCommunity] = useState<string>(firstCommunity);
+  const [picked, setPicked] = useState<string>(firstCommunity);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /**
+   * The community actually in force.
+   *
+   * Switching shelf can leave the picked one with nothing on the new shelf —
+   * everything there is posted, or none of it is yet. Falling back to all of
+   * them beats showing an empty list under a name the picker no longer
+   * offers, which reads as the app having lost the work.
+   */
+  const offered = useMemo(() => new Set(communities.map(([name]) => name)), [communities]);
+  const community = picked === ALL || offered.has(picked) ? picked : ALL;
 
   const list = useMemo(
     () =>
@@ -186,7 +204,7 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
         <select
           value={community}
           onChange={(e) => {
-            setCommunity(e.target.value);
+            setPicked(e.target.value);
             setSelectedId(null);
           }}
           className="w-full cursor-pointer rounded-xl border border-sand-200 bg-white px-3.5 py-3 text-[13px] text-sand-900 shadow-sm transition-colors hover:border-sand-300 focus:border-forest-400 focus:outline-none focus:ring-2 focus:ring-forest-600/15"
@@ -194,8 +212,7 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
           <option value={ALL}>All communities</option>
           {communities.map(([name, c]) => (
             <option key={name} value={name}>
-              {name}
-              {c.open > 0 ? ` · ${c.open} to post` : ""}
+              {name} · {c.open} {shelf === "done" ? "done" : "to post"}
             </option>
           ))}
         </select>
@@ -330,7 +347,11 @@ function Detail({
 
   return (
     <article className="min-w-0">
-      <header className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4 pb-6">
+      {/* No wrapping: a long event name used to push the buttons onto their
+          own line and move them every time the selection changed. The name
+          gives way instead, which is the part you can still read from the
+          row you clicked. */}
+      <header className="flex items-start justify-between gap-x-8 pb-6">
         <div className="min-w-0">
           {/* The community, not the deadline. Which building this belongs to
               is the thing you check before pasting anything into a form; the
@@ -340,14 +361,20 @@ function Detail({
               {row.community ?? "No community"}
             </span>
             {/* Planner's own distinction, carried through: this one also
-                wants a post on the community's website. */}
+                wants a post on the community's website. The badge names the
+                second deliverable rather than remarking on it. */}
             {row.wantsWebsitePost && (
-              <span className="rounded-full bg-clay-100 px-2 py-0.5 text-[10.5px] font-medium text-clay-700">
-                Website too
+              <span className="rounded-full bg-clay-100 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-clay-700">
+                Website post
               </span>
             )}
           </p>
-          <h2 className="mt-1.5 font-serif text-[26px] leading-tight text-sand-900">{name}</h2>
+          <h2
+            className="mt-1.5 truncate font-serif text-[26px] leading-tight text-sand-900"
+            title={name}
+          >
+            {name}
+          </h2>
         </div>
 
         <div className="flex shrink-0 items-center gap-2.5">
@@ -443,7 +470,7 @@ function Detail({
               {noPhone && (
                 <Notice tone="bad">
                   This event asks people to call, and {row.community ?? "this community"} has no
-                  Facebook tracking number yet. Add one on the community page, then write it again.
+                  Facebook tracking number yet. Add one under Settings, then write it again.
                 </Notice>
               )}
               {mismatch && (
@@ -459,7 +486,23 @@ function Detail({
             </div>
           )}
 
-          <div className="mt-5 space-y-3">
+          {/* Everything in here is rewritten at once, so the whole set dims
+              rather than one card — and it stops accepting clicks, because a
+              value copied mid-rewrite is the old one. */}
+          <div className="relative mt-5 space-y-3">
+            {busy && (
+              <div className="absolute inset-0 z-10 flex items-start justify-center rounded-2xl bg-white/55 pt-24 backdrop-blur-[1px]">
+                <span className="sticky top-28 flex items-center gap-2.5 rounded-full border border-sand-200 bg-white px-4 py-2 text-[12px] text-sand-600 shadow-sm">
+                  <span className="h-1.5 w-1.5 animate-ping rounded-full bg-forest-600" />
+                  Rewriting this event
+                </span>
+              </div>
+            )}
+            <div
+              className={`space-y-3 transition-opacity duration-200 ${
+                busy ? "pointer-events-none opacity-40" : ""
+              }`}
+            >
             <Field label="Event name" value={name} taken={taken} onCopied={took} />
             {row.eventDate && (
               <Field label="Date" value={row.eventDate} taken={taken} onCopied={took} />
@@ -484,6 +527,7 @@ function Detail({
             />
             <Photos taskId={row.taskId} hasSource={row.hasSource} />
             <Flyer taskId={row.taskId} hasSource={row.hasSource} />
+            </div>
           </div>
 
           <p className="mt-5 text-[11px] text-sand-400">

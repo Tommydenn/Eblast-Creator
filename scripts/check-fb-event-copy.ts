@@ -143,10 +143,10 @@ eq(
   if (facebook.endsWith("\n") || facebook.includes("\n\n\n")) fail("left a gap where the close would be");
 }
 {
-  // No RSVP wanted: no close at all, even with a number on file. The close
-  // exists to collect an RSVP, and a number under "call today" turns a
-  // walk-in event into one you apparently have to ring first.
-  const { facebook } = buildDescriptions({
+  // No RSVP wanted: the copy says so, and says it without a number. Saying
+  // nothing leaves the reader to guess whether they are expected to ring
+  // first; printing a number under "call today" answers it wrongly.
+  const { facebook, further } = buildDescriptions({
     paragraphs: ["Only this."],
     date: "Thursday, November 19",
     time: "2:00 PM",
@@ -154,12 +154,17 @@ eq(
     phone: "651-360-1691",
     rsvpRequired: false,
   });
-  if (/rsvp/i.test(facebook)) fail("asked for an RSVP on an event that does not want one");
-  if (/call/i.test(facebook)) fail("told people to call an event that does not want an RSVP");
+  if (!/no rsvp required/i.test(facebook)) {
+    fail("a walk-in event does not say that no RSVP is required");
+  }
+  if (/call today/i.test(facebook)) fail("told people to call an event that does not want an RSVP");
   if (facebook.includes("651-360-1691") || facebook.includes("📞")) {
     fail("printed a number to call on an event that does not want an RSVP");
   }
   if (facebook.endsWith("\n") || facebook.includes("\n\n\n")) fail("left a gap where the close would be");
+  // Further collects its own RSVPs and shows its own fields, so its copy is
+  // still the prose alone — the close belongs to Facebook either way.
+  if (/rsvp/i.test(further)) fail("Further's copy carries the RSVP line, which Further handles itself");
 }
 {
   // A missing detail drops its own line rather than printing an empty icon.

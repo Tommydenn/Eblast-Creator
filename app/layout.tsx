@@ -15,7 +15,12 @@ const inter = Inter({
 export const maxDuration = 300;
 
 export const metadata: Metadata = {
-  title: "Eblast Drafter — Great Lakes Management",
+  // Each section names itself in the browser tab. One title for the whole
+  // app meant three open tabs that all read the same thing.
+  title: {
+    default: "Eblasts — Great Lakes Management",
+    template: "%s — Great Lakes Management",
+  },
   description: "Agentic eblast drafting and HubSpot publishing for Great Lakes Management's senior-living communities.",
 };
 

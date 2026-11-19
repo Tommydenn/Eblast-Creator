@@ -1433,7 +1433,7 @@ export default function GenerateView() {
 
   return (
     <div className="min-h-screen bg-[#f9f7f3] flex flex-col">
-      <Header active="drafter" />
+      <Header active="eblasts" />
 
       <div className="flex-1 flex flex-col items-center justify-start pt-10 pb-16 px-4">
         <div className="w-full max-w-5xl">

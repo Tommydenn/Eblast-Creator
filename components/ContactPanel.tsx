@@ -12,15 +12,6 @@ interface Props {
   /** Where this community holds its events, when that is not where it is. */
   initialEventsAddress: Address | null;
   initialUseEventsAddress: boolean;
-  initialTrackingPhone: string | null;
-  /**
-   * The number Facebook events print, which is not the eblast's.
-   *
-   * Two campaigns, two numbers, so a call can be told apart by where it came
-   * from. Empty is a real answer — the Facebook copy then says the number is
-   * missing rather than borrowing the one above it.
-   */
-  initialFacebookPhone: string | null;
   initialWebsiteUrl: string | null;
 }
 
@@ -33,8 +24,6 @@ export function ContactPanel({
   initialAddress,
   initialEventsAddress,
   initialUseEventsAddress,
-  initialTrackingPhone,
-  initialFacebookPhone,
   initialWebsiteUrl,
 }: Props) {
   const router = useRouter();
@@ -52,8 +41,6 @@ export function ContactPanel({
   const [venueCity, setVenueCity] = useState(initialEventsAddress?.city ?? "");
   const [venueState, setVenueState] = useState(initialEventsAddress?.state ?? "");
   const [venueZip, setVenueZip] = useState(initialEventsAddress?.zip ?? "");
-  const [trackingPhone, setTrackingPhone] = useState(initialTrackingPhone ?? "");
-  const [facebookPhone, setFacebookPhone] = useState(initialFacebookPhone ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(initialWebsiteUrl ?? "");
 
   function handleCancel() {
@@ -67,8 +54,6 @@ export function ContactPanel({
     setVenueCity(initialEventsAddress?.city ?? "");
     setVenueState(initialEventsAddress?.state ?? "");
     setVenueZip(initialEventsAddress?.zip ?? "");
-    setTrackingPhone(initialTrackingPhone ?? "");
-    setFacebookPhone(initialFacebookPhone ?? "");
     setWebsiteUrl(initialWebsiteUrl ?? "");
     setError(null);
     setEditing(false);
@@ -96,8 +81,6 @@ export function ContactPanel({
             zip: venueZip.trim() || undefined,
           },
           useEventsAddress: useVenue,
-          trackingPhone: trackingPhone.trim() || null,
-          facebookPhone: facebookPhone.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
         }),
       });
@@ -150,16 +133,6 @@ export function ContactPanel({
             <p className="mt-0.5 text-xs text-sand-500">Eblasts print this instead of the address above.</p>
           </div>
         )}
-
-        <div>
-          <SectionLabel className="text-forest-700">Tracking phone — eblasts</SectionLabel>
-          <p className="mt-0.5 text-sm font-medium text-forest-700">{trackingPhone || na}</p>
-        </div>
-
-        <div>
-          <SectionLabel className="text-forest-700">Tracking phone — Facebook events</SectionLabel>
-          <p className="mt-0.5 text-sm font-medium text-forest-700">{facebookPhone || na}</p>
-        </div>
 
         <div>
           <SectionLabel>Website</SectionLabel>
@@ -222,17 +195,6 @@ export function ContactPanel({
             <p className="text-xs text-sand-500">Eblasts print this instead of the address above.</p>
           </div>
         )}
-      </div>
-
-      <div>
-        <SectionLabel className="text-forest-700">Tracking phone — eblasts</SectionLabel>
-        <input className={`mt-1 ${INPUT}`} value={trackingPhone} onChange={(e) => setTrackingPhone(e.target.value)} placeholder="(555) 000-0000" />
-      </div>
-
-      <div>
-        <SectionLabel className="text-forest-700">Tracking phone — Facebook events</SectionLabel>
-        <input className={`mt-1 ${INPUT}`} value={facebookPhone} onChange={(e) => setFacebookPhone(e.target.value)} placeholder="(555) 000-0000" />
-        <p className="mt-1 text-xs text-sand-500">Left empty, Facebook copy says the number is missing.</p>
       </div>
 
       <div>

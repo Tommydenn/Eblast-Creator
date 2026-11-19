@@ -131,8 +131,10 @@ export function RegionalsPanel({ initialRegionals, communities }: Props) {
     error,
   };
 
+  // No top margin: this is a view of its own under the Settings tabs, not a
+  // section hanging off the bottom of the community list.
   return (
-    <section id="regionals" className="mt-10 scroll-mt-6">
+    <section id="regionals" className="scroll-mt-6">
       <div className="mb-2 flex items-end justify-between gap-4">
         <div>
           <h2 className="text-[11px] font-semibold uppercase tracking-widest text-sand-600">Regionals</h2>

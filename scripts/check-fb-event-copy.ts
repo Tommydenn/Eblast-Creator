@@ -217,6 +217,25 @@ eq(
   eq("nothing at all", phoneInDescription(null).phone, null);
 }
 
+// ── Nothing measures an emoji ─────────────────────────────────────────────
+{
+  // "📞".length is 2 here and 12 in the built bundle: the production
+  // minifier folds the escaped literal's length, not the character's. That
+  // shipped once — every event reported no number to call — and no test run
+  // through tsx can reproduce it, because nothing is minified. So the shape
+  // that caused it is banned outright.
+  const code = readFileSync("lib/fb-event-copy.ts", "utf-8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/.*$/gm, " ");
+  const measured = code.match(/["'][^"']*\p{Extended_Pictographic}[^"']*["']\s*\.\s*length/gu);
+  if (measured) {
+    fail(
+      `lib/fb-event-copy.ts measures an emoji literal (${measured.join(", ")}); ` +
+        "the minifier folds that to the wrong number and only production sees it",
+    );
+  }
+}
+
 // ── Written vs built ──────────────────────────────────────────────────────
 {
   const drafter = readFileSync("lib/fb-event-draft.ts", "utf-8");

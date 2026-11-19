@@ -26,14 +26,19 @@ export function Header({ active }: HeaderProps) {
         </Link>
 
         <nav className="flex items-center gap-1">
+          {/* Named for what each one produces, in the order the work runs:
+              the email, then the posts about it, then everything both of
+              them read from. "Communities" undersold the third — it holds
+              brands, logos, senders, approvers, numbers and the regionals
+              roster as much as it holds communities. */}
           <NavLink href="/" active={active === "drafter"}>
-            Drafter
+            Eblasts
           </NavLink>
           <NavLink href="/events" active={active === "events"}>
-            Events
+            Social
           </NavLink>
           <NavLink href="/communities" active={active === "communities"}>
-            Communities
+            Settings
           </NavLink>
         </nav>
       </div>

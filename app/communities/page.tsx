@@ -83,7 +83,21 @@ function missingPieces(c: Awaited<ReturnType<typeof listCommunities>>[number]): 
   return missing;
 }
 
-export default async function CommunitiesPage() {
+/**
+ * Which half of Settings is showing.
+ *
+ * A link rather than client state: these are two separate things to look at,
+ * not a filter over one list, so each gets an address you can send someone
+ * and a back button that does what it should.
+ */
+type View = "communities" | "regionals";
+
+export default async function CommunitiesPage({
+  searchParams,
+}: {
+  searchParams?: { view?: string };
+}) {
+  const view: View = searchParams?.view === "regionals" ? "regionals" : "communities";
   const [communities, awaitingApproval, regionals] = await Promise.all([
     listCommunities(),
     countAwaitingApproval(),
@@ -107,13 +121,9 @@ export default async function CommunitiesPage() {
         <div className="mb-8 flex items-end justify-between gap-6">
           <div>
             <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-clay-600">Control center</p>
-            <h1 className="mt-1 font-serif text-[30px] font-bold leading-tight text-sand-900">Communities</h1>
+            <h1 className="mt-1 font-serif text-[30px] font-bold leading-tight text-sand-900">Settings</h1>
             <p className="mt-1.5 text-sm text-sand-500">
-              {total} communities ·{" "}
-              <a href="#regionals" className="underline-offset-2 transition-colors hover:text-sand-800 hover:underline">
-                {regionals.length} regionals
-              </a>{" "}
-              · Great Lakes Management
+              {total} communities · {regionals.length} regionals · Great Lakes Management
             </p>
           </div>
 
@@ -131,8 +141,33 @@ export default async function CommunitiesPage() {
           )}
         </div>
 
+        {/* The regionals roster used to hang off the end of the community
+            list, below everything, which read as an afterthought because it
+            was in the position of one. It is its own thing. */}
+        <div className="mb-6 flex gap-1 rounded-xl bg-sand-100/80 p-1">
+          {(
+            [
+              ["communities", "Communities", total],
+              ["regionals", "Regionals", regionals.length],
+            ] as Array<[View, string, number]>
+          ).map(([key, label, n]) => (
+            <Link
+              key={key}
+              href={key === "communities" ? "/communities" : "/communities?view=regionals"}
+              className={`rounded-lg px-4 py-1.5 text-[12.5px] font-medium transition-colors ${
+                view === key ? "bg-white text-sand-900 shadow-sm" : "text-sand-500 hover:text-sand-800"
+              }`}
+            >
+              {label}
+              <span className={`ml-1.5 tabular-nums ${view === key ? "text-sand-400" : "text-sand-300"}`}>
+                {n}
+              </span>
+            </Link>
+          ))}
+        </div>
+
         {/* Community groups */}
-        <div className="space-y-6">
+        <div className={`space-y-6 ${view === "communities" ? "" : "hidden"}`}>
           {Array.from(grouped.entries())
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([family, list]) => (
@@ -225,10 +260,12 @@ export default async function CommunitiesPage() {
             ))}
         </div>
 
-        <RegionalsPanel
-          initialRegionals={regionals}
-          communities={communities.map((c) => ({ id: c.id, displayName: c.displayName }))}
-        />
+        {view === "regionals" && (
+          <RegionalsPanel
+            initialRegionals={regionals}
+            communities={communities.map((c) => ({ id: c.id, displayName: c.displayName }))}
+          />
+        )}
       </main>
     </>
   );

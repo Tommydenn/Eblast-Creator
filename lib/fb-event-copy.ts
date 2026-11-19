@@ -141,7 +141,13 @@ export function phoneInDescription(description: string | null | undefined): {
 } {
   for (const raw of (description ?? "").split("\n")) {
     const text = raw.trim();
-    if (text.startsWith("📞")) return { line: true, phone: phoneFrom(text.slice("📞".length)) };
+    // The whole line goes to phoneFrom, emoji and all, because it keeps only
+    // the digits anyway. The first version cut the marker off with
+    // slice("📞".length) and worked everywhere except production: the
+    // minifier folded that length to 12 rather than 2, so the built page cut
+    // twelve characters off a fifteen-character line and found no number on
+    // any event. Nothing measures an emoji here now.
+    if (text.startsWith("📞")) return { line: true, phone: phoneFrom(text) };
   }
   return { line: false, phone: null };
 }

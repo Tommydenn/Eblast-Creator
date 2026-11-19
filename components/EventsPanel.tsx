@@ -447,11 +447,7 @@ function Detail({
                 </Notice>
               )}
               {mismatch && (
-                <Notice tone="warn">
-                  The copy prints {printed.phone ?? "no number"}, but{" "}
-                  {row.community ?? "this community"}&rsquo;s Facebook tracking number is{" "}
-                  {row.phoneOnFile ?? "not set"}. Write it again to use the one on file.
-                </Notice>
+                <Notice tone="warn">The tracking number doesn&rsquo;t match the one on file.</Notice>
               )}
               {row.stale && (
                 <Notice tone="warn">The eblast has been drafted again since this was written.</Notice>

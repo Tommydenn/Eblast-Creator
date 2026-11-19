@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { NO_FB_PHONE, phoneInDescription } from "@/lib/fb-event-copy";
+import { EventCropModal } from "@/components/EventCropModal";
 
 export interface EventRow {
   taskId: string;
@@ -64,6 +65,10 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
   const [shelf, setShelf] = useState<Shelf>("todo");
   const [busy, setBusy] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // The id of the event whose rewrite just finished, held a couple of seconds
+  // so the button can say it did something. The copy a rewrite produces is
+  // often close to what was there, so without this the click looked inert.
+  const [rewrote, setRewrote] = useState<string | null>(null);
 
 /**
    * The communities on the shelf you are looking at, soonest deadline first.
@@ -158,6 +163,8 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
             : r,
         ),
       );
+      setRewrote(taskId);
+      setTimeout(() => setRewrote((id) => (id === taskId ? null : id)), 2500);
     } catch (e) {
       setErrors((p) => ({ ...p, [taskId]: e instanceof Error ? e.message : "Could not write it" }));
     } finally {
@@ -296,6 +303,7 @@ export function EventsPanel({ initialRows }: { initialRows: EventRow[] }) {
           key={selected.taskId}
           row={selected}
           busy={busy === selected.taskId}
+          rewrote={rewrote === selected.taskId}
           error={errors[selected.taskId]}
           onGenerate={() => generate(selected.taskId)}
           onPosted={(v) => setPosted(selected.taskId, v)}
@@ -317,12 +325,14 @@ const WORDPRESS_CROP = { w: 1000, h: 667 };
 function Detail({
   row,
   busy,
+  rewrote,
   error,
   onGenerate,
   onPosted,
 }: {
   row: EventRow;
   busy: boolean;
+  rewrote: boolean;
   error?: string;
   onGenerate: () => void;
   onPosted: (v: boolean) => void;
@@ -392,9 +402,22 @@ function Detail({
             <button
               onClick={onGenerate}
               disabled={busy}
-              className="rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-[13px] text-sand-600 shadow-sm transition-colors hover:border-sand-300 hover:text-sand-900 disabled:opacity-40"
+              className={`flex items-center gap-1.5 rounded-xl border bg-white px-4 py-2.5 text-[13px] shadow-sm transition-colors disabled:opacity-40 ${
+                rewrote
+                  ? "border-forest-300 text-forest-700"
+                  : "border-sand-200 text-sand-600 hover:border-sand-300 hover:text-sand-900"
+              }`}
             >
-              {busy ? "Writing…" : "Write it again"}
+              {busy ? (
+                "Writing…"
+              ) : rewrote ? (
+                <>
+                  <Check className="h-3.5 w-3.5" />
+                  Rewritten
+                </>
+              ) : (
+                "Write it again"
+              )}
             </button>
           )}
 
@@ -548,6 +571,7 @@ function Detail({
               taskId={row.taskId}
               hasSource={row.hasSource}
               crop={tab === "wordpress" ? WORDPRESS_CROP : undefined}
+              title={name}
             />
             <Flyer taskId={row.taskId} hasSource={row.hasSource} />
             </div>
@@ -665,14 +689,21 @@ function Photos({
   taskId,
   hasSource,
   crop,
+  title,
 }: {
   taskId: string;
   hasSource: boolean;
   crop?: { w: number; h: number };
+  title?: string;
 }) {
   const [photos, setPhotos] = useState<PhotoChoice[] | null>(null);
   const [chosen, setChosen] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // A crop set by hand, per photo, keyed by its index. The automatic crop is
+  // only a guess; when it guesses wrong this holds the one you set instead,
+  // and it is what the panel shows and what Download hands over.
+  const [manual, setManual] = useState<Record<number, string>>({});
+  const [editing, setEditing] = useState(false);
   // Folds away like the flyer below it. Open to start with, because the
   // cover is part of posting; shut once you have taken it, so the panel
   // underneath is not a screen away.
@@ -687,6 +718,7 @@ function Photos({
     setPhotos(null);
     setChosen(0);
     setError(null);
+    setManual({});
     fetch(`/api/fb-events/${taskId}/photos`)
       .then((res) => res.json())
       .then((json) => {
@@ -726,9 +758,11 @@ function Photos({
 
   const current = photos[chosen] ?? photos[0];
   const cropSuffix = crop ? `crop=${crop.w}x${crop.h}` : "";
-  const downloadHref = `/api/fb-events/${taskId}/photos/${current.index}?download=1${
-    crop ? `&${cropSuffix}` : ""
-  }`;
+  const edited = crop ? manual[current.index] : undefined;
+  // The whole photo at full resolution, which the crop tool works from.
+  const originalUrl = `/api/fb-events/${taskId}/photos/${current.index}`;
+  const safeName = (title || "event").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  const serverDownload = `${originalUrl}?download=1${crop ? `&${cropSuffix}` : ""}`;
 
   return (
     <div className="overflow-hidden rounded-xl border border-sand-200 bg-white shadow-sm">
@@ -745,30 +779,50 @@ function Photos({
             </span>
           )}
         </button>
-        <a
-          href={downloadHref}
-          className="text-[11px] text-forest-700 transition-colors hover:text-forest-900"
-        >
-          {crop ? `Download ${crop.w}×${crop.h}` : "Download"}
-        </a>
+        <span className="flex items-center gap-3">
+          {/* Only on the cropped tab: set the crop yourself when the automatic
+              one framed the wrong thing. */}
+          {crop && (
+            <button
+              onClick={() => setEditing(true)}
+              className="text-[11px] text-sand-500 transition-colors hover:text-sand-800"
+            >
+              Adjust crop
+            </button>
+          )}
+          {/* A hand-set crop is a data URI the browser already holds, so it
+              downloads straight from there; otherwise the server renders it. */}
+          {edited ? (
+            <a
+              href={edited}
+              download={`${safeName}-${current.index + 1}-${crop!.w}x${crop!.h}.jpg`}
+              className="text-[11px] text-forest-700 transition-colors hover:text-forest-900"
+            >
+              Download {crop!.w}×{crop!.h}
+            </a>
+          ) : (
+            <a href={serverDownload} className="text-[11px] text-forest-700 transition-colors hover:text-forest-900">
+              {crop ? `Download ${crop.w}×${crop.h}` : "Download"}
+            </a>
+          )}
+        </span>
       </div>
 
       {open && (
       <>
       <div className="border-t border-sand-100 bg-sand-50/60 p-4">
         {crop ? (
-          // The real cropped output, cut by the server so what is shown is
-          // exactly what Download hands over — the subject kept in frame, not
-          // a centre cut. The box holds the website's aspect so the panel
-          // does not jump between photos of different shapes.
+          // Exactly what Download hands over: the crop you set if you set one,
+          // otherwise the automatic one. The box holds the website's aspect so
+          // the panel does not jump between photos of different shapes.
           <div
             className="mx-auto overflow-hidden rounded-lg bg-sand-100"
             style={{ aspectRatio: `${crop.w} / ${crop.h}`, maxWidth: 480 }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              key={`${current.index}-${crop.w}x${crop.h}`}
-              src={`/api/fb-events/${taskId}/photos/${current.index}?${cropSuffix}`}
+              key={edited ? `${current.index}-manual` : `${current.index}-${crop.w}x${crop.h}`}
+              src={edited ?? `${originalUrl}?${cropSuffix}`}
               alt=""
               className="h-full w-full object-cover"
             />
@@ -783,10 +837,28 @@ function Photos({
             className="mx-auto block max-h-[320px] w-auto max-w-full rounded-lg"
           />
         )}
-        <p className="mt-2 text-center text-[11px] text-sand-400">
-          {crop
-            ? `${crop.w} × ${crop.h}, cropped to keep the subject in frame`
-            : `${current.width} × ${current.height}, uncropped`}
+        <p className="mt-2 flex items-center justify-center gap-2 text-center text-[11px] text-sand-400">
+          {crop ? (
+            edited ? (
+              <>
+                {crop.w} × {crop.h}, cropped by hand
+                <button
+                  onClick={() => setManual((m) => {
+                    const next = { ...m };
+                    delete next[current.index];
+                    return next;
+                  })}
+                  className="text-sand-500 underline underline-offset-2 transition-colors hover:text-sand-800"
+                >
+                  reset to automatic
+                </button>
+              </>
+            ) : (
+              `${crop.w} × ${crop.h}, cropped automatically — Adjust to set it yourself`
+            )
+          ) : (
+            `${current.width} × ${current.height}, uncropped`
+          )}
         </p>
       </div>
 
@@ -807,6 +879,16 @@ function Photos({
         </div>
       )}
       </>
+      )}
+
+      {crop && editing && (
+        <EventCropModal
+          imageUrl={originalUrl}
+          width={crop.w}
+          height={crop.h}
+          onClose={() => setEditing(false)}
+          onApply={(uri) => setManual((m) => ({ ...m, [current.index]: uri }))}
+        />
       )}
     </div>
   );

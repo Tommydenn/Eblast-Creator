@@ -36,6 +36,24 @@ const fail = (m: string) => failures.push(m);
   if (/crop=\{\{\s*w:\s*1000/.test(panel)) {
     fail("components/EventsPanel.tsx crops a photo on a tab that should offer it whole");
   }
+
+  // The automatic crop is a guess, so you can set your own and download that.
+  if (!/<EventCropModal[\s/>]/.test(panel)) {
+    fail("components/EventsPanel.tsx offers no way to adjust the crop by hand");
+  }
+  if (!/manual\[current\.index\]/.test(panel)) {
+    fail("components/EventsPanel.tsx does not keep a hand-set crop per photo");
+  }
+  // What you set is what downloads: the edited data URI, not the auto crop.
+  if (!/href=\{edited\}/.test(panel)) {
+    fail("components/EventsPanel.tsx downloads the automatic crop even after you set one by hand");
+  }
+
+  const modal = readFileSync("components/EventCropModal.tsx", "utf-8");
+  // The hand crop comes out at the exact size too, not the source's own.
+  if (!/cropInBrowser\([^)]*width,\s*height\)/.test(modal)) {
+    fail("components/EventCropModal.tsx does not crop to the exact 1000×667 the website wants");
+  }
 }
 
 // ── The crop keeps the subject, not the centre ─────────────────────────────

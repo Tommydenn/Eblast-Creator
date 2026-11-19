@@ -36,6 +36,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 /**
  * Crop to `targetRatio`, positioned by x/y (0-100, the same scale the
  * repositioning tool uses) and tightened by `zoom`. Returns a JPEG data URI.
+ *
+ * `outWidth`/`outHeight`, when given, scale the crop into a canvas of exactly
+ * that size. The website wants a 1000×667 file, no larger and no smaller, and
+ * this is how it gets one from a crop taken at the source's own resolution.
+ * Left off, the output keeps the crop's pixel size, which is what the editor
+ * has always done.
  */
 export async function cropInBrowser(
   imageUrl: string,
@@ -43,6 +49,8 @@ export async function cropInBrowser(
   x = 50,
   y = 50,
   zoom = 1,
+  outWidth?: number,
+  outHeight?: number,
 ): Promise<string> {
   const img = await loadImage(imageUrl);
   const width = img.naturalWidth;
@@ -74,12 +82,18 @@ export async function cropInBrowser(
   const left = Math.round((width - cropWidth) * (x / 100));
   const top = Math.round((height - cropHeight) * (y / 100));
 
+  // The canvas is the requested output size, or the crop's own size when none
+  // was asked for. Either way the same crop region is drawn into it, scaled to
+  // fill — so an exact 1000×667 comes out without a second encode.
+  const outW = outWidth ?? cropWidth;
+  const outH = outHeight ?? cropHeight;
+
   const canvas = document.createElement("canvas");
-  canvas.width = cropWidth;
-  canvas.height = cropHeight;
+  canvas.width = outW;
+  canvas.height = outH;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("This browser cannot crop photos");
-  ctx.drawImage(img, left, top, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  ctx.drawImage(img, left, top, cropWidth, cropHeight, 0, 0, outW, outH);
 
   return canvas.toDataURL("image/jpeg", JPEG_QUALITY);
 }

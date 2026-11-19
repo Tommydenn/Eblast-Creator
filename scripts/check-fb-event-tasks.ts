@@ -317,6 +317,12 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
     fail("components/EventsPanel.tsx still prints the due date beside the community name");
   }
 
+  // A missing Facebook number is in the copy, at the bottom of a long
+  // description. The page says so where it will be read before posting.
+  if (!panel.includes("NO_FB_PHONE")) {
+    fail("components/EventsPanel.tsx does not flag an event whose Facebook number is missing");
+  }
+
   if (!panel.includes("onPosted(false)")) {
     fail("components/EventsPanel.tsx offers no way back from a mis-clicked tick");
   }

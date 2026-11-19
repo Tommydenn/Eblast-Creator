@@ -315,6 +315,7 @@ export default async function CommunityDetailPage({ params }: { params: { slug: 
                 initialEventsAddress={c.eventsAddress ?? null}
                 initialUseEventsAddress={c.useEventsAddress ?? false}
                 initialTrackingPhone={c.trackingPhone ?? null}
+                initialFacebookPhone={c.facebookPhone ?? null}
                 initialWebsiteUrl={c.websiteUrl ?? null}
               />
               {c.hubspot?.acronym && (

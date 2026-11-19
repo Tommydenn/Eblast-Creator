@@ -37,13 +37,16 @@ export interface EventSource {
   fields: DraftFields;
   communityName: string;
   /**
-   * The number this event tells people to ring, already decided.
+   * The number this event tells people to ring: the community's Facebook
+   * tracking number, or nothing at all.
    *
-   * Facebook has its own tracking number so a call from an event can be told
-   * apart from a call from an eblast, and the flyer carries neither — it has
-   * whichever line the designer printed. So the community's Facebook number
-   * wins, and the eblast's is the fallback for a community that has not been
-   * given one yet.
+   * Facebook has a number of its own so a call from an event can be told
+   * apart from a call from an eblast, which is the whole reason the two
+   * differ. Falling back to the eblast's would book the call against the
+   * wrong campaign and look perfectly right doing it, and whatever line the
+   * designer printed on the flyer is no safer. So a community that has not
+   * been given a Facebook number has no number here, and the copy says so
+   * rather than borrowing one.
    */
   phone: string | null;
   /** The draft the fields came from, when they came from one. */
@@ -130,10 +133,7 @@ export async function sourceFor(taskId: string): Promise<EventSource> {
         fields,
         communityName: draft.communityName,
         draftId: task.savedDraftId,
-        phone:
-          phoneFrom(community.facebookPhone) ??
-          phoneFrom(fields.ctaButtonHref, fields.ctaButtonLabel) ??
-          phoneFrom(community.trackingPhone),
+        phone: phoneFrom(community.facebookPhone),
       };
     }
   }
@@ -153,7 +153,7 @@ export async function sourceFor(taskId: string): Promise<EventSource> {
     kind: "flyer",
     draftId: null,
     communityName: community.displayName,
-    phone: phoneFrom(community.facebookPhone) ?? phoneFrom(community.trackingPhone),
+    phone: phoneFrom(community.facebookPhone),
     fields: {
       headline: flyer.headline,
       storyScriptTitle: flyer.storyScriptTitle,
@@ -163,8 +163,6 @@ export async function sourceFor(taskId: string): Promise<EventSource> {
       eventTime: flyer.eventTime,
       eventLocation: flyer.eventLocation,
       bodyParagraphs: flyer.bodyParagraphs,
-      // The flyer has no call button, so the number is the community's own —
-      // which is what the eblast's button ends up carrying anyway.
       // Only when the flyer says so. Assuming it meant every walk-in event
       // was printed with a number and told people to call first.
       rsvpRequired: flyer.rsvpRequired === true,

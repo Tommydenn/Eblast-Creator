@@ -124,6 +124,18 @@ export function detailsFromDescription(description: string | null | undefined): 
   return { date: after("📅"), time: after("🕐"), location: after("📍") };
 }
 
+/**
+ * What stands in for the number when there is no Facebook number to print.
+ *
+ * An event that asks people to call needs the community's Facebook tracking
+ * number, and that is the only number that belongs here — the eblast's would
+ * book the call to the wrong campaign, and anything invented is worse than
+ * both. So when the community has not been given one, the line says so in
+ * place of a number: visible in the copy, impossible to paste by accident,
+ * and it tells you exactly what is missing.
+ */
+export const NO_FB_PHONE = "[no Facebook tracking number on file]";
+
 export interface EventFacts {
   /** The two paragraphs, already written. */
   paragraphs: string[];
@@ -153,9 +165,14 @@ export function buildDescriptions(facts: EventFacts): EventDescriptions {
   // The close exists to collect an RSVP. An event that does not want one is
   // a walk-in, and printing a number under "call today" turns an open door
   // into a hurdle — so when no RSVP is asked for, neither the line nor the
-  // number appears. No number on file means the same thing.
-  const close =
-    facts.rsvpRequired && facts.phone ? `RSVP required, call today!\n📞 ${facts.phone}` : "";
+  // number appears.
+  //
+  // When one is asked for and there is no number, the line stays and says
+  // what is missing. Dropping it quietly would hide the gap behind copy that
+  // looks finished, and the event would go up asking nobody to call.
+  const close = facts.rsvpRequired
+    ? `RSVP required, call today!\n📞 ${facts.phone ?? NO_FB_PHONE}`
+    : "";
 
   return {
     facebook: [body, details.join("\n"), close].filter(Boolean).join("\n\n"),

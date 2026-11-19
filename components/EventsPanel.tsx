@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { NO_FB_PHONE } from "@/lib/fb-event-copy";
 
 export interface EventRow {
   taskId: string;
@@ -309,6 +310,10 @@ function Detail({
   const written = Boolean(row.facebookDescription);
   const posted = Boolean(row.postedToFacebookAt);
   const name = row.eventTitle ?? row.eventName;
+  // The copy itself carries the gap, so it cannot be pasted without being
+  // seen — but it is at the bottom of a long description, and this is the
+  // one thing here that has to be fixed before the event goes up.
+  const noPhone = (row.facebookDescription ?? "").includes(NO_FB_PHONE);
 
   const took = (key: string) => setTaken((prev) => new Set(prev).add(key));
 
@@ -407,8 +412,14 @@ function Detail({
             </a>
           </div>
 
-          {(row.stale || error || row.inFurther === true) && (
+          {(row.stale || error || noPhone || row.inFurther === true) && (
             <div className="mt-4 space-y-2">
+              {noPhone && (
+                <Notice tone="bad">
+                  This event asks people to call, and {row.community ?? "this community"} has no
+                  Facebook tracking number yet. Add one on the community page, then write it again.
+                </Notice>
+              )}
               {row.stale && (
                 <Notice tone="warn">The eblast has been drafted again since this was written.</Notice>
               )}

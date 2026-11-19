@@ -11,6 +11,7 @@
  */
 import { readFileSync } from "node:fs";
 import {
+  NO_FB_PHONE,
   buildDescriptions,
   formatEventDate,
   formatEventTime,
@@ -120,7 +121,10 @@ eq(
   }
 }
 {
-  // No number on file: no line telling anyone to call one.
+  // An RSVP is wanted and the community has no Facebook number on file. The
+  // close stays and says what is missing: dropping it quietly would hide the
+  // gap behind copy that looks finished, and borrowing the eblast's number
+  // would book the call against the wrong campaign while looking right.
   const { facebook } = buildDescriptions({
     paragraphs: ["Only this."],
     date: "Thursday, November 19",
@@ -129,7 +133,12 @@ eq(
     phone: null,
     rsvpRequired: true,
   });
-  if (/call today/i.test(facebook)) fail("told people to call with no number to call");
+  if (!facebook.includes(NO_FB_PHONE)) {
+    fail("an RSVP event with no number does not say the number is missing");
+  }
+  const close = facebook.split("\n").find((l) => l.startsWith("📞")) ?? "";
+  if (!close) fail("dropped the close instead of saying the number is missing");
+  if (/\d/.test(close)) fail(`printed a number where the community has none: ${close}`);
   if (facebook.endsWith("\n") || facebook.includes("\n\n\n")) fail("left a gap where the close would be");
 }
 {
@@ -176,6 +185,23 @@ eq(
   }
   if (!drafter.includes("buildDescriptions")) {
     fail("lib/fb-event-draft.ts no longer assembles the description from the facts");
+  }
+}
+
+// ── Whose number ──────────────────────────────────────────────────────────
+{
+  const source = readFileSync("lib/fb-event-source.ts", "utf-8");
+  if (!source.includes("phone: phoneFrom(community.facebookPhone)")) {
+    fail("lib/fb-event-source.ts no longer takes the number from the community's Facebook field");
+  }
+  // Facebook and the eblasts carry different numbers on purpose, so a call
+  // can be told apart by where it came from. Any fallback destroys that and
+  // leaves copy that looks perfectly correct, which is why this is checked
+  // as the absence of the other numbers rather than the presence of one.
+  for (const borrowed of ["trackingPhone", "ctaButton"]) {
+    if (source.includes(borrowed)) {
+      fail(`lib/fb-event-source.ts borrows ${borrowed} when the Facebook number is missing`);
+    }
   }
 }
 

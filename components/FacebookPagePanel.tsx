@@ -88,7 +88,7 @@ export function FacebookPagePanel({ slug, initialUrl }: { slug: string; initialU
           </div>
         </div>
       ) : (
-        <p className="-mt-3 text-sm">
+        <p className="mt-0.5 text-sm">
           {initialUrl ? (
             <a
               href={initialUrl}

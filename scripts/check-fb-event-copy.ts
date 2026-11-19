@@ -17,6 +17,7 @@ import {
   formatEventTime,
   ordinal,
   phoneFrom,
+  phoneInDescription,
 } from "@/lib/fb-event-copy";
 
 const failures: string[] = [];
@@ -171,6 +172,49 @@ eq(
     rsvpRequired: false,
   });
   if (facebook.includes("📅") || facebook.includes("🕐")) fail("printed an icon with nothing after it");
+}
+
+// ── Reading the number back off finished copy ─────────────────────────────
+{
+  const full = buildDescriptions({
+    paragraphs: ["Only this."],
+    date: "Thursday, November 19",
+    time: "2:00 PM",
+    location: "Somewhere",
+    phone: "651-360-1691",
+    rsvpRequired: true,
+  }).facebook;
+  const read = phoneInDescription(full);
+  eq("a finished description has a close", read.line, true);
+  eq("and the number it prints", read.phone, "651-360-1691");
+
+  // The marker is a line, not a number. Both halves matter: the line is what
+  // says this event asks for a call, and the missing number is what has to
+  // be compared against the community page.
+  const missing = buildDescriptions({
+    paragraphs: ["Only this."],
+    date: "Thursday, November 19",
+    time: "2:00 PM",
+    location: "Somewhere",
+    phone: null,
+    rsvpRequired: true,
+  }).facebook;
+  eq("the marker still counts as a close", phoneInDescription(missing).line, true);
+  eq("with no number in it", phoneInDescription(missing).phone, null);
+
+  // An event that wants no RSVP has nothing to disagree with.
+  const walkIn = buildDescriptions({
+    paragraphs: ["Only this."],
+    date: "Thursday, November 19",
+    time: "2:00 PM",
+    location: "Somewhere",
+    phone: "651-360-1691",
+    rsvpRequired: false,
+  }).facebook;
+  eq("a walk-in has no close", phoneInDescription(walkIn).line, false);
+
+  // The date line has digits in it and must not be mistaken for the number.
+  eq("nothing at all", phoneInDescription(null).phone, null);
 }
 
 // ── Written vs built ──────────────────────────────────────────────────────

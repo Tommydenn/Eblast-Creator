@@ -29,11 +29,11 @@ export function Header({ active }: HeaderProps) {
           <NavLink href="/" active={active === "drafter"}>
             Drafter
           </NavLink>
-          <NavLink href="/communities" active={active === "communities"}>
-            Communities
-          </NavLink>
           <NavLink href="/events" active={active === "events"}>
             Events
+          </NavLink>
+          <NavLink href="/communities" active={active === "communities"}>
+            Communities
           </NavLink>
         </nav>
       </div>

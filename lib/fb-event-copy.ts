@@ -125,6 +125,28 @@ export function detailsFromDescription(description: string | null | undefined): 
 }
 
 /**
+ * Whether the finished copy asks anyone to call, and on what number.
+ *
+ * The description is the thing that gets pasted into Facebook, so it is the
+ * only place worth asking. A community's number can change — or arrive after
+ * the copy was written — and nothing about a stale number looks stale, so
+ * this is read back off the text and compared with what is on file.
+ *
+ * `line` is whether there is a 📞 line at all: an event that wants no RSVP
+ * has none, and has nothing to disagree with.
+ */
+export function phoneInDescription(description: string | null | undefined): {
+  line: boolean;
+  phone: string | null;
+} {
+  for (const raw of (description ?? "").split("\n")) {
+    const text = raw.trim();
+    if (text.startsWith("📞")) return { line: true, phone: phoneFrom(text.slice("📞".length)) };
+  }
+  return { line: false, phone: null };
+}
+
+/**
  * What stands in for the number when there is no Facebook number to print.
  *
  * An event that asks people to call needs the community's Facebook tracking

@@ -11,7 +11,12 @@ import { EventsPanel } from "@/components/EventsPanel";
 import { listFbEventTasks } from "@/lib/fb-events";
 import { listCommunities } from "@/data/communities";
 import { facebookEventsUrl } from "@/lib/db/queries";
-import { detailsFromDescription, formatEventDate, formatEventTime } from "@/lib/fb-event-copy";
+import {
+  detailsFromDescription,
+  formatEventDate,
+  formatEventTime,
+  phoneFrom,
+} from "@/lib/fb-event-copy";
 import { hasFurtherKey, listCommunityEvents } from "@/lib/further";
 
 export const dynamic = "force-dynamic";
@@ -81,6 +86,9 @@ export default async function EventsPage() {
       inFurther: inFurther ? inFurther.has((e.eventTitle ?? e.eventName).trim().toLowerCase()) : null,
         facebookEventsUrl: facebookEventsUrl(community?.socials?.facebook),
         wantsWebsitePost: e.wantsWebsitePost,
+        // What the community page holds today, so the page can say when the
+        // number printed in the copy is no longer the number on file.
+        phoneOnFile: phoneFrom(community?.facebookPhone),
       };
     });
 

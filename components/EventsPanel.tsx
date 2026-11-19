@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { NO_FB_PHONE } from "@/lib/fb-event-copy";
+import { NO_FB_PHONE, phoneInDescription } from "@/lib/fb-event-copy";
 
 export interface EventRow {
   taskId: string;
@@ -26,6 +26,8 @@ export interface EventRow {
   wantsWebsitePost: boolean;
   /** Whether there is a draft or a flyer behind this, so photos are possible. */
   hasSource: boolean;
+  /** The community's Facebook tracking number as the community page holds it. */
+  phoneOnFile: string | null;
 }
 
 const ALL = "__all__";
@@ -310,10 +312,19 @@ function Detail({
   const written = Boolean(row.facebookDescription);
   const posted = Boolean(row.postedToFacebookAt);
   const name = row.eventTitle ?? row.eventName;
-  // The copy itself carries the gap, so it cannot be pasted without being
-  // seen — but it is at the bottom of a long description, and this is the
-  // one thing here that has to be fixed before the event goes up.
-  const noPhone = (row.facebookDescription ?? "").includes(NO_FB_PHONE);
+  /**
+   * What the copy says to call, against what the community page holds.
+   *
+   * The description is written once and the number can move afterwards — a
+   * new tracking number, or the first one this community has ever had — and
+   * a stale number looks exactly like a current one. So the printed line is
+   * read back and compared, and the two are named when they disagree.
+   */
+  const printed = phoneInDescription(row.facebookDescription);
+  const usesMarker = (row.facebookDescription ?? "").includes(NO_FB_PHONE);
+  // Nothing anywhere: the copy says so and there is nothing to fix it with.
+  const noPhone = usesMarker && !row.phoneOnFile;
+  const mismatch = printed.line && printed.phone !== row.phoneOnFile && !noPhone;
 
   const took = (key: string) => setTaken((prev) => new Set(prev).add(key));
 
@@ -339,7 +350,21 @@ function Detail({
           <h2 className="mt-1.5 font-serif text-[26px] leading-tight text-sand-900">{name}</h2>
         </div>
 
-        {written &&
+        <div className="flex shrink-0 items-center gap-2.5">
+          {/* Up here with the other action, because the reason to reach for
+              it — a notice saying the copy is out of date — is up here too,
+              and it used to sit below the flyer. */}
+          {written && (
+            <button
+              onClick={onGenerate}
+              disabled={busy}
+              className="rounded-xl border border-sand-200 bg-white px-4 py-2.5 text-[13px] text-sand-600 shadow-sm transition-colors hover:border-sand-300 hover:text-sand-900 disabled:opacity-40"
+            >
+              {busy ? "Writing…" : "Write it again"}
+            </button>
+          )}
+
+          {written &&
           (posted ? (
             <span className="flex shrink-0 items-center gap-2.5 rounded-xl bg-forest-50 px-4 py-2.5 text-[13px] text-forest-800">
               <Check className="h-4 w-4" />
@@ -359,6 +384,7 @@ function Detail({
               Mark posted
             </button>
           ))}
+        </div>
       </header>
 
       {!written ? (
@@ -412,12 +438,19 @@ function Detail({
             </a>
           </div>
 
-          {(row.stale || error || noPhone || row.inFurther === true) && (
+          {(row.stale || error || noPhone || mismatch || row.inFurther === true) && (
             <div className="mt-4 space-y-2">
               {noPhone && (
                 <Notice tone="bad">
                   This event asks people to call, and {row.community ?? "this community"} has no
                   Facebook tracking number yet. Add one on the community page, then write it again.
+                </Notice>
+              )}
+              {mismatch && (
+                <Notice tone="warn">
+                  The copy prints {printed.phone ?? "no number"}, but{" "}
+                  {row.community ?? "this community"}&rsquo;s Facebook tracking number is{" "}
+                  {row.phoneOnFile ?? "not set"}. Write it again to use the one on file.
                 </Notice>
               )}
               {row.stale && (
@@ -457,20 +490,11 @@ function Detail({
             <Flyer taskId={row.taskId} hasSource={row.hasSource} />
           </div>
 
-          <div className="mt-5 flex items-center justify-between text-[11px] text-sand-400">
-            <span>
-              {row.generatedFrom === "flyer"
-                ? "Written from the flyer, before the eblast was drafted."
-                : "Written from the eblast draft."}
-            </span>
-            <button
-              onClick={onGenerate}
-              disabled={busy}
-              className="transition-colors hover:text-sand-700 disabled:opacity-40"
-            >
-              {busy ? "Writing…" : "Write it again"}
-            </button>
-          </div>
+          <p className="mt-5 text-[11px] text-sand-400">
+            {row.generatedFrom === "flyer"
+              ? "Written from the flyer, before the eblast was drafted."
+              : "Written from the eblast draft."}
+          </p>
         </>
       )}
     </article>
@@ -573,6 +597,10 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
   const [photos, setPhotos] = useState<PhotoChoice[] | null>(null);
   const [chosen, setChosen] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Folds away like the flyer below it. Open to start with, because the
+  // cover is part of posting; shut once you have taken it, so the panel
+  // underneath is not a screen away.
+  const [open, setOpen] = useState(true);
 
   // Fetched as the event opens rather than on a click. They are a database
   // read now — gathered when the copy was written — so this is quick, and
@@ -625,14 +653,18 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
   return (
     <div className="overflow-hidden rounded-xl border border-sand-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 px-5 py-3">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sand-400">
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-sand-400 transition-colors hover:text-sand-700"
+        >
+          <span className={`transition-transform ${open ? "rotate-90" : ""}`}>›</span>
           Photo
           {photos.length > 1 && (
-            <span className="ml-2 font-normal tracking-normal text-sand-300">
+            <span className="font-normal tracking-normal text-sand-300">
               {chosen + 1} of {photos.length}
             </span>
           )}
-        </span>
+        </button>
         <a
           href={`/api/fb-events/${taskId}/photos/${current.index}?download=1`}
           className="text-[11px] text-forest-700 transition-colors hover:text-forest-900"
@@ -641,6 +673,8 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
         </a>
       </div>
 
+      {open && (
+      <>
       <div className="border-t border-sand-100 bg-sand-50/60 p-4">
         {/* The stored preview, so it is there the moment the panel is. The
             full-size original is what Download hands over. */}
@@ -670,6 +704,8 @@ function Photos({ taskId, hasSource }: { taskId: string; hasSource: boolean }) {
             </button>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );

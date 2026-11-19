@@ -322,6 +322,12 @@ const task = (id: string, title: string, planId: string) => ({ id, title, planId
   if (!panel.includes("NO_FB_PHONE")) {
     fail("components/EventsPanel.tsx does not flag an event whose Facebook number is missing");
   }
+  // And a number that no longer matches the community page. Copy is written
+  // once; a tracking number can be changed afterwards, and a stale number
+  // looks exactly like a current one on a finished event.
+  if (!panel.includes("printed.phone !== row.phoneOnFile")) {
+    fail("components/EventsPanel.tsx does not compare the printed number with the one on file");
+  }
 
   if (!panel.includes("onPosted(false)")) {
     fail("components/EventsPanel.tsx offers no way back from a mis-clicked tick");

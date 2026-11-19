@@ -14,6 +14,8 @@
  *   npx tsx scripts/check-undo-history.ts
  */
 
+import { readFileSync } from "node:fs";
+
 const COALESCE_MS = 700;
 const LIMIT = 100;
 
@@ -100,6 +102,24 @@ const fail = (m: string) => failures.push(m);
   if (h.stack[h.stack.length - 1] !== `state${LIMIT + 49}`) fail("the newest step was dropped instead of the oldest");
 }
 
+// ── Saving by hand is a button, not a menu item ────────────────────────────
+{
+  // The draft saves itself, which is the argument that folded saving by hand
+  // into an overflow menu. But reassurance is what that control is for, and
+  // a save you have to go looking for behind three dots cannot reassure
+  // anyone. It stays on the bar, beside the words saying where things stand.
+  const layout = readFileSync("components/drafter/EditorLayout.tsx", "utf-8");
+  if (!layout.includes("onClick={save}")) {
+    fail("components/drafter/EditorLayout.tsx has no button that saves the draft");
+  }
+  if (/items=\{\[[^\]]*onClick:\s*save\b/s.test(layout)) {
+    fail("components/drafter/EditorLayout.tsx has put saving by hand back inside a menu");
+  }
+  if (!layout.includes("<SaveStatus")) {
+    fail("components/drafter/EditorLayout.tsx no longer says where the draft stands");
+  }
+}
+
 if (failures.length) {
   console.error(`\n${failures.length} problem(s):\n`);
   for (const f of failures) console.error(`  - ${f}`);
@@ -107,5 +127,6 @@ if (failures.length) {
 }
 console.log(
   "\nTyping a word is one undo step; a pause, a different field, or a colour change starts another.\n" +
-  `Undo breaks the run, and the stack stops at ${LIMIT} by dropping the oldest.`,
+  `Undo breaks the run, the stack stops at ${LIMIT} by dropping the oldest, and saving by\n` +
+  "hand is a button on the bar rather than something to go hunting for.",
 );

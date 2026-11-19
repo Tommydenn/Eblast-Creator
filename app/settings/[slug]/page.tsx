@@ -32,9 +32,9 @@ export const dynamic = "force-dynamic";
  */
 const TABS = [
   ["details", "Details"],
+  ["brand", "Brand"],
   ["eblasts", "Eblasts"],
   ["social", "Social"],
-  ["brand", "Brand"],
 ] as const;
 
 type Tab = (typeof TABS)[number][0];
@@ -275,6 +275,10 @@ export default async function CommunityDetailPage({
           {TABS.map(([key, label]) => (
             <Link
               key={key}
+              // The page is the same page; only the panel under these changes.
+              // Scrolling to the top on every switch moved the tabs out from
+              // under the pointer that had just clicked them.
+              scroll={false}
               href={key === "details" ? `/settings/${c.slug}` : `/settings/${c.slug}?tab=${key}`}
               className={`rounded-lg px-4 py-1.5 text-[12.5px] font-medium transition-colors ${
                 tab === key ? "bg-white text-sand-900 shadow-sm" : "text-sand-500 hover:text-sand-800"
@@ -395,6 +399,11 @@ export default async function CommunityDetailPage({
                   </Field>
                 )}
               </Section>
+
+              {/* What was sent, under the tab about sending. It used to sit
+                  below whichever tab was open, so a community's email history
+                  showed up under Social and under Brand. */}
+              <RecentSendsPanel sends={recentSends} />
             </>
           )}
 
@@ -424,11 +433,6 @@ export default async function CommunityDetailPage({
               )}
             </Section>
           )}
-        </div>
-
-        {/* ── Recent sends — full width, collapsible ───────────────────────── */}
-        <div className="mt-6">
-          <RecentSendsPanel sends={recentSends} />
         </div>
       </main>
     </>

@@ -347,11 +347,13 @@ function Detail({
 
   return (
     <article className="min-w-0">
-      {/* No wrapping: a long event name used to push the buttons onto their
-          own line and move them every time the selection changed. The name
-          gives way instead, which is the part you can still read from the
-          row you clicked. */}
-      <header className="flex items-start justify-between gap-x-8 pb-6">
+      {/* The community line spans the top; the name and the two actions sit
+          on one row beneath it, so the buttons line up with the name rather
+          than floating above it. And that row does not wrap: a long name
+          used to push the buttons onto their own line and move them every
+          time the selection changed. The name gives way instead, which is
+          the part you can still read on the row you clicked. */}
+      <header className="pb-6">
         <div className="min-w-0">
           {/* The community, not the deadline. Which building this belongs to
               is the thing you check before pasting anything into a form; the
@@ -369,15 +371,17 @@ function Detail({
               </span>
             )}
           </p>
+        </div>
+
+        <div className="mt-1.5 flex items-center justify-between gap-x-8">
           <h2
-            className="mt-1.5 truncate font-serif text-[26px] leading-tight text-sand-900"
+            className="min-w-0 flex-1 truncate font-serif text-[26px] leading-tight text-sand-900"
             title={name}
           >
             {name}
           </h2>
-        </div>
 
-        <div className="flex shrink-0 items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-2.5">
           {/* Up here with the other action, because the reason to reach for
               it — a notice saying the copy is out of date — is up here too,
               and it used to sit below the flyer. */}
@@ -411,6 +415,7 @@ function Detail({
               Mark posted
             </button>
           ))}
+          </div>
         </div>
       </header>
 

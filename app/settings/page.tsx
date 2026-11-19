@@ -154,6 +154,7 @@ export default async function CommunitiesPage({
           ).map(([key, label, n]) => (
             <Link
               key={key}
+              scroll={false}
               href={key === "communities" ? "/settings" : "/settings?view=regionals"}
               className={`rounded-lg px-4 py-1.5 text-[12.5px] font-medium transition-colors ${
                 view === key ? "bg-white text-sand-900 shadow-sm" : "text-sand-500 hover:text-sand-800"

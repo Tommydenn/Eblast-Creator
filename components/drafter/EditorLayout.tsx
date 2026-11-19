@@ -73,10 +73,9 @@ function TopBar({
   onTestApproval: () => void;
   autoSaveLabel: string | null;
 }) {
-  const router = useRouter();
   const {
     community, fields, isSaving, saveError, isPushing, pushResult, pushError, approvalStatus,
-    imagesLoading, waitingForImages, save, push, discard, dismissPushResult,
+    imagesLoading, waitingForImages, save, push, dismissPushResult,
     canUndo, canRedo, undo, redo, lastRefineInstruction,
   } = useDraft();
 
@@ -124,8 +123,6 @@ function TopBar({
         </div>
       )}
 
-      <SaveStatus autoSaving={!!autoSaveLabel} />
-
       {imagesLoading && (
         <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-[#6A736F]">
           <Spinner />
@@ -144,6 +141,27 @@ function TopBar({
           </button>
         </div>
       )}
+
+      {/* Where the draft stands, and the button that acts on it, together.
+          The words sat on the far left beside the community's name, where
+          they answered a question nobody was asking at that end of the bar,
+          and the button they belong to was folded into a menu — so the one
+          moment you want both, having typed something you care about, was
+          the moment they were furthest apart. */}
+      <div className="flex shrink-0 items-center gap-2.5">
+        <SaveStatus autoSaving={!!autoSaveLabel} />
+        <button
+          type="button"
+          onClick={save}
+          disabled={isSaving}
+          title="Saves itself a few seconds after you stop typing"
+          className="flex h-[30px] items-center rounded-md border border-[#DCD7CE] bg-white px-3 text-[12px] font-medium text-[#1B1D1C] transition-colors hover:border-[#1F4538] hover:text-[#1F4538] disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isSaving ? "Saving…" : "Save"}
+        </button>
+      </div>
+
+      <span className="h-5 w-px shrink-0 bg-[#E4E0D9]" aria-hidden />
 
       {/* Undo and redo cover every change to the draft — words, colours, sizes,
           hidden blocks, and whatever the AI did. Photos are not in it: those
@@ -223,27 +241,21 @@ function TopBar({
         )}
       </div>
 
-      <Menu
-        align="right"
-        label="More"
-        title="More"
-        className="grid h-[30px] w-[30px] place-items-center rounded-md text-[#495250] transition-colors hover:bg-[#F0EDE7] hover:text-[#1B1D1C]"
-        items={[
-          { label: isSaving ? "Saving…" : "Save now", onClick: save, disabled: isSaving },
-          { label: "Start a new draft", onClick: () => { discard(); router.push("/"); } },
-        ]}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-          <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
-        </svg>
-      </Menu>
     </header>
   );
 }
 
-/** The two halves of the split button, so they read as one control. */
+/**
+ * The two halves of the split button, so they read as one control.
+ *
+ * Both halves lay themselves out as flex boxes. The arrow is wrapped by the
+ * menu in a plain div, and an inline-block button inside one sits on a line
+ * box — which reserves room under it for descenders and made the arrow half
+ * a couple of pixels taller than the half it is joined to. A block-level
+ * child has no line box, so the two now share an edge exactly.
+ */
 const SPLIT =
-  "h-[30px] border border-[#DCD7CE] bg-white text-[12px] font-medium text-[#1B1D1C] transition-colors " +
+  "flex h-[30px] items-center justify-center border border-[#DCD7CE] bg-white text-[12px] font-medium text-[#1B1D1C] transition-colors " +
   "hover:border-[#1F4538] hover:text-[#1F4538] hover:z-10 relative disabled:opacity-40 disabled:cursor-not-allowed";
 
 /**
